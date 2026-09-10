@@ -6,7 +6,7 @@ const terminales = new Map();
 // asseverar sobre el buffer/selección de xterm sin tocar el módulo.
 window.terminalesXterm = terminales;
 
-const _t = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
+const _termT = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
 
 // Comandos que se lanzan automáticamente según el tipo de IA
 const AUTO_CMDS = {
@@ -550,8 +550,8 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
       document.body.appendChild(a); a.click(); a.remove();
       setTimeout(() => { try { URL.revokeObjectURL(a.href); } catch (_) {} }, 1000);
       const msg = cmp.iguales === false
-        ? _t('Garble capturado: {n} fila(s) rotas · renderer {r}').replace('{n}', cmp.diferencias.length).replace('{r}', _rendererActivo)
-        : _t('Sin garble ahora (xterm == tmux) · renderer {r}').replace('{r}', _rendererActivo);
+        ? _termT('Garble capturado: {n} fila(s) rotas · renderer {r}').replace('{n}', cmp.diferencias.length).replace('{r}', _rendererActivo)
+        : _termT('Sin garble ahora (xterm == tmux) · renderer {r}').replace('{r}', _rendererActivo);
       if (window.toast) window.toast(msg); else console.log('[garble]', msg);
     } catch (err) {
       console.error('[garble] captura falló', err);

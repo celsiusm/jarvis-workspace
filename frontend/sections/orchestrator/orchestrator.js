@@ -41,7 +41,7 @@ function orchEsc(str) {
     .replace(/"/g, '&quot;');
 }
 
-const _t = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
+const _orchT = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
 
 /* ── Inline markdown parser (code, em) ───────────────────────── */
 function orchParseContent(text) {
@@ -709,7 +709,7 @@ class OrchestratorPanel {
       el.textContent = `$${c.toFixed(2)}`;
       const tel = this.el.querySelector('#orch-telemetry');
       if (tel) tel.title = u.llamadas
-        ? _t('Uso del orquestador en este proyecto: {c} · {t} tokens · {n} llamada(s)')
+        ? _orchT('Uso del orquestador en este proyecto: {c} · {t} tokens · {n} llamada(s)')
             .replace('{c}', '$' + c.toFixed(4))
             .replace('{t}', this._fmtTokens(tot))
             .replace('{n}', u.llamadas)
