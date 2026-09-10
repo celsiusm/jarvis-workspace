@@ -79,11 +79,12 @@ for (const p of L.PRESETS) {
 }
 
 // countsIniciales: TODOS los tipos de CLI_ORDEN presentes (fuente única — el
-// reset del launcher enumeraba a mano y omitía grok), claude=1 y el resto 0.
+// reset del launcher enumeraba a mano y omitía grok), TODO en 0: el launcher no
+// preselecciona agentes.
 const ini = L.countsIniciales();
 assert.deepStrictEqual(Object.keys(ini).sort(), [...L.CLI_ORDEN].sort());
-assert.ok(L.CLI_ORDEN.every(t => t === 'claude' ? ini[t] === 1 : ini[t] === 0));
-assert.strictEqual(L.totalContadores(ini), 1);
+assert.ok(L.CLI_ORDEN.every(t => ini[t] === 0));
+assert.strictEqual(L.totalContadores(ini), 0);
 
 // etiquetaAbrir: CTA del modo "Abrir de la PC" (no dice "Crear" al abrir)
 assert.strictEqual(L.etiquetaAbrir({}), 'Abrir proyecto');

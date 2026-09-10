@@ -1242,6 +1242,11 @@ async function cargarProyecto() {
   if (_elSep) _elSep.style.display = _ruta ? '' : 'none';
   document.title = `JARVIS — ${estado.project.nombre}`;
 
+  // Entering a project invalidates the "no workspace" welcome (bootstrap
+  // ?launcher=nuevo): hide it or it sits ON TOP of #terminals-empty (same box)
+  // and swallows its buttons' clicks (overlap bug 2026-09-10).
+  document.getElementById('jw-welcome')?.classList.add('oculto');
+
   for (const t of estado.terminals) {
     agregarTarjetaTerminal(t);
   }
@@ -3851,9 +3856,10 @@ function _pingAnillos() { clearTimeout(_anillosDeb); _anillosDeb = setTimeout(_r
 // Persistencia: jarvis.launcher.rutas (últimas rutas lanzadas) en localStorage.
 // (La UI de templates del launcher viejo se retiró con el rediseño 2026-07-10.)
 
-// El shape completo lo define CLI_ORDEN (countsIniciales); este literal solo
-// existe para el primer parse (launcher-state.js carga después).
-const _tlCounts = { claude: 1, codex: 0, opencode: 0, qwen: 0, antigravity: 0, grok: 0, manual: 0 };
+// The full shape is defined by CLI_ORDEN (countsIniciales); this literal only
+// exists for the first parse (launcher-state.js loads later). All zero: the
+// launcher does NOT preselect agents, the user picks them.
+const _tlCounts = { claude: 0, codex: 0, opencode: 0, qwen: 0, antigravity: 0, grok: 0, cursor: 0, pi: 0, manual: 0 };
 const _TL_RUTAS_KEY = 'jarvis.launcher.rutas';
 
 function _tlLeerRutas() {

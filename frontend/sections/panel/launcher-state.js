@@ -42,11 +42,12 @@
     if (t === 0) return 'Abrir proyecto';
     return `Abrir con ${t} terminal${t === 1 ? '' : 'es'}`;
   }
-  // Set inicial del launcher: claude=1, el resto 0. Derivado de CLI_ORDEN para
-  // que un CLI nuevo nunca quede fuera del reset (grok quedó colgado una vez).
+  // Launcher initial set: ALL zero — the user picks the agents. It used to come
+  // with claude=1, preselecting Claude Code even when it wasn't installed.
+  // Derived from CLI_ORDEN so a new CLI never falls outside the reset.
   function countsIniciales() {
     const out = {};
-    for (const t of CLI_ORDEN) out[t] = t === 'claude' ? 1 : 0;
+    for (const t of CLI_ORDEN) out[t] = 0;
     return out;
   }
   // n deseado para `tipo`, con `usadas` terminales ya vivas y los demás contadores fijos.

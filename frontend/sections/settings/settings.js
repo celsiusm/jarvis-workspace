@@ -496,9 +496,15 @@
         if (window.JarvisSonido) window.JarvisSonido.set(snd.checked);
         else localStorage.setItem('jarvis.sonidoTareas', snd.checked ? 'on' : 'off');
       });
-      // Captura del binding: la maneja el motor real de workspace.js
-      b.querySelector('.set-keybind')?.addEventListener('click', (e) =>
-        window.JarvisControls?.capturar?.(e.currentTarget.dataset.id));
+      // The voice control opens the voice setup dialog (Groq key + key) instead
+      // of capturing inline: it's the only place where it's edited.
+      b.querySelector('.set-keybind')?.addEventListener('click', (e) => {
+        if (e.currentTarget.dataset.id === 'mic-ptt' && window.JarvisGroqSetup?.abrir) {
+          window.JarvisGroqSetup.abrir();
+          return;
+        }
+        window.JarvisControls?.capturar?.(e.currentTarget.dataset.id);
+      });
     };
 
     window.JarvisControls && (window.JarvisControls.onCambio = () => { pintar(); _pintarValores(); });

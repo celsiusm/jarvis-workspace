@@ -2,6 +2,9 @@
 (function (global) {
   const CLAVE_URL = 'https://console.groq.com/keys';
   const LS_TECLA = 'jarvis.groq.setup.tecla';
+  // "Ya vio el aviso": al cargar la modal sale SOLO la primera vez. Cerrarla
+  // (X) o completar el setup la marca, y no vuelve a molestar al cargar.
+  const LS_INTRO = 'jarvis.groq.intro.visto';
   // Gaming order: 1=left, 2=right, 3=middle, 4=back (e.button 0, 2, 1, 3).
   const MOUSE_BOTONES = [
     { n: 1, button: 0, label: 'Mouse 1' },
@@ -56,6 +59,18 @@
     _root = null;
   }
 
+  // Cerrar con la X: no vuelve a molestar al cargar (se reabre solo si el
+  // usuario usa la voz o toca el control de voz en Configuración).
+  function _cerrarIntro() {
+    try { localStorage.setItem(LS_INTRO, '1'); } catch (_) {}
+    _cerrar();
+  }
+
+  function _btnX() {
+    const ic = global.icon ? global.icon('x', 15) : '×';
+    return `<button type="button" class="gq-x" aria-label="${_esc(_t('Cerrar'))}">${ic}</button>`;
+  }
+
   function _pintar(paso) {
     if (!_root) {
       _root = document.createElement('div');
@@ -68,6 +83,7 @@
     if (paso === 'clave') {
       _root.innerHTML = `
         <div class="gq-card">
+          ${_btnX()}
           <p class="gq-kicker">${_esc(_t('Dictado'))}</p>
           <h2>${_esc(_t('Para hablar hace falta una clave de Groq'))}</h2>
           <p class="gq-msg">${_esc(_t('El dictado usa Whisper gratis en Groq. Creá una clave (sin tarjeta) y pegala acá — después podés hablarle a los agentes.'))}</p>
@@ -105,12 +121,14 @@
         _pintar('tecla');
       };
       _root.querySelector('#gq-save').addEventListener('click', go);
+      _root.querySelector('.gq-x')?.addEventListener('click', _cerrarIntro);
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
       inp.focus();
       return;
     }
     _root.innerHTML = `
       <div class="gq-card">
+        ${_btnX()}
         <p class="gq-kicker">${_esc(_t('Dictado'))}</p>
         <h2>${_esc(_t('Elegí la tecla para dictar'))}</h2>
         <p class="gq-msg">${_esc(_t('Apretá una tecla o un botón del mouse. También podés elegir Mouse 1–4 acá.'))}</p>
@@ -165,8 +183,9 @@
     _marcarMice();
     // Escucha ya: un botón del mouse (1–4) se toma al apretarlo, sin otro click.
     global.JarvisControls?.capturar?.('mic-ptt');
+    _root.querySelector('.gq-x')?.addEventListener('click', _cerrarIntro);
     _root.querySelector('#gq-done').addEventListener('click', () => {
-      try { localStorage.setItem(LS_TECLA, '1'); } catch (_) {}
+      try { localStorage.setItem(LS_TECLA, '1'); localStorage.setItem(LS_INTRO, '1'); } catch (_) {}
       _cerrar();
     });
   }
@@ -178,6 +197,11 @@
       const d = await r.json();
       _groq = !!d.groq;
     } catch (_) { return; }
+    // Solo la PRIMERA vez (nunca vista/cerrada) aparece sola al cargar el
+    // workspace; despues se reabre solo bajo demanda (voz o editar el control).
+    let introVisto = false;
+    try { introVisto = localStorage.getItem(LS_INTRO) === '1'; } catch (_) {}
+    if (introVisto) return;
     let teclaLista = false;
     try { teclaLista = localStorage.getItem(LS_TECLA) === '1'; } catch (_) {}
     const paso = siguientePaso({ groq: _groq, teclaLista });
@@ -186,9 +210,12 @@
   }
 
   function abrir() {
+    // Abrir bajo demanda SIEMPRE: sirve tanto para configurar como para EDITAR
+    // el control de voz. Si ya esta todo listo, muestra el paso de la tecla
+    // (para reasignarla) en vez de cortar.
     const teclaLista = (() => { try { return localStorage.getItem(LS_TECLA) === '1'; } catch (_) { return false; } })();
-    const paso = siguientePaso({ groq: _groq, teclaLista });
-    if (paso === 'listo') return;
+    let paso = siguientePaso({ groq: _groq, teclaLista });
+    if (paso === 'listo') paso = 'tecla';
     _pintar(paso);
   }
 
