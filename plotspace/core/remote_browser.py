@@ -27,7 +27,6 @@ abre un contexto aislado (cookies/storage propios).
 """
 import asyncio
 import base64
-import os
 from typing import Optional
 
 from plotspace.core import ssrf
@@ -53,14 +52,11 @@ def _args_chromium():
             '--disable-blink-features=AutomationControlled']
 
 
-def _headless() -> bool:
-    """El `headless_shell` de Playwright es detectado por los muros anti-bot
-    (X/Twitter devuelve una página VACÍA: el panel queda en blanco). En modo
-    headed, sobre un display (WSLg/Xvfb), el motor se comporta como un browser
-    real y esos sitios cargan. Sólo caemos a headless si no hay display."""
-    if os.name == 'nt':
-        return True
-    return not (os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'))
+# Playwright usa por defecto el `headless_shell`, que los muros anti-bot
+# detectan: X/Twitter devuelve un documento VACÍO y el panel queda en blanco.
+# `channel='chromium'` usa el Chromium full en el headless NUEVO: no lo detectan
+# y NO abre ventana (headed sobre WSLg sí mostraba la ventana en Windows).
+_CHANNEL = 'chromium'
 
 
 # UA de desktop real: el "HeadlessChrome" del default dispara muros anti-bot
@@ -87,8 +83,14 @@ class _Pool:
             if self._browser is None or not self._browser.is_connected():
                 from playwright.async_api import async_playwright
                 self._pw = await async_playwright().start()
-                self._browser = await self._pw.chromium.launch(
-                    headless=_headless(), args=_args_chromium())
+                try:
+                    self._browser = await self._pw.chromium.launch(
+                        headless=True, channel=_CHANNEL, args=_args_chromium())
+                except Exception:
+                    # Sin el build `chromium` full: default (peor fingerprint,
+                    # pero el motor no se cae).
+                    self._browser = await self._pw.chromium.launch(
+                        headless=True, args=_args_chromium())
             return self._browser
 
     async def cerrar_todo(self):
