@@ -46,7 +46,7 @@ def _args_chromium():
     `--disable-blink-features=AutomationControlled` evita el fingerprint obvio
     que activa los muros anti-bot de X/Google."""
     return ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage',
-            '--hide-scrollbars', '--mute-audio',
+            '--hide-scrollbars',
             '--disable-blink-features=AutomationControlled']
 
 
