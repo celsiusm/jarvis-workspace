@@ -57,7 +57,6 @@
   function urlBusqueda(tipo, q) {
     const t = encodeURIComponent(q || '');
     if (tipo === 'youtube') return `https://www.youtube.com/results?search_query=${t}`;
-    if (tipo === 'radio') return 'https://music.youtube.com/';
     return `https://www.google.com/search?q=${t}`;
   }
   function linkAlPreview(uri, jarvisOrigin) {
@@ -107,7 +106,6 @@
     lupa: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="4.5"/><path d="m13.5 13.5-3-3"/></svg>',
     globo: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.3"><circle cx="8" cy="8" r="6"/><path d="M2 8h12M8 2c1.7 1.8 1.7 10.2 0 12M8 2c-1.7 1.8-1.7 10.2 0 12"/></svg>',
     play: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round"><path d="M5 3.5 12.5 8 5 12.5z"/></svg>',
-    music: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12V4l7-1.5v8"/><circle cx="4.3" cy="12" r="1.7"/><circle cx="11.3" cy="10.5" r="1.7"/></svg>',
     plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>',
     x: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m2 2 8 8M10 2l-8 8"/></svg>',
     monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>',
@@ -229,7 +227,6 @@
                 'Type a URL or a search above. Loads any site: X, YouTube, Google…')} <code>localhost:5173</code> ${_L('también.', 'too.')}</p>
         <div class="br-chips">
           <button class="br-chip" type="button" data-chip="youtube">${SVG.play} YouTube</button>
-          <button class="br-chip" type="button" data-chip="radio">${SVG.music} ${_L('Radio', 'Radio')}</button>
           <button class="br-chip" type="button" data-chip="busqueda">${SVG.lupa} ${_L('Buscá en la web', 'Search the web')}</button>
         </div>
       </div>`;
@@ -252,11 +249,7 @@
     cell.addEventListener('keyup', (e) => _tecla(tab, e));
     cell.addEventListener('click', (e) => {
       const chip = e.target.closest('[data-chip]');
-      if (!chip) return;
-      // La Radio es la vía de audio del workspace (el video del Browser va mudo
-      // en el server): el chip la abre en vez de navegar.
-      if (chip.dataset.chip === 'radio') { root.JarvisRadio?.open?.(); return; }
-      setUrl(urlBusqueda(chip.dataset.chip, ''), tab);
+      if (chip) { setUrl(urlBusqueda(chip.dataset.chip, ''), tab); }
     });
     _grid.appendChild(cell);
   }

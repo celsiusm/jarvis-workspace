@@ -494,7 +494,7 @@
     "Quitar imagen": "Remove image",
     "REMOTO ✕": "REMOTE ✕",
     "RUTA DEL PROYECTO": "PROJECT PATH",
-    "Radio": "Radius",
+    "Radio": "Radio",
     "Recargar": "Reload",
     "Recargar la pantalla": "Reload screen",
     "Reconectar": "Reconnect",
