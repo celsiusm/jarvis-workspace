@@ -79,7 +79,11 @@
 .qp-hint b { color: var(--ob-accent-fg); font-weight: 600; }
 
 /* ── Grid de agentes ── */
-.qp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+/* minmax(0,1fr) y NO 1fr 1fr: el `auto` del track es el min-content de la fila,
+   y el chip "Falta instalar" (nowrap) lo inflaba → la columna derecha desbordaba
+   el panel y se cortaba en ventanas angostas / zoom>1. Ver
+   [[leccion-grid-minmax-chips-overflow]]. */
+.qp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
 /* con conteo IMPAR el último queda solo en su fila → centrado y con el mismo
    ancho de columna (simetría pedida por el usuario 2026-07-10) */
 .qp-row:last-child:nth-child(odd) { grid-column: 1 / -1; width: calc(50% - 4px); justify-self: center; }
@@ -216,5 +220,12 @@
 @media (prefers-reduced-motion: reduce) {
   .qp-overlay, .qp-panel, .qp-pd { animation: none; }
   .qp-row, .qp-pd, .qp-go, .qp-tecla, .qp-st-b { transition: none; }
+}
+
+/* Angosto: 2 columnas no dejan ancho para el chip "Falta instalar" completo
+   (nowrap) → 1 columna, y la última fila impar ocupa el ancho entero. */
+@media (max-width: 540px) {
+  .qp-grid { grid-template-columns: 1fr; }
+  .qp-row:last-child:nth-child(odd) { grid-column: auto; width: 100%; justify-self: stretch; }
 }
 

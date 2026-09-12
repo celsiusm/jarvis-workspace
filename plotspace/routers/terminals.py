@@ -2116,13 +2116,31 @@ def _motor_control() -> bool:
     return os.getenv('TERMINALES_MOTOR', 'control').strip().lower() == 'control'
 
 
+# Cache de /api/clis: la detección mira el PATH (en WSL incluye decenas de
+# dirs /mnt/c y tarda ~2-3s). La UI la pide al arrancar y al abrir el picker;
+# sin cache, el aviso "Falta instalar" aparecía segundos tarde. TTL corto: el
+# estado cambia poco (solo al instalar un CLI, que invalida este cache).
+_CLIS_CACHE = {'ts': 0.0, 'data': None}
+_CLIS_TTL_S = 30.0
+
+
+async def _clis_estado_cacheado():
+    ahora = time.monotonic()
+    if _CLIS_CACHE['data'] is not None and (ahora - _CLIS_CACHE['ts']) < _CLIS_TTL_S:
+        return _CLIS_CACHE['data']
+    from plotspace.core import clis as _clis
+    # La detección puede tardar (mirar el PATH del entorno): fuera del loop.
+    data = await asyncio.to_thread(_clis.estado)
+    _CLIS_CACHE['data'] = data
+    _CLIS_CACHE['ts'] = ahora
+    return data
+
+
 @router.get("/api/clis")
 async def listar_clis():
     """Qué CLIs de agente hay instalados en esta máquina, y cuáles se pueden
     instalar desde acá."""
-    from plotspace.core import clis as _clis
-    # La detección puede tardar (mirar el PATH del entorno): fuera del loop.
-    return await asyncio.to_thread(_clis.estado)
+    return await _clis_estado_cacheado()
 
 
 @router.post("/api/clis/{cli_id}/instalar")
@@ -2140,6 +2158,7 @@ async def instalar_cli(cli_id: str):
 
     await broadcaster.broadcast({'type': 'cli_instalando', 'cli': cli_id})
     r = await asyncio.to_thread(_clis.instalar, cli_id)
+    _CLIS_CACHE['data'] = None   # el estado cambió: que la próxima consulta re-detecte
     await broadcaster.broadcast({'type': 'cli_instalado', 'cli': cli_id,
                                  'ok': r['ok'], 'salida': r['salida'][-400:]})
     return r

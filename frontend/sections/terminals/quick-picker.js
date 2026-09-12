@@ -341,12 +341,20 @@
       _onPick = onPick || _onPick;
       _disponibles = Math.max(1, disponibles | 0);
       _existentes = Math.max(0, existentes | 0);
-      _counts = { claude: 1 };     // default listo: Enter = 1 Claude, sin fricción
+      _counts = {};                // sin preselección: la tanda la arma el usuario
       _pdSel = 'auto';
       // Estado desde la cache global (la carga el shell al arrancar): las filas
       // pintan el aviso YA, sin el "1 segundo de nada". Después se refresca en
       // el fondo por si cambió mientras la app está abierta.
       _clisEstado = Array.isArray(global.JarvisClisEstado?.clis) ? global.JarvisClisEstado.clis : null;
+      // Sin cache en memoria, tirar de la última detección guardada: el aviso
+      // sale al instante aunque el shell todavía no haya terminado el fetch.
+      if (!_clisEstado) {
+        try {
+          const prev = JSON.parse(localStorage.getItem('jarvis_clis_estado') || 'null');
+          if (prev && Array.isArray(prev.clis)) _clisEstado = prev.clis;
+        } catch { /* localStorage roto: seguimos sin cache */ }
+      }
       _el.hidden = false;
       _render();
       _el.querySelector('.qp-panel').setAttribute('tabindex', '-1');

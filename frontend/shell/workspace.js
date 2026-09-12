@@ -3902,12 +3902,26 @@ function _tlPintarFalta() {
 }
 
 function _tlEstadoFaltantes() {
+  // Hidratación inmediata desde la última detección guardada: el aviso "Falta
+  // instalar" sale YA al abrir el picker/launcher, sin esperar a la red (la
+  // detección mira el PATH y en WSL tarda segundos). Después se refresca.
+  if (!_tlEstadoClis) {
+    try {
+      const prev = JSON.parse(localStorage.getItem('jarvis_clis_estado') || 'null');
+      if (prev && Array.isArray(prev.clis)) {
+        _tlEstadoClis = prev;
+        window.JarvisClisEstado = prev;        // cache compartida con QuickPicker
+        _tlPintarFalta();
+      }
+    } catch { /* localStorage roto o JSON inválido: seguimos por red */ }
+  }
   fetch('/api/clis')
     .then(r => (r.ok ? r.json() : null))
     .then(d => {
       if (!d) return;
       _tlEstadoClis = d;
       window.JarvisClisEstado = d;             // cache compartida con QuickPicker
+      try { localStorage.setItem('jarvis_clis_estado', JSON.stringify(d)); } catch { /* cuota/privacidad */ }
       _tlPintarFalta();
     })
     .catch(() => {});
