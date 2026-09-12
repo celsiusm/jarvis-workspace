@@ -32,8 +32,10 @@ from typing import Optional
 from plotspace.core import ssrf
 
 # Un Chromium por proceso; cada pestaña/panel es un contexto. El tope evita que
-# N pestañas se coman la RAM (cada contexto ronda las decenas de MB).
-MAX_SESIONES = 3
+# N pestañas se coman la RAM (cada contexto ronda las decenas de MB). Tiene que
+# coincidir con MAX_TABS del front (hoy 4): si el front deja abrir más paneles
+# de los que el motor admite, el último siempre falla con "demasiadas pestañas".
+MAX_SESIONES = 4
 # Tamaño de un frame del screencast (JPEG). 70 es el balance calidad/peso.
 CALIDAD_JPEG = 70
 # Ancho/alto máximos del stream: no manda más píxeles de los que se muestran.
@@ -198,15 +200,18 @@ class Sesion:
         if self._cerrada:
             return
         self._cerrada = True
-        try:
-            await self.cdp.send('Page.stopScreencast')
-        except Exception:
-            pass
-        try:
-            await self.ctx.close()
-        except Exception:
-            pass
+        # Liberar el cupo ANTES de cerrar los recursos: `ctx.close()` puede
+        # tardar segundos y, si esperamos, abrir/cerrar pestañas rápido agota
+        # el tope aunque las sesiones ya estén muertas.
         _pool.vivas = max(0, _pool.vivas - 1)
+        try:
+            await asyncio.wait_for(self.cdp.send('Page.stopScreencast'), timeout=3)
+        except Exception:
+            pass
+        try:
+            await asyncio.wait_for(self.ctx.close(), timeout=8)
+        except Exception:
+            pass
 
     # ── Navegación ──────────────────────────────────────────────────
     async def navegar(self, url: str):

@@ -40,6 +40,8 @@ async def ws_browser(websocket: WebSocket, sid: str):
     except Exception as e:
         await websocket.send_json({'t': 'err', 'msg': f'screencast: {e}'})
 
+    fin = asyncio.Event()
+
     async def leer_cliente():
         try:
             async for msg in websocket.iter_json():
@@ -48,11 +50,21 @@ async def ws_browser(websocket: WebSocket, sid: str):
             pass
         except Exception:
             pass
+        finally:
+            # Marca la desconexión aunque el cliente sólo reciba (nosotros no
+            # mandamos nada): sin esto, con una página quieta el loop se queda
+            # bloqueado en `cola.get()` y la sesión queda viva para siempre.
+            fin.set()
 
     tarea = asyncio.create_task(leer_cliente())
     try:
-        while True:
-            item = await ses.cola.get()
+        while not fin.is_set():
+            try:
+                item = await asyncio.wait_for(ses.cola.get(), timeout=0.25)
+            except asyncio.TimeoutError:
+                continue
+            if fin.is_set():
+                break
             await websocket.send_json(item)
     except (WebSocketDisconnect, RuntimeError):
         pass
