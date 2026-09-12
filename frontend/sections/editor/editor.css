@@ -817,3 +817,89 @@
   opacity:        1;
   pointer-events: auto;
 }
+
+/* ─── Git en el editor: gutter, blame, barra de conflicto, diff ───────────── */
+.ed-gm-add { background: linear-gradient(90deg, #3fb950 0 3px, transparent 3px); }
+.ed-gm-mod { background: linear-gradient(90deg, #d29922 0 3px, transparent 3px); }
+.ed-gm-del { background: linear-gradient(90deg, #f85149 0 3px, transparent 3px); }
+
+.ed-blame {
+  color: var(--ob-fg-3, #8b949e);
+  font-style: italic;
+  opacity: .7;
+  font-size: 11px;
+  pointer-events: none;
+}
+
+.ed-cambio-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 5px 10px;
+  margin: 0 0 4px;
+  font-size: 12px;
+  color: var(--ob-work, #d29922);
+  background: color-mix(in srgb, var(--ob-work, #d29922) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ob-work, #d29922) 35%, transparent);
+  border-radius: 6px;
+}
+.ed-cambio-bar[hidden] { display: none; }
+.edcb-txt code { font-family: var(--font-mono, monospace); opacity: .85; }
+.edcb-actions { display: inline-flex; gap: 6px; flex: none; }
+.edcb-actions button {
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 5px;
+  color: var(--ob-fg-1, #e6edf3);
+  background: var(--ob-bg-3, #21262d);
+  border: 1px solid var(--ob-line-2, #30363d);
+}
+.edcb-actions button:hover { background: var(--ob-bg-4, #30363d); }
+
+.ed-diff-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, .55);
+  backdrop-filter: blur(2px);
+}
+.ed-diff-modal {
+  width: min(1400px, 94vw);
+  height: min(85vh, 900px);
+  display: flex;
+  flex-direction: column;
+  background: var(--ob-bg-1, #0d1117);
+  border: 1px solid var(--ob-line-2, #30363d);
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 18px 60px rgba(0, 0, 0, .5);
+}
+.ed-diff-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--ob-fg-2, #c9d1d9);
+  border-bottom: 1px solid var(--ob-line-1, #21262d);
+}
+.ed-diff-head code { font-family: var(--font-mono, monospace); opacity: .8; }
+.ed-diff-x {
+  font: inherit;
+  cursor: pointer;
+  background: transparent;
+  border: 0;
+  color: var(--ob-fg-3, #8b949e);
+  font-size: 14px;
+  padding: 2px 6px;
+  border-radius: 5px;
+}
+.ed-diff-x:hover { background: var(--ob-bg-3, #21262d); color: var(--ob-fg-1, #e6edf3); }
+.ed-diff-host { flex: 1; min-height: 0; }

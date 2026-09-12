@@ -5,8 +5,9 @@
 # calidad; acá el HUMANO ve y decide el ship.
 
 import os
+import re
 import subprocess
-from fastapi import APIRouter, Body, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Query
 
 from plotspace.core.database import get_db
 
@@ -295,6 +296,103 @@ async def estado_review(project_id: int):
         'truncado': truncado,
         'limpio':   not archivos,
     }
+
+
+# ─── Editor: gutter de cambios + blame por línea ─────────────────────────────
+
+def _parse_diff_hunks(diff: str) -> list:
+    """Parsea `git diff --unified=0` y devuelve rangos del archivo NUEVO:
+    [{'start','end','type'}] con type add|mod|del. Puro y testeable."""
+    hunks = []
+    cur = None
+
+    def cerrar(h):
+        start = int(h['start']); count = int(h['count'])
+        if count <= 0:
+            ln = max(1, start)          # borrado puro: marcar la línea donde cayó
+            return {'start': ln, 'end': ln, 'type': 'del'}
+        tipo = 'add' if (h['mas'] and not h['menos']) else 'mod'
+        return {'start': start, 'end': start + count - 1, 'type': tipo}
+
+    for ln in diff.split('\n'):
+        if ln.startswith('@@'):
+            if cur:
+                hunks.append(cerrar(cur))
+            m = re.match(r'^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@', ln)
+            cur = ({'start': int(m.group(1)), 'count': int(m.group(2) or 1),
+                    'mas': 0, 'menos': 0} if m else None)
+        elif cur is not None and ln[:1] in ('+', '-'):
+            cur['mas' if ln[0] == '+' else 'menos'] += 1
+    if cur:
+        hunks.append(cerrar(cur))
+    return hunks
+
+
+def _parse_blame(out: str) -> dict:
+    """Extrae autor/tiempo/resumen del `git blame --porcelain -L n,n`."""
+    lineas = out.split('\n')
+    if not lineas or not lineas[0]:
+        return {}
+    info = {'hash': lineas[0].split(' ')[0][:8], 'autor': '',
+            'tiempo': 0, 'resumen': ''}
+    for ln in lineas[1:]:
+        if ln.startswith('author '):
+            info['autor'] = ln[7:].strip()
+        elif ln.startswith('author-time '):
+            try:
+                info['tiempo'] = int(ln[12:].strip())
+            except ValueError:
+                pass
+        elif ln.startswith('summary '):
+            info['resumen'] = ln[8:].strip()
+        elif ln.startswith('\t'):
+            break
+    return info
+
+
+@router.get("/projects/{project_id}/files/git-diff")
+async def git_diff_archivo(project_id: int, path: str = Query(...)):
+    """Rangos de líneas cambiadas de UN archivo vs HEAD (gutter del editor)."""
+    cwd = _ruta_proyecto(project_id)
+    rel = _path_relativo_seguro(cwd, path)
+    if rel is None:
+        raise HTTPException(status_code=400, detail="Ruta fuera del proyecto")
+    rc, _ = _git(cwd, 'rev-parse', '--git-dir')
+    if rc != 0:
+        return {'git': False, 'hunks': []}
+
+    rc_track, _ = _git(cwd, 'ls-files', '--error-unmatch', '--', rel)
+    if rc_track != 0:   # untracked: el archivo entero es nuevo
+        full = os.path.join(cwd, rel)
+        if os.path.isfile(full):
+            try:
+                with open(full, 'r', encoding='utf-8', errors='replace') as f:
+                    n = sum(1 for _ in f)
+            except OSError:
+                n = 0
+            return {'git': True, 'hunks': [{'start': 1, 'end': max(1, n), 'type': 'add'}]}
+        return {'git': True, 'hunks': []}
+
+    _, diff = _git(cwd, '-c', 'core.quotepath=false',
+                   'diff', '--unified=0', '--no-color', 'HEAD', '--', rel)
+    return {'git': True, 'hunks': _parse_diff_hunks(diff)}
+
+
+@router.get("/projects/{project_id}/files/git-blame")
+async def git_blame_linea(project_id: int, path: str = Query(...), line: int = Query(1)):
+    """Blame de UNA línea (blame inline del editor)."""
+    cwd = _ruta_proyecto(project_id)
+    rel = _path_relativo_seguro(cwd, path)
+    if rel is None:
+        raise HTTPException(status_code=400, detail="Ruta fuera del proyecto")
+    rc, _ = _git(cwd, 'rev-parse', '--git-dir')
+    if rc != 0:
+        return {'git': False}
+    ln = max(1, int(line))
+    rc, out = _git(cwd, 'blame', '--porcelain', '-L', f'{ln},{ln}', '--', rel)
+    if rc != 0:
+        return {'git': False}
+    return {'git': True, 'blame': _parse_blame(out)}
 
 
 # NOTA: el endpoint POST /review/aprobar (git add -A + commit) se quitó: hacía

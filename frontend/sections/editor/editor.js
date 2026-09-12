@@ -29,6 +29,12 @@
   let _restaurando = false;         // true mientras restauramos → no guardar
   let _sesProyectoRestaurado = null; // evita restaurar dos veces el mismo proyecto
 
+  // Git: gutter de cambios + blame inline (por editor/grupo).
+  let _edGutterIds = new Map();      // editor → ids de decorations
+  let _edBlameIds  = new Map();
+  let _edBlameTimer = null;
+  let _edBlameGen   = 0;
+
   // ─── Estado del editor: modelo de grupos (split view, Fase 9) ────────
   // editorGroups[0] siempre existe (host = #monaco-editor-host).
   // editorGroups[1] se crea LAZY al primer split (toggleSplit).
@@ -162,6 +168,9 @@
   const escAttr = (s) => esc(s).replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
   const _t = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
+  // Bilingüe para strings COMPUESTAS (números/valores adentro): las estáticas
+  // las traduce el observer; éstas se arman a mano.
+  const _LE = (es, en) => (window.JarvisI18n?.lang?.() === 'en' ? en : es);
 
   // ─── File tree ──────────────────────────────────────────────────────
 
@@ -1354,6 +1363,7 @@
       fontSize:      13,
       fontFamily:    "'Cascadia Code', 'JetBrains Mono', Consolas, monospace",
       minimap:       { enabled: false },
+      glyphMargin:   true,
       scrollBeyondLastLine: false,
       tabSize:       2,
     });
@@ -1369,6 +1379,7 @@
       if (g !== _grupoActivo()) return;
       const elPos = document.getElementById('mf-pos');
       if (elPos) elPos.textContent = `Ln ${e.position.lineNumber}, Col ${e.position.column}`;
+      _programarBlame(g, e.position.lineNumber);
     });
 
     // Edición → marca dirty el tab activo de ESTE grupo. El modelo es compartido
@@ -1714,6 +1725,163 @@
     return true;
   }
 
+  // ─── Git: gutter de cambios + blame inline (Monaco) ─────────────────────────
+  function _haceCuanto(epoch) {
+    if (!epoch) return '';
+    const s = Math.max(0, Math.floor(Date.now() / 1000 - epoch));
+    if (s < 60) return _LE('recién', 'just now');
+    const m = Math.floor(s / 60);
+    if (m < 60) return _LE(`hace ${m} min`, `${m} min ago`);
+    const h = Math.floor(m / 60);
+    if (h < 24) return _LE(`hace ${h} h`, `${h} h ago`);
+    const d = Math.floor(h / 24);
+    if (d < 30) return _LE(`hace ${d} d`, `${d} d ago`);
+    return new Date(epoch * 1000).toLocaleDateString();
+  }
+
+  async function _actualizarGutter(g) {
+    if (!g?.editor) return;
+    const path = g.activeTab;
+    const prev = _edGutterIds.get(g) || [];
+    if (!path || !monaco) { g.editor.deltaDecorations(prev, []); _edGutterIds.set(g, []); return; }
+    let hunks = null;
+    try {
+      const r = await fetch(`/api/projects/${_projectId}/files/git-diff?path=${encodeURIComponent(path)}`);
+      if (r.ok) { const d = await r.json(); if (d.git) hunks = d.hunks || []; }
+    } catch (_) { /* sin git / red caída */ }
+    if (g.activeTab !== path) return;   // cambió de tab mientras viajaba
+    const decos = (hunks || []).map(h => ({
+      range: new monaco.Range(h.start, 1, h.end, 1),
+      options: {
+        isWholeLine: true,
+        linesDecorationsClassName: 'ed-gm-' + h.type,
+        hoverMessage: { value: _LE(
+          h.type === 'add' ? 'Línea agregada' : h.type === 'del' ? 'Líneas eliminadas' : 'Línea modificada',
+          h.type === 'add' ? 'Added line' : h.type === 'del' ? 'Deleted lines' : 'Modified line') },
+      },
+    }));
+    _edGutterIds.set(g, g.editor.deltaDecorations(_edGutterIds.get(g) || [], decos));
+  }
+
+  function _programarBlame(g, linea) {
+    clearTimeout(_edBlameTimer);
+    _edBlameTimer = setTimeout(() => _actualizarBlame(g, linea), 300);
+  }
+
+  async function _actualizarBlame(g, linea) {
+    if (!g?.editor) return;
+    const path = g.activeTab;
+    const limpiar = () => {
+      g.editor.deltaDecorations(_edBlameIds.get(g) || [], []);
+      _edBlameIds.set(g, []);
+    };
+    if (!path || !monaco) { limpiar(); return; }
+    const gen = ++_edBlameGen;
+    let b = null;
+    try {
+      const r = await fetch(`/api/projects/${_projectId}/files/git-blame?path=${encodeURIComponent(path)}&line=${linea}`);
+      if (r.ok) { const d = await r.json(); if (d.git) b = d.blame; }
+    } catch (_) { /* sin git */ }
+    if (gen !== _edBlameGen || g.activeTab !== path) return;
+    if (!b || !b.autor) { limpiar(); return; }
+    const txt = `${b.autor} · ${_haceCuanto(b.tiempo)} · ${b.resumen}`.slice(0, 100);
+    _edBlameIds.set(g, g.editor.deltaDecorations(_edBlameIds.get(g) || [], [{
+      range: new monaco.Range(linea, 1, linea, 1),
+      options: { after: { content: '      ' + txt, inlineClassName: 'ed-blame' }, showIfCollapsed: true },
+    }]));
+  }
+
+  // ── Barra "cambió en disco" (conflicto buffer vs disco) ─────────────────────
+  function _barraConflictoEl() {
+    let el = document.getElementById('ed-cambio-bar');
+    if (el) return el;
+    const split = document.getElementById('monaco-split');
+    if (!split || !split.parentNode) return null;
+    el = document.createElement('div');
+    el.id = 'ed-cambio-bar';
+    el.className = 'ed-cambio-bar';
+    el.hidden = true;
+    split.parentNode.insertBefore(el, split);
+    el.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-edcb]');
+      if (!b) return;
+      const g = _grupoActivo();
+      const path = g?.activeTab;
+      const tab = path ? g.tabs.get(path) : null;
+      if (!tab) return;
+      if (b.dataset.edcb === 'diff') _verDiferencias(g, tab, path);
+      else if (b.dataset.edcb === 'reload') _recargarDesdeDisco(g, path);
+      else if (b.dataset.edcb === 'keep') {
+        tab.conflicto = false; tab.diskContent = null;
+        renderTabs(); _actualizarBarraConflicto();
+      }
+    });
+    return el;
+  }
+
+  function _actualizarBarraConflicto() {
+    const el = _barraConflictoEl();
+    if (!el) return;
+    const g = _grupoActivo();
+    const path = g?.activeTab;
+    const tab = path ? g.tabs.get(path) : null;
+    if (!tab || !tab.conflicto) { el.hidden = true; el.innerHTML = ''; return; }
+    el.hidden = false;
+    el.innerHTML =
+      `<span class="edcb-txt">${_LE('Cambió en disco', 'Changed on disk')} · <code>${esc(path)}</code></span>` +
+      `<span class="edcb-actions">` +
+      `<button type="button" data-edcb="diff">${_LE('Ver diferencias', 'View changes')}</button>` +
+      `<button type="button" data-edcb="reload">${_LE('Recargar del disco', 'Reload from disk')}</button>` +
+      `<button type="button" data-edcb="keep">${_LE('Mantener la mía', 'Keep mine')}</button>` +
+      `</span>`;
+  }
+
+  function _recargarDesdeDisco(g, path) {
+    const tab = g?.tabs?.get(path);
+    if (!tab || tab.diskContent == null) return;
+    const model = monaco.editor.getModel(_ftUri(path));
+    if (model && model.getValue() !== tab.diskContent) model.setValue(tab.diskContent);
+    for (const gg of editorGroups) {
+      const t = gg?.tabs?.get(path);
+      if (t) {
+        t.content = tab.diskContent; t.dirty = false;
+        t.conflicto = false; t.diskContent = null; t.mtime = tab.diskMtime;
+      }
+    }
+    fileCache.set(path, { content: tab.diskContent, language: tab.language,
+                          mtime: tab.diskMtime, ts: Date.now() });
+    renderTabs(); _actualizarBarraConflicto();
+  }
+
+  function _verDiferencias(g, tab, path) {
+    if (tab.diskContent == null || !monaco) return;
+    const buffer = g.editor.getValue();
+    const lang = tab.language || 'plaintext';
+    const ov = document.createElement('div');
+    ov.className = 'ed-diff-overlay';
+    ov.innerHTML =
+      `<div class="ed-diff-modal"><div class="ed-diff-head">` +
+      `<span>${_LE('Diferencias con el disco', 'Changes on disk')} · <code>${esc(path)}</code></span>` +
+      `<button type="button" class="ed-diff-x" aria-label="${_LE('Cerrar', 'Close')}">✕</button>` +
+      `</div><div class="ed-diff-host" id="ed-diff-host"></div></div>`;
+    document.body.appendChild(ov);
+    const orig = monaco.editor.createModel(tab.diskContent, lang);
+    const mod  = monaco.editor.createModel(buffer, lang);
+    const de = monaco.editor.createDiffEditor(document.getElementById('ed-diff-host'), {
+      readOnly: true, automaticLayout: true, theme: 'jarvis-dark',
+      renderSideBySide: true, fontSize: 12,
+    });
+    de.setModel({ original: orig, modified: mod });
+    const cerrar = () => {
+      try { de.dispose(); } catch (_) {}
+      try { orig.dispose(); } catch (_) {}
+      try { mod.dispose(); } catch (_) {}
+      ov.remove();
+    };
+    ov.querySelector('.ed-diff-x').addEventListener('click', cerrar);
+    ov.addEventListener('click', (e) => { if (e.target === ov) cerrar(); });
+  }
+
   // ─── Sesión del editor por proyecto (tabs/cursor/split en localStorage) ──────
   function _sesClave() { return _projectId ? `jarvis.editor.sesion.${_projectId}` : null; }
 
@@ -1969,21 +2137,26 @@
       const st = await res.json();
       if (tab.mtime != null && st.mtime != null && Math.abs(st.mtime - tab.mtime) < 0.001) return; // sin cambios
       const algunoDirty = _tabsConPath.some(g => g.tabs.get(path).dirty);
-      if (algunoDirty) {
-        console.warn(`[editor] conflicto: "${path}" cambió en disco y tiene cambios sin guardar`);
-        for (const g of _tabsConPath) g.tabs.get(path).conflicto = true;
-        renderTabs();
-        return;
-      }
-      // No dirty → recargar silenciosamente el contenido fresco.
+      // Traer el contenido del disco: sirve tanto para la recarga silenciosa
+      // como para el diff de la barra de conflicto.
       const r2 = await fetch(`/api/projects/${_projectId}/files/read?path=${encodeURIComponent(path)}`);
       if (!r2.ok) return;
       const data = await r2.json();
-      // Actualizar el tab homónimo en TODOS los grupos (buffer compartido).
+      if (algunoDirty) {
+        console.warn(`[editor] conflicto: "${path}" cambió en disco y tiene cambios sin guardar`);
+        for (const g of _tabsConPath) {
+          const t = g.tabs.get(path);
+          t.conflicto = true; t.diskContent = data.content; t.diskMtime = data.mtime;
+        }
+        renderTabs();
+        _actualizarBarraConflicto();
+        return;
+      }
+      // No dirty → recargar silenciosamente el contenido fresco.
       for (const g of _tabsConPath) {
         const t = g.tabs.get(path);
         t.content = data.content; t.language = data.language;
-        t.mtime = data.mtime; t.conflicto = false;
+        t.mtime = data.mtime; t.conflicto = false; t.diskContent = null;
       }
       fileCache.set(path, {
         content: data.content, language: data.language,
@@ -2043,6 +2216,9 @@
     } else {
       renderTabs();   // por si cambió el dirty del otro grupo (no debería)
     }
+    _actualizarGutter(g);
+    _programarBlame(g, g.editor.getPosition()?.lineNumber || 1);
+    _actualizarBarraConflicto();
     _sesGuardar();    // persiste tabs/activo/split de este proyecto
   }
 
@@ -2092,6 +2268,7 @@
       }
     }
     renderTabs();
+    _actualizarBarraConflicto();
     _sesGuardar();
   }
 
@@ -2249,7 +2426,7 @@
       // tab homónimo en AMBOS grupos (sin save-pisado).
       for (const gr of editorGroups) {
         const t = gr?.tabs?.get(path);
-        if (t) { t.dirty = false; t.conflicto = false; t.content = content; t.mtime = data.mtime; }
+        if (t) { t.dirty = false; t.conflicto = false; t.content = content; t.mtime = data.mtime; t.diskContent = null; }
       }
       // Actualizar la cache con lo recién guardado para que reabrir sea instantáneo
       // y la revalidación de mtime no dispare recargas falsas.
@@ -2261,6 +2438,7 @@
         ts: Date.now(),
       });
       renderTabs();
+      _actualizarBarraConflicto();
       // Repintar badges git sin reconstruir el árbol (el archivo ahora es 'M').
       refrescarGitStatus();
       _setSaveStatus('Guardado', 'ok', 'check');
