@@ -1,0 +1,3 @@
+# Que la fuente única de versión viaje en el sdist (setuptools la lee con
+# `dynamic = ["version"]` -> plotspace.__version__, ver pyproject.toml).
+include VERSION

@@ -4,7 +4,10 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-workspace"
-version = "1.8.52"
+# Fuente única de versión = archivo VERSION (el mismo que lee el motor en
+# runtime, ver plotspace/routers/system.py). Se resuelve más abajo, en
+# [tool.setuptools.dynamic]; nunca hardcodear acá o se desincroniza.
+dynamic = ["version"]
 description = "Jarvis Workspace — tu flota de agentes de código, en una app"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -72,3 +75,8 @@ include-package-data = true
 
 [tool.setuptools.package-data]
 plotspace = ["../frontend/**/*"]
+
+[tool.setuptools.dynamic]
+# La versión sale del archivo VERSION vía plotspace.__version__ (que lo lee y
+# hace strip del \n final). Una sola fuente de verdad, imposible de divergir.
+version = { attr = "plotspace.__version__" }
