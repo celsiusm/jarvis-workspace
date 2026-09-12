@@ -22,6 +22,13 @@
   let fileTreeTimer = null;
   const MAX_TABS    = 10;
 
+  // Links `archivo:línea` (terminal) + sesión por proyecto.
+  let _projectRoot = null;          // ruta absoluta del proyecto (cache del fetch)
+  let _rootPromise = null;
+  let _sesTimer    = null;
+  let _restaurando = false;         // true mientras restauramos → no guardar
+  let _sesProyectoRestaurado = null; // evita restaurar dos veces el mismo proyecto
+
   // ─── Estado del editor: modelo de grupos (split view, Fase 9) ────────
   // editorGroups[0] siempre existe (host = #monaco-editor-host).
   // editorGroups[1] se crea LAZY al primer split (toggleSplit).
@@ -1576,6 +1583,7 @@
 
     setActiveGroup(1);
     _relayout();
+    _sesGuardar();
   }
 
   // Colapsa el split: vuelca todo al grupo 0 y oculta el grupo 1.
@@ -1604,6 +1612,7 @@
 
     setActiveGroup(0);
     _relayout();
+    _sesGuardar();
   }
 
   // Reset COMPLETO del estado del editor al cambiar de proyecto. Limpia tabs/
@@ -1653,6 +1662,129 @@
     marcarArchivoActivoEnTree(null);
     const elLang = document.getElementById('mf-lang');
     if (elLang) elLang.textContent = '—';
+  }
+
+  // ─── Links `archivo:línea` (terminal) + sesión por proyecto ─────────────────
+
+  // Ruta absoluta del proyecto (para convertir links absolutos de la terminal a
+  // relativos al root). Se cachea; se invalida al cambiar de proyecto.
+  function _rootProyecto() {
+    if (_projectRoot != null) return Promise.resolve(_projectRoot);
+    if (!_rootPromise) {
+      _rootPromise = fetch(`/api/workspace/${_projectId}/state`)
+        .then(r => (r.ok ? r.json() : null))
+        .then(st => { _projectRoot = (st && st.project && st.project.ruta) || ''; return _projectRoot; })
+        .catch(() => { _projectRoot = ''; return ''; });
+    }
+    return _rootPromise;
+  }
+
+  async function _aRelativoProyecto(path) {
+    let p = String(path || '').trim().replace(/^file:\/\//, '');
+    if (!p) return null;
+    const root = await _rootProyecto();
+    const base = root ? root.replace(/\/+$/, '') : '';
+    if (p.startsWith('/')) {
+      if (base && (p === base || p.startsWith(base + '/'))) p = p.slice(base.length + 1);
+      else return null;   // absoluto fuera del proyecto: no lo podemos abrir
+    }
+    p = p.replace(/^\.\//, '').replace(/^\/+/, '');
+    return p || null;
+  }
+
+  // Abre `path` (relativo al proyecto, o absoluto dentro de él) y salta a la
+  // línea. La usa la terminal para los `archivo:línea` clickeables.
+  async function _abrirArchivoEnLinea(path, linea, col) {
+    const rel = await _aRelativoProyecto(path);
+    if (!rel) return false;
+    try { window.JarvisDock?.open?.('editor'); } catch (_) {}
+    const g = _grupoActivo() || (_initGrupos(), _grupoActivo());
+    if (!g) return false;
+    await abrirArchivoEnEditor(rel, g);
+    if (!g.editor || !g.tabs.has(rel)) return false;
+    const model = g.editor.getModel();
+    const total = model ? model.getLineCount() : 1;
+    const ln = Math.min(Math.max(1, parseInt(linea, 10) || 1), total);
+    const c  = Math.max(1, parseInt(col, 10) || 1);
+    try {
+      g.editor.setPosition({ lineNumber: ln, column: c });
+      g.editor.revealLineInCenter(ln);
+      g.editor.focus();
+    } catch (_) {}
+    return true;
+  }
+
+  // ─── Sesión del editor por proyecto (tabs/cursor/split en localStorage) ──────
+  function _sesClave() { return _projectId ? `jarvis.editor.sesion.${_projectId}` : null; }
+
+  function _sesGuardar() {
+    if (_restaurando) return;
+    const clave = _sesClave();
+    if (!clave) return;
+    clearTimeout(_sesTimer);
+    _sesTimer = setTimeout(() => {
+      try {
+        const idxs = splitActivo ? [0, 1] : [0];
+        const grupos = idxs.map(i => {
+          const g = editorGroups[i];
+          if (!g) return null;
+          return { activo: g.activeTab || null, tabs: [...g.tabs.keys()] };
+        });
+        const vs = idxs.map(i => {
+          const g = editorGroups[i];
+          if (!g?.editor || !g.activeTab) return null;
+          try { return { i, path: g.activeTab, vs: g.editor.saveViewState() }; } catch (_) { return null; }
+        }).filter(Boolean);
+        localStorage.setItem(clave, JSON.stringify({
+          v: 1, split: { activo: splitActivo, orientacion: splitOrientacion }, grupos, vs, ts: Date.now(),
+        }));
+      } catch (_) { /* cuota / modo privado: ignorar */ }
+    }, 250);
+  }
+
+  async function _sesRestaurar() {
+    const clave = _sesClave();
+    if (!clave) return;
+    let data = null;
+    try { data = JSON.parse(localStorage.getItem(clave) || 'null'); } catch (_) { data = null; }
+    if (!data || !Array.isArray(data.grupos) || !data.grupos.length) return;
+    _restaurando = true;
+    try {
+      await cargarMonacoLazy();
+      if (data.split?.activo) await toggleSplit(data.split.orientacion || 'vertical');
+      const abrirGrupo = async (i, info) => {
+        const g = editorGroups[i];
+        if (!g || !info || !Array.isArray(info.tabs)) return;
+        for (const p of info.tabs) {
+          if (!g.tabs.has(p) && g.tabs.size < MAX_TABS) await abrirArchivoEnEditor(p, g);
+        }
+        if (info.activo && g.tabs.has(info.activo)) setActiveTab(info.activo, g);
+      };
+      await abrirGrupo(0, data.grupos[0]);
+      if (data.split?.activo) await abrirGrupo(1, data.grupos[1]);
+      if (Array.isArray(data.vs)) {
+        for (const v of data.vs) {
+          const g = editorGroups[v.i];
+          if (g?.editor && v.path && v.vs && g.tabs.has(v.path)) {
+            try { g.editor.restoreViewState(v.vs); } catch (_) {}
+          }
+        }
+      }
+    } catch (_) { /* restauración best-effort */ }
+    finally {
+      _restaurando = false;
+      _sesGuardar();
+    }
+  }
+
+  // Arranca la restauración UNA vez por proyecto (cuando el editor es usable).
+  function _sesArrancar() {
+    // El onTabShown del dock puede correr ANTES de init(): sin projectId no
+    // podemos leer la sesión, y no hay que marcarla como restaurada.
+    if (!_projectId) return;
+    if (_sesProyectoRestaurado === _projectId) return;
+    _sesProyectoRestaurado = _projectId;
+    _sesRestaurar();
   }
 
   function _cargarScript(src) {
@@ -1819,7 +1951,7 @@
       g.tabs.set(path, { content: data.content, language: data.language, dirty: false, mtime: data.mtime });
       setActiveTab(path, g);
     } catch (err) {
-      toast(`Error abriendo archivo: ${err.message}`, 'error');
+      if (!_restaurando) toast(`Error abriendo archivo: ${err.message}`, 'error');
     }
   }
 
@@ -1911,6 +2043,7 @@
     } else {
       renderTabs();   // por si cambió el dirty del otro grupo (no debería)
     }
+    _sesGuardar();    // persiste tabs/activo/split de este proyecto
   }
 
   // Cierra `path` en el grupo `g` (default: grupo activo). Solo pregunta por dirty
@@ -1959,6 +2092,7 @@
       }
     }
     renderTabs();
+    _sesGuardar();
   }
 
   function renderBreadcrumb(path) {
@@ -2335,6 +2469,7 @@
       cargarFileTree();
       iniciarPollingFileTree();
       cargarMonacoLazy();
+      _sesArrancar();
     }
   }
 
@@ -2344,12 +2479,27 @@
   // ═══════════════════════════════════════════════════════════════════
   window.JarvisEditor = {
     // Ciclo de vida
-    init(projectId)            { _projectId = String(projectId); _arrancarSiVisible(); },
-    onProjectChanged(projectId){ _cpCerrar(); _limpiarSearch(); _resetEditorState(); _projectId = String(projectId); _arrancarSiVisible(); },
+    init(projectId) {
+      _projectId = String(projectId);
+      _projectRoot = null; _rootPromise = null; _sesProyectoRestaurado = null;
+      _arrancarSiVisible();
+      _sesArrancar();   // barato sin sesión; restaura aunque el panel esté oculto
+    },
+    onProjectChanged(projectId) {
+      _cpCerrar(); _limpiarSearch();
+      _restaurando = true;          // que el reset no pise la sesión guardada
+      _resetEditorState();
+      _restaurando = false;
+      _projectId = String(projectId);
+      _projectRoot = null; _rootPromise = null; _sesProyectoRestaurado = null;
+      _arrancarSiVisible();
+      _sesArrancar();
+    },
 
     // Tabs / archivos (superficie congelada → funciones internas históricas).
     // Rutean SIEMPRE al grupo activo (default param de las internas).
     abrirArchivo(path)  { return abrirArchivoEnEditor(path); },
+    abrirArchivoEnLinea(path, linea, col) { return _abrirArchivoEnLinea(path, linea, col); },
     cerrarTab(path)     { return cerrarTab(path); },
     guardarActivo()     { return guardarArchivoActivo(); },
     estaAbierto(path)   { return editorGroups.some(g => g?.tabs?.has(path)); },
@@ -2368,7 +2518,7 @@
     // Toggle del panel (lo invoca el shim window.togglePanel → JarvisDock)
     iniciarPolling()    { return iniciarPollingFileTree(); },
     detenerPolling()    { return detenerPollingFileTree(); },
-    cargarMonaco()      { return cargarMonacoLazy(); },
+    cargarMonaco()      { cargarMonacoLazy(); _sesArrancar(); },
 
     // Relayout (lo invoca JarvisDock al redimensionar/maximizar): ambos grupos.
     relayout()          { _relayout(); },

@@ -247,6 +247,47 @@ if (typeof window !== 'undefined') {
   });
 }
 
+// ── Links `archivo:línea` clickeables ────────────────────────────────────────
+// Los agentes imprimen `frontend/x.js:42` a rolete: al clickearlos abrimos el
+// editor de Jarvis en esa línea (no el browser externo). Sólo extensiones de
+// código conocidas, para no confundir dominios (`x.com:3000`).
+const RE_ARCHIVO_LINEA = /(?:^|[\s("'`\[{<])((?:\.\.?\/)?\/?[A-Za-z0-9_@][A-Za-z0-9_@./-]*\.(?:py|js|mjs|cjs|ts|tsx|jsx|css|scss|html?|jsonc?|md|markdown|ya?ml|toml|ini|cfg|conf|sh|bash|zsh|go|rs|java|kt|rb|php|cs|c|cc|cpp|h|hpp|swift|sql|vue|svelte|astro|lua|txt|env))(?::(\d+))(?::(\d+))?/g;
+
+function _wireLinksArchivo(term) {
+  try {
+    term.registerLinkProvider({
+      provideLinks(bufferLineNumber, callback) {
+        let line = null;
+        try { line = term.buffer.active.getLine(bufferLineNumber - 1); } catch (_) {}
+        if (!line) { callback(undefined); return; }
+        const text = line.translateToString(true);
+        const links = [];
+        RE_ARCHIVO_LINEA.lastIndex = 0;
+        let m;
+        while ((m = RE_ARCHIVO_LINEA.exec(text))) {
+          const rel  = m[1];
+          const ln   = m[2] ? parseInt(m[2], 10) : 1;
+          const col  = m[3] ? parseInt(m[3], 10) : 1;
+          const full = rel + (m[2] ? ':' + m[2] : '') + (m[3] ? ':' + m[3] : '');
+          const start = m.index + m[0].length - full.length;
+          if (start >= 2 && text.slice(start - 2, start) === '//') continue;   // URL, no path
+          links.push({
+            range: {
+              start: { x: start + 1, y: bufferLineNumber },
+              end:   { x: start + full.length, y: bufferLineNumber },
+            },
+            text: full,
+            activate: () => {
+              try { window.JarvisEditor?.abrirArchivoEnLinea?.(rel, ln, col); } catch (_) {}
+            },
+          });
+        }
+        callback(links.length ? links : undefined);
+      },
+    });
+  } catch (_) { /* provider no soportado: degrada sin romper */ }
+}
+
 function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto = 0) {
   const container = document.getElementById(containerId);
   if (!container) return null;
@@ -382,6 +423,9 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
       term.loadAddon(new window.WebLinksAddon.WebLinksAddon((_e, uri) => _abrirLink(uri)));
     }
   } catch (_) { /* addon no disponible: degrada sin romper la terminal */ }
+
+  // `archivo:línea` de la salida de los agentes → editor de Jarvis en esa línea.
+  _wireLinksArchivo(term);
 
   // Blindaje anti "terminal NEGRA hasta scrollear": el repintado de xterm vive en
   // UN rAF que se starva bajo carga (terminales ocultas parseando) — si no corre
