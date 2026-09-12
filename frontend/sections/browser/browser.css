@@ -1,0 +1,63 @@
+/* JARVIS — Browser (panel del dock). Chrome propio; el motor es Chromium
+   server-side (ver plotspace/core/remote_browser.py). Estética Obsidian Glass
+   con tokens --ob-*; el resto del look Nave se pule en su fase. */
+
+.br-wrap { display: flex; flex-direction: column; height: 100%; min-height: 0; background: var(--ob-bg-0); }
+.br-wrap[hidden] { display: none; }
+
+/* barra */
+.br-bar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+  border-bottom: 1px solid var(--ob-line-1); background: var(--ob-bg-1);
+  flex: none; -webkit-app-region: no-drag;
+}
+.br-nav {
+  width: 28px; height: 28px; flex: none; display: grid; place-items: center;
+  border-radius: 8px; background: none; border: 0; cursor: pointer;
+  color: var(--ob-fg-3); transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
+}
+.br-nav:hover:not(:disabled) { background: var(--ob-bg-3); color: var(--ob-fg-0); }
+.br-nav:disabled { opacity: .35; cursor: default; }
+.br-nav svg { width: 15px; height: 15px; }
+
+.br-omni {
+  flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px;
+  height: 32px; padding: 0 10px; border-radius: 999px;
+  background: var(--ob-bg-0); border: 1px solid color-mix(in oklch, var(--ob-fg-0) 8%, transparent);
+}
+.br-omni svg { width: 14px; height: 14px; color: var(--ob-fg-4); flex: none; }
+.br-omni input {
+  flex: 1; min-width: 0; background: none; border: 0; outline: none;
+  color: var(--ob-fg-0); font: 500 12.5px var(--font-ui); caret-color: var(--ob-accent);
+}
+.br-omni input::placeholder { color: var(--ob-fg-3); }
+
+/* cuerpo / viewport */
+.br-body { position: relative; flex: 1; min-height: 0; overflow: hidden; background: #0b0b0e; }
+.br-body:focus { outline: none; }
+.br-frame {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: fill; display: block; -webkit-user-select: none; user-select: none;
+  cursor: default; background: #0b0b0e;
+}
+.br-frame[hidden] { display: none; }
+
+/* estado vacío / aviso */
+.br-empty {
+  position: absolute; inset: 0; display: grid; place-items: center; text-align: center;
+  padding: 24px; color: var(--ob-fg-3);
+}
+.br-empty[hidden] { display: none; }
+.br-empty h2 { font: 600 15px var(--font-ui); color: var(--ob-fg-1); margin: 0 0 6px; }
+.br-empty p { font: 400 12px var(--font-ui); margin: 0; max-width: 360px; line-height: 1.5; }
+.br-empty code { font: 500 11px var(--font-mono); color: var(--ob-accent-fg); }
+
+.br-status {
+  position: absolute; left: 10px; bottom: 10px; z-index: 3;
+  font: 500 11px var(--font-mono); color: var(--ob-fg-3);
+  background: color-mix(in oklch, var(--ob-bg-void) 80%, transparent);
+  border: 1px solid var(--ob-line-1); border-radius: 999px; padding: 3px 9px;
+  max-width: calc(100% - 20px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.br-status[hidden] { display: none; }
+.br-status.err { color: var(--ob-err); border-color: color-mix(in oklch, var(--ob-err) 40%, transparent); }
