@@ -333,7 +333,9 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  padding: 24px 18px;
+  /* el bloque del hero va un poco por ENCIMA del centro óptico del panel:
+     el padding inferior empuja el contenido hacia arriba. */
+  padding: 24px 18px 150px;
   gap: 16px;
   position: relative;
   animation: orch-msg-in 500ms var(--ease-out, ease);
