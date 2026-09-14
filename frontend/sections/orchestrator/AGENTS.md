@@ -47,10 +47,9 @@ Jarvis is the **central node of a living neural network** that reacts to voice.
   (read from the `$textarea`, where `workspace.js` dumps partial STT — doesn't touch the voice
   pipeline); while PROCESSING → "Pensando". Reacts to `setSphereState`. The transcript echo runs
   in an rAF that stops itself if the node disconnects (hero → chat).
-- **Telemetry** (`.orch-telemetry`, BOTTOM, FUSED with the composer as a single instrument base
-  — no own border-top/backdrop): `● RED <nodes> · AGENTES <steps> · COST $`, with a live micro-dot
-  (`.orch-tl-net-dot`) that pulses. Cost is refreshed by `_refrescarUso()` (→ `#orch-tl-cost`); AGENTES =
-  pending/running steps.
+- **Telemetry + composer hints REMOVED** (2026-09-12, pedido del usuario): se quitó la fila
+  `● RED · AGENTES · COSTO` (`.orch-telemetry`, `_refrescarUso`, `_updateRunningIndicator`) y la
+  línea de atajos `.orch-hints` ("↵ enviar · ⇧↵ línea nueva · …"). No reintroducir sin pedido.
 - **Composer** (ELITE redesign — no focus rectangle): bar INTEGRATED to the panel surface,
   NOT a box/pill. `.orch-input-box` flex row (attach/mention/slash icons ·
   `$textarea` · send) with no border or ring: focus is marked with an **accent hairline** that

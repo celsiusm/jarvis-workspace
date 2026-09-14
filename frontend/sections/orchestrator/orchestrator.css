@@ -24,8 +24,7 @@
    del canvas. */
 .orch-panel > header,
 .orch-panel > .orch-messages-wrap,
-.orch-panel > .orch-composer,
-.orch-panel > .orch-telemetry { position: relative; z-index: 1; }
+.orch-panel > .orch-composer { position: relative; z-index: 1; }
 /* El header contiene el menú ⋯ (desplegable): debe pintar por ENCIMA de los
    mensajes/hero. Sin esto, messages-wrap (mismo z-index, más tarde en el DOM)
    se pintaba sobre el menú y lo tapaba (parecía "transparente"). */
@@ -248,50 +247,6 @@
   0%, 100% { filter: brightness(1); }
   50%      { filter: brightness(1.25); }
 }
-
-/* ═══════════════════════════════════════════════════════════════
-   TELEMETRÍA (abajo): RED · AGENTES · COSTO
-═══════════════════════════════════════════════════════════════ */
-.orch-telemetry {
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  height: 28px;
-  padding: 0 16px 2px;
-  /* se funde con el composer como UNA sola base de instrumentos (sin border-top
-     ni backdrop propios: son parte de la misma superficie inferior). */
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  letter-spacing: 0.08em;
-}
-/* micro-punto vivo antes de RED: la red "respira" (señal de vida barata). */
-.orch-tl-net-dot {
-  width: 5px; height: 5px; border-radius: 50%; flex: none;
-  background: var(--ob-accent-fg);
-  box-shadow: 0 0 8px var(--ob-accent-glow);
-  animation: orch-tl-breath 3s var(--ease-in-out) infinite;
-}
-@keyframes orch-tl-breath {
-  0%, 100% { opacity: .45; transform: scale(.85); }
-  50%      { opacity: 1;   transform: scale(1); }
-}
-.orch-tl-item {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
-  color: var(--ob-fg-4);
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-.orch-tl-item b { color: var(--ob-fg-2); font-weight: 600; }
-.orch-tl-sep { width: 3px; height: 3px; border-radius: 50%; background: var(--ob-line-3); flex: none; }
-/* el costo se tiñe del acento (dato "de plata") */
-#orch-tl-cost { color: var(--ob-accent-fg); }
-/* AGENTES > 0 → el número toma el verde de "corriendo" */
-.orch-panel[data-state="processing"] #orch-tl-agents,
-.orch-panel[data-state="responding"] #orch-tl-agents { color: var(--ob-run); }
 
 /* ═══════════════════════════════════════════════════════════════
    MESSAGES (scrollable)
@@ -1155,16 +1110,6 @@
   50%      { filter: brightness(1.12); }
 }
 
-.orch-hints {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--ob-fg-4);
-  margin-top: 8px;
-  letter-spacing: 0.04em;
-  text-align: center;
-  user-select: none;
-}
-
 /* ═══════════════════════════════════════════════════════════════
    FLOAT MENUS (mention / slash)
 ═══════════════════════════════════════════════════════════════ */
@@ -1311,11 +1256,10 @@
   .orch-orb::after { animation: none !important; opacity: 0; }
   .orch-voice-orbit i,
   .orch-empty[data-voice="listening"] .orch-voice-transcript::after { animation: none !important; }
-  /* la hairline de foco aparece sin "dibujarse"; la de grabación y el punto de
-     RED no laten. El estado se sigue leyendo por color/opacidad. */
+  /* la hairline de foco aparece sin "dibujarse"; la de grabación no late.
+     El estado se sigue leyendo por color/opacidad. */
   .orch-input-box::after { transition: opacity 120ms ease; }
-  .orch-composer[data-recording="true"] .orch-input-box::after,
-  .orch-tl-net-dot { animation: none !important; }
+  .orch-composer[data-recording="true"] .orch-input-box::after { animation: none !important; }
 }
 
 /* ═══════════════════════════════════════════════════════════════
@@ -1352,17 +1296,15 @@
   .orch-composer { padding: 12px clamp(24px, 6cqw, 80px) 12px; }
   .orch-composer > .orch-composer-chips,
   .orch-composer > .orch-image-preview,
-  .orch-composer > .orch-input-box,
-  .orch-composer > .orch-hints {
+  .orch-composer > .orch-input-box {
     max-width: 720px;
     margin-inline: auto;
   }
   .orch-input-box { border-radius: 24px; }
 
-  /* Marca + telemetría acompañan el aire disponible. */
+  /* Marca acompaña el aire disponible. */
   .orch-brand-name { font-size: clamp(25px, 2.6cqw, 30px); }
   .orch-header    { height: 60px; }
-  .orch-telemetry { height: 34px; font-size: 10.5px; gap: 16px; }
 }
 
 /* ── Pantalla completa / muy ancho: editorial d4 pleno ────────────── */
@@ -1379,9 +1321,7 @@
   .orch-composer  { padding-bottom: 16px; }
   .orch-composer > .orch-composer-chips,
   .orch-composer > .orch-image-preview,
-  .orch-composer > .orch-input-box,
-  .orch-composer > .orch-hints { max-width: 760px; }
+  .orch-composer > .orch-input-box { max-width: 760px; }
   /* Input más redondeado → lee como la barra flotante del concepto d4. */
   .orch-input-box { border-radius: 26px; }
-  .orch-hints     { font-size: 11px; }
 }

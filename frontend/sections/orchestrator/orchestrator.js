@@ -91,7 +91,6 @@ class OrchestratorPanel {
     this._initConstellation();     // canvas vivo detrás de todo
     this._renderMessages();
     this._updateSphere(this.sphereState);
-    this._updateRunningIndicator();
   }
 
   /* ── HTML skeleton ─────────────────────────────────────────── */
@@ -198,18 +197,7 @@ class OrchestratorPanel {
             ${ORCH_SVG.send}
           </button>
         </div>
-
-        <p class="orch-hints" aria-hidden="true">↵ enviar · ⇧↵ línea nueva · mantené tu tecla de voz para hablar</p>
       </footer>
-
-      <!-- TELEMETRÍA (abajo): red · agentes · costo -->
-      <div class="orch-telemetry" id="orch-telemetry" aria-hidden="true">
-        <span class="orch-tl-item"><span class="orch-tl-net-dot" aria-hidden="true"></span><span class="orch-tl-k">RED</span><b id="orch-tl-net">—</b></span>
-        <span class="orch-tl-sep"></span>
-        <span class="orch-tl-item"><span class="orch-tl-k">AGENTES</span><b id="orch-tl-agents">0</b></span>
-        <span class="orch-tl-sep"></span>
-        <span class="orch-tl-item"><span class="orch-tl-k">COSTO</span><b id="orch-tl-cost">$0.00</b></span>
-      </div>
     `;
   }
 
@@ -225,10 +213,6 @@ class OrchestratorPanel {
     this.$slashMenu      = q('#orch-slash-menu');
     this.$btnMore        = q('#orch-btn-more');
     this.$moreMenu       = q('#orch-more-menu');
-    // Telemetría (abajo)
-    this.$tlNet          = q('#orch-tl-net');
-    this.$tlAgents       = q('#orch-tl-agents');
-    this.$tlCost         = q('#orch-tl-cost');
     // Image attach
     this.$iconAttach     = q('#orch-icon-attach');
     this.$fileInput      = q('#orch-file-input');
@@ -626,14 +610,13 @@ class OrchestratorPanel {
 
   addMessage(msg) {
     // Si Jarvis manda un mensaje real, el typing indicator deja de tener sentido
-    if (msg.role === 'jarvis') { this._hideTyping(); this._refrescarUso(); }
+    if (msg.role === 'jarvis') { this._hideTyping(); }
     // Transición hero → chat: si estábamos en el hero, reconstruir (el hero se
     // reemplaza por el day-divider + el primer mensaje).
     const enHero = !!this.$messages.querySelector('.orch-empty');
     this.messages.push(msg);
     if (enHero) this._renderMessages();
     else this._appendMessage(msg);
-    this._updateRunningIndicator();
     this._syncConv();
     if (!this._userScrolled) {
       requestAnimationFrame(() => {
@@ -681,40 +664,6 @@ class OrchestratorPanel {
   setMessages(msgs) {
     this.messages = [...msgs];
     this._renderMessages();
-    this._updateRunningIndicator();
-    this._refrescarUso();   // cambió de proyecto/thread → refrescar costo
-  }
-
-  // ── Uso/costo del orquestador (Sprint 3) ───────────────────────
-  // Lee el projectId de la URL (igual que workspace.js) — así esta sección
-  // es autosuficiente y no necesita un hook en el shell.
-  _fmtTokens(n) {
-    n = n || 0;
-    if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
-    if (n >= 1e3) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
-    return String(n);
-  }
-
-  async _refrescarUso() {
-    const pid = new URLSearchParams(location.search).get('id');
-    const el = this.$tlCost;                             // COSTO en la telemetría de abajo
-    if (!pid || !el) return;
-    try {
-      const url = `/api/orchestrator/uso/${pid}`;
-      const r = window.apiFetch ? await window.apiFetch(url) : await fetch(url);
-      if (!r.ok) return;
-      const u = await r.json();
-      const tot = (u.input_tokens || 0) + (u.output_tokens || 0);
-      const c = u.costo_usd ?? 0;
-      el.textContent = `$${c.toFixed(2)}`;
-      const tel = this.el.querySelector('#orch-telemetry');
-      if (tel) tel.title = u.llamadas
-        ? _orchT('Uso del orquestador en este proyecto: {c} · {t} tokens · {n} llamada(s)')
-            .replace('{c}', '$' + c.toFixed(4))
-            .replace('{t}', this._fmtTokens(tot))
-            .replace('{n}', u.llamadas)
-        : '';
-    } catch (_) { /* silencioso: el costo es informativo */ }
   }
 
   // Limpia mensajes y workflow cards. Útil al iniciar un thread nuevo.
@@ -723,7 +672,6 @@ class OrchestratorPanel {
     this._wfCards.forEach(card => card.remove());
     this._wfCards.clear();
     this._renderMessages();
-    this._updateRunningIndicator();
   }
 
   // Devuelve copia plana de los mensajes (para guardar/exportar).
@@ -786,16 +734,6 @@ class OrchestratorPanel {
 
   // AGENTES en la telemetría = pasos de workflow corriendo/pendientes (agentes
   // realmente trabajando). Se llama en cada cambio de mensajes.
-  _updateRunningIndicator() {
-    let n = 0;
-    this.messages.forEach(m => {
-      (m.actionPlan?.steps || []).forEach(s => {
-        if (s && (s.status === 'pending' || s.status === 'running')) n++;
-      });
-    });
-    if (this.$tlAgents) this.$tlAgents.textContent = String(n);
-  }
-
   // data-conv sobre .orch-panel: '1' cuando hay conversación (la red se atenúa
   // para dar contraste al chat) · '0' en el hero (la red brilla plena).
   _syncConv() {
@@ -900,9 +838,6 @@ class OrchestratorPanel {
         edges.push({ a: i, b: jj, base: Math.max(0.08, 0.2 - d * 0.22) });
       }
     }
-
-    // Telemetría RED = cantidad de nodos
-    if (this.$tlNet) this.$tlNet.textContent = String(nodes.length);
 
     this._nodes = nodes; this._edges = edges; this._maxR = maxR;
     this._waves = [];
@@ -1300,5 +1235,4 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Exponer globalmente para workspace.js
   window.jarvisPanel = panel;
-  panel._refrescarUso();   // costo acumulado al montar
 });
