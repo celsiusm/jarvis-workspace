@@ -247,8 +247,14 @@
     if (bar) bar.innerHTML = `<span class="rv-fpath">${esc(path)}</span>`;
     const host = $('#rv-diff-host');
     const text = $('.rv-textdiff');
-    if (host) { host.hidden = false; host.innerHTML = `<div class="rv-vacio">${_L('Cargando diff…', 'Loading diff…')}</div>`; }
     if (text) { text.hidden = true; text.innerHTML = ''; }
+    // El placeholder SOLO se pinta ANTES de crear el editor: una vez creado, su
+    // DOM vive dentro de #rv-diff-host y NO se debe vaciar (lo desengancharía y
+    // el panel quedaría en blanco en la 2ª selección).
+    if (host && !_diffEditor) {
+      host.hidden = false;
+      host.innerHTML = `<div class="rv-vacio">${_L('Cargando diff…', 'Loading diff…')}</div>`;
+    }
 
     let pair = null;
     try {
@@ -260,8 +266,9 @@
     const monaco = await _monaco();
     if (_activo !== path) return;
 
-    if (!monaco || !pair || pair.binary) {
-      if (host) { host.hidden = true; host.innerHTML = ''; }
+    const sinContenido = !pair || (!pair.original && !pair.modified);
+    if (!monaco || sinContenido || pair.binary || !host) {
+      if (host) host.hidden = true;
       if (text) {
         text.hidden = false;
         const d = _diffTextoDe(path);
@@ -271,8 +278,9 @@
       return;
     }
 
-    if (host) host.innerHTML = '';
+    host.hidden = false;
     if (!_diffEditor) {
+      host.innerHTML = '';   // limpiar el placeholder SOLO antes de crear
       _diffEditor = monaco.editor.createDiffEditor(host, {
         readOnly: true, automaticLayout: true, theme: 'jarvis-dark',
         renderSideBySide: false, fontSize: 12, scrollBeyondLastLine: false,
