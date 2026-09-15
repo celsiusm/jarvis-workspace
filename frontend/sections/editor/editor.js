@@ -2696,7 +2696,7 @@
     // Toggle del panel (lo invoca el shim window.togglePanel → JarvisDock)
     iniciarPolling()    { return iniciarPollingFileTree(); },
     detenerPolling()    { return detenerPollingFileTree(); },
-    cargarMonaco()      { cargarMonacoLazy(); _sesArrancar(); },
+    cargarMonaco()      { const p = cargarMonacoLazy(); _sesArrancar(); return p; },
 
     // Relayout (lo invoca JarvisDock al redimensionar/maximizar): ambos grupos.
     relayout()          { _relayout(); },

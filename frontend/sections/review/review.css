@@ -1,9 +1,8 @@
 /* ═══════════════════════════════════════════════════════════════
-   SECTION — Review Room (diff visual + decisión de ship)
+   SECTION — Review Room (revisar por agente + diff + commit)
    Prefijo: rv-  ·  tokens --ob-* (shared/tokens.css)
+   Master-detail: lista agrupada (side) + diff del archivo activo (main).
 ═══════════════════════════════════════════════════════════════ */
-
-/* .rv-overlay — removido en Task 26: el dock controla la visibilidad del pane */
 
 .rv-modal {
   width: 100%;
@@ -13,23 +12,18 @@
   border-radius: 0;
   background: var(--ob-bg-1);
   overflow: hidden;
-  container-type: inline-size;   /* el dock cambia de ancho → media queries por contenedor */
+  container-type: inline-size;   /* el dock cambia de ancho → queries por contenedor */
 }
 
-/* Dock angosto (~320px default): la lista de 290px ahogaba al diff (~30px, 1 char
-   por línea). Apilamos: archivos arriba (acordeón con scroll) y diff a todo el ancho. */
-@container (max-width: 540px) {
-  .rv-body { flex-direction: column; }
-  .rv-archivos {
-    width: auto; flex-shrink: 0; max-height: 38%;
-    border-right: none; border-bottom: 1px solid var(--ob-line-1);
-  }
-}
+/* `hidden` gana sobre los display de las clases (si no, el empty-state y el
+   cuerpo se ven a la vez). */
+.rv-body[hidden], .rv-emptystate[hidden],
+.rv-diffhost[hidden], .rv-textdiff[hidden] { display: none; }
 
 /* ── Topbar ── */
 .rv-top {
   display: flex; align-items: center; gap: 10px;
-  padding: 14px 18px;
+  padding: 12px 16px;
   border-bottom: 1px solid var(--ob-line-1);
   flex-shrink: 0;
 }
@@ -39,90 +33,186 @@
   letter-spacing: var(--ls-caps);
   text-transform: uppercase;
   color: var(--ob-fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%;
 }
 .rv-branch b { color: var(--ob-accent-fg); font-weight: 600; }
+.rv-sum {
+  font: 500 var(--text-2xs) var(--font-mono);
+  color: var(--ob-fg-3); white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .rv-spacer { flex: 1; }
+.rv-ago {
+  font: 400 var(--text-2xs) var(--font-ui);
+  color: var(--ob-fg-4); white-space: nowrap;
+}
 .rv-refresh {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 30px; height: 30px;
+  width: 28px; height: 28px; flex-shrink: 0;
   background: none; border: none; border-radius: var(--radius-btn);
   color: var(--ob-fg-3); cursor: pointer;
   transition: color var(--dur-1), background var(--dur-1);
 }
 .rv-refresh:hover { color: var(--ob-fg-0); background: var(--ob-bg-3); }
 
-/* ── Cuerpo ── */
+/* ── Cuerpo (master-detail) ── */
 .rv-body { flex: 1; display: flex; min-height: 0; }
 
-.rv-archivos {
-  width: 290px; flex-shrink: 0;
+.rv-side {
+  width: 320px; flex-shrink: 0;
+  display: flex; flex-direction: column; min-height: 0;
   border-right: 1px solid var(--ob-line-1);
-  overflow-y: auto;
-  padding: 8px;
-  display: flex; flex-direction: column; gap: 3px;
 }
-.rv-archivo {
-  display: flex; align-items: center; gap: 8px;
+.rv-search {
+  margin: 8px 8px 4px;
   padding: 6px 9px;
-  background: none;
+  font: 400 var(--text-xs) var(--font-ui);
+  color: var(--ob-fg-0);
+  background: var(--ob-bg-3);
+  border: 1px solid var(--ob-line-2);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+.rv-search:focus { border-color: var(--ob-accent-40, var(--ob-accent)); }
+.rv-lista {
+  flex: 1; min-height: 0;
+  overflow-y: auto;
+  padding: 4px 8px 8px;
+}
+
+/* Grupo por agente */
+.rv-grupo { margin-bottom: 8px; }
+.rv-ghead {
+  display: flex; align-items: center; gap: 7px;
+  padding: 4px 4px 4px 2px;
+  position: sticky; top: 0;
+  background: var(--ob-bg-1);
+  z-index: 1;
+}
+.rv-gsel {
+  width: 15px; height: 15px; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  font: 700 10px var(--font-mono);
+  color: var(--ob-on-accent, #fff);
+  background: none; border: 1px solid var(--ob-line-3);
+  border-radius: 4px; cursor: pointer; padding: 0;
+}
+.rv-gsel.on { background: var(--ob-accent); border-color: var(--ob-accent); }
+.rv-gname {
+  flex: 1; min-width: 0;
+  font: 600 var(--text-2xs) var(--font-ui);
+  letter-spacing: .04em; text-transform: uppercase;
+  color: var(--ob-fg-2);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rv-gcount {
+  font: 600 var(--text-2xs) var(--font-mono);
+  color: var(--ob-fg-4);
+  background: var(--ob-bg-3);
+  padding: 1px 6px; border-radius: var(--radius-pill, 999px);
+  flex-shrink: 0;
+}
+
+/* Fila de archivo */
+.rv-fila {
+  display: flex; align-items: center; gap: 7px;
+  padding: 5px 7px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
   cursor: pointer;
-  text-align: left;
   transition: background var(--dur-1) var(--ease-out);
-  animation: ob-pop-in var(--dur-2) var(--ease-out) calc(var(--i, 0) * 15ms) both;
 }
-.rv-archivo:hover  { background: var(--ob-bg-3); }
-.rv-archivo.activo { background: var(--ob-accent-08); border-color: var(--ob-accent-14); }
+.rv-fila:hover { background: var(--ob-bg-3); }
+.rv-fila.activo { background: var(--ob-accent-08); border-color: var(--ob-accent-14); }
+.rv-fila.sel { background: var(--ob-bg-3); }
+.rv-check { flex-shrink: 0; accent-color: var(--ob-accent); cursor: pointer; }
 .rv-estado {
-  width: 16px; height: 16px;
+  width: 16px; height: 16px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 4px;
-  font: 700 var(--text-2xs) var(--font-mono);
-  flex-shrink: 0;
+  border-radius: 4px; font: 700 var(--text-2xs) var(--font-mono);
 }
 .rv-estado.M { color: var(--ob-work); background: var(--ob-work-08); }
 .rv-estado.A { color: var(--ob-run);  background: var(--ob-run-08); }
 .rv-estado.D { color: var(--ob-err);  background: var(--ob-err-08); }
 .rv-estado.R { color: var(--ob-accent-fg); background: var(--ob-accent-08); }
 .rv-estado.U { color: var(--ob-run);  background: var(--ob-run-08); }
+.rv-estado.\? { color: var(--ob-run);  background: var(--ob-run-08); }
 .rv-path {
   flex: 1; min-width: 0;
   font: 400 var(--text-xs) var(--font-mono);
   color: var(--ob-fg-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-  direction: rtl; text-align: left; /* recorta el inicio, no el archivo */
+  direction: rtl; text-align: left;
 }
 .rv-stat {
   font: 500 var(--text-2xs) var(--font-mono); flex-shrink: 0;
-  min-width: 46px; text-align: right;
-  font-variant-numeric: tabular-nums;
+  min-width: 44px; text-align: right; font-variant-numeric: tabular-nums;
 }
 .rv-stat .mas   { color: var(--ob-run); }
 .rv-stat .menos { color: var(--ob-err); }
-
-.rv-vacio {
-  margin: auto;
-  text-align: center;
-  color: var(--ob-fg-3);
-  font: 400 var(--text-base) var(--font-ui);
-  line-height: var(--lh-base);
+.rv-open {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 20px; height: 20px; flex-shrink: 0;
+  background: none; border: none; border-radius: 4px;
+  color: var(--ob-fg-4); cursor: pointer; padding: 0;
 }
-.rv-vacio svg { color: var(--ob-run); margin-bottom: 8px; }
+.rv-open:hover { color: var(--ob-accent-fg); background: var(--ob-bg-3); }
 
-/* ── Diff ── */
-.rv-diff {
+/* Barra de commit (siempre visible abajo del side) */
+.rv-commit {
+  flex-shrink: 0;
+  display: flex; gap: 6px; align-items: center;
+  padding: 8px; border-top: 1px solid var(--ob-line-1);
+}
+.rv-msg {
   flex: 1; min-width: 0;
-  overflow: auto;
-  font: 400 var(--text-sm)/1.5 var(--font-mono);
-  padding: 10px 0 30px;
+  padding: 6px 9px;
+  font: 400 var(--text-xs) var(--font-ui);
+  color: var(--ob-fg-0);
+  background: var(--ob-bg-3);
+  border: 1px solid var(--ob-line-2);
+  border-radius: var(--radius-sm);
+  outline: none;
+}
+.rv-msg:focus { border-color: var(--ob-accent-40, var(--ob-accent)); }
+.rv-commitbtn {
+  flex-shrink: 0;
+  padding: 6px 11px;
+  font: 600 var(--text-xs) var(--font-ui);
+  color: var(--ob-on-accent, #fff);
+  background: var(--ob-accent);
+  border: none; border-radius: var(--radius-sm); cursor: pointer;
+  transition: filter var(--dur-1), opacity var(--dur-1);
+}
+.rv-commitbtn:hover:not(:disabled) { filter: brightness(1.08); }
+.rv-commitbtn:disabled { opacity: .4; cursor: default; }
+
+/* ── Panel de diff ── */
+.rv-main {
+  flex: 1; min-width: 0; min-height: 0;
+  display: flex; flex-direction: column;
   background: var(--ob-bg-void);
 }
-.rv-linea {
-  padding: 0 14px;
-  white-space: pre-wrap;
-  word-break: break-all;
+.rv-filebar {
+  flex-shrink: 0;
+  padding: 7px 14px;
+  border-bottom: 1px solid var(--ob-line-1);
+  background: var(--ob-bg-1);
+  font: 600 var(--text-xs) var(--font-mono);
+  color: var(--ob-fg-0);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
+.rv-fpath { direction: rtl; text-align: left; display: inline-block; max-width: 100%; }
+.rv-diffhost { flex: 1; min-height: 0; }
+.rv-textdiff {
+  flex: 1; min-height: 0;
+  overflow: auto;
+  font: 400 var(--text-sm)/1.5 var(--font-mono);
+  padding: 8px 0 24px;
+}
+
+/* Diff de texto (fallback) */
+.rv-linea { padding: 0 14px; white-space: pre-wrap; word-break: break-all; }
 .rv-linea.add  { background: color-mix(in oklch, var(--ob-run) 9%,  transparent); color: color-mix(in oklch, var(--ob-run) 70%, var(--ob-fg-1)); }
 .rv-linea.del  { background: color-mix(in oklch, var(--ob-err) 9%,  transparent); color: color-mix(in oklch, var(--ob-err) 70%, var(--ob-fg-1)); }
 .rv-linea.hunk {
@@ -131,16 +221,38 @@
   padding-top: 2px; padding-bottom: 2px;
 }
 .rv-linea.meta { color: var(--ob-fg-4); }
+.rv-file-sec { margin-top: 10px; }
 .rv-file-head {
   position: sticky; top: 0;
-  display: flex; align-items: center; gap: 8px;
-  margin-top: 14px;
-  padding: 7px 14px;
+  padding: 6px 14px;
   background: var(--ob-bg-1);
   border-top: 1px solid var(--ob-line-1);
-  box-shadow: 0 1px 0 var(--ob-line-1);
+  border-bottom: 1px solid var(--ob-line-1);
   font: 600 var(--text-xs) var(--font-mono);
   color: var(--ob-fg-0);
 }
-.rv-file-head svg { color: var(--ob-fg-3); flex-shrink: 0; }
-.rv-contexto { color: var(--ob-fg-2); }
+
+.rv-vacio {
+  margin: auto; text-align: center;
+  color: var(--ob-fg-3);
+  font: 400 var(--text-base) var(--font-ui);
+  line-height: var(--lh-base);
+  padding: 20px;
+}
+.rv-emptystate {
+  flex: 1; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 4px;
+  text-align: center; color: var(--ob-fg-3);
+  font: 400 var(--text-base) var(--font-ui); line-height: var(--lh-base);
+}
+.rv-emptystate svg { color: var(--ob-run); margin-bottom: 8px; }
+
+/* Dock angosto: apilamos (lista arriba, diff abajo). */
+@container (max-width: 560px) {
+  .rv-body { flex-direction: column; }
+  .rv-side {
+    width: auto; max-height: 46%; flex-shrink: 0;
+    border-right: none; border-bottom: 1px solid var(--ob-line-1);
+  }
+  .rv-branch { display: none; }
+}

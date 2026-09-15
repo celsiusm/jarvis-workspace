@@ -395,6 +395,43 @@ async def git_blame_linea(project_id: int, path: str = Query(...), line: int = Q
     return {'git': True, 'blame': _parse_blame(out)}
 
 
+@router.get("/projects/{project_id}/review/file")
+async def review_file(project_id: int, path: str = Query(...)):
+    """Par original (HEAD) vs modificado (working tree) de UN archivo, para el
+    diff de Monaco del Review. `binary` → la UI cae al diff de texto."""
+    cwd = _ruta_proyecto(project_id)
+    rel = _path_relativo_seguro(cwd, path)
+    if rel is None:
+        raise HTTPException(status_code=400, detail="Ruta fuera del proyecto")
+    rc, _ = _git(cwd, 'rev-parse', '--git-dir')
+    if rc != 0:
+        raise HTTPException(status_code=400, detail="El proyecto no es un repo git")
+
+    rc, original = _git(cwd, 'show', f'HEAD:{rel}')
+    if rc != 0 or 'fatal:' in original[:20]:
+        original = ''
+    original = original.replace('\r\n', '\n')
+
+    modified = ''
+    binary = False
+    full = os.path.join(cwd, rel)
+    if os.path.isfile(full):
+        try:
+            with open(full, 'r', encoding='utf-8') as f:
+                modified = f.read()
+            modified = modified.replace('\r\n', '\n')
+        except (UnicodeDecodeError, OSError):
+            binary = True
+
+    try:
+        from plotspace.routers.projects_files import _detectar_lenguaje
+        language = _detectar_lenguaje(rel)
+    except Exception:
+        language = 'plaintext'
+    return {'original': original, 'modified': modified,
+            'binary': binary, 'language': language}
+
+
 # NOTA: el endpoint POST /review/aprobar (git add -A + commit) se quitó: hacía
 # justo lo que el CLAUDE.md prohíbe ("NUNCA git add -A") y el hook pre-commit
 # bloquea, así que estaba roto por diseño en el árbol compartido sobre main. La
