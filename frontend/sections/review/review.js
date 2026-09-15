@@ -279,9 +279,6 @@
         renderOverviewRuler: false, minimap: { enabled: false },
         originalEditable: false,
       });
-      // En modo inline, Monaco muestra DOS columnas de números (original +
-      // modificado). Apagamos la del original: sólo queremos la del archivo actual.
-      try { _diffEditor.getOriginalEditor().updateOptions({ lineNumbers: 'off' }); } catch (_) {}
     }
     if (_diffModelos) {
       try { _diffModelos.original.dispose(); } catch (_) {}
