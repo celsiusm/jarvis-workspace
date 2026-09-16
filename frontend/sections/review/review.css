@@ -204,10 +204,15 @@
 }
 .rv-fpath { direction: rtl; text-align: left; display: inline-block; max-width: 100%; }
 .rv-diffhost { flex: 1; min-height: 0; }
-/* En modo inline, Monaco deja el editor "original" como una tira de ~36px a la
-   izquierda (con su gutter) además del modificado → doble columna de números.
-   Lo ocultamos: el diff inline vive entero en el editor modificado. */
+/* En modo inline, Monaco deja el editor "original" como una tira a la izquierda
+   (su gutter) y DESPLAZA el "modified" a la derecha → hueco negro + doble
+   columna de números. Hay que ocultar el WRAPPER original entero (no sólo su
+   contenido `.original-in-monaco-diff-editor`) y anclar el modificado a la
+   izquierda, o el espacio reservado del original sigue ahí. */
+.rv-diffhost .editor.original,
 .rv-diffhost .original-in-monaco-diff-editor { display: none !important; }
+.rv-diffhost .editor.modified,
+.rv-diffhost .modified-in-monaco-diff-editor { left: 0 !important; width: 100% !important; }
 .rv-textdiff {
   flex: 1; min-height: 0;
   overflow: auto;
