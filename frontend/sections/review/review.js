@@ -25,16 +25,35 @@
   const _pane = () => document.getElementById('jw-pane-review');
   const $ = (sel) => _pane()?.querySelector(sel) || null;
 
+  // El dock puede restaurar/abrir la pestaña Review ANTES de que init() haya
+  // fijado el proyecto (onTabShown corre mientras workspace.js todavía espera
+  // cargarProyecto). En ese hueco _projectId es null → /api/projects/null/...
+  // Caemos a la URL (?id=), que siempre está presente en /workspace.
+  const _pid = () => _projectId ?? new URLSearchParams(location.search).get('id');
+
+  // FastAPI devuelve `detail` como string O array/objeto (422) → String() daba
+  // "[object Object]". Normalizamos a un mensaje legible.
+  const _errMsg = (e) => {
+    const d = e && e.detail;
+    if (Array.isArray(d)) return d.map(x => x?.msg || JSON.stringify(x)).join('; ');
+    if (d && typeof d === 'object') return d.msg || d.error || JSON.stringify(d);
+    if (typeof d === 'string' && d) return d;
+    return String((e && (e.message || e.error)) || e || '');
+  };
+
   // ── Carga ───────────────────────────────────────────────────────────
   async function _cargar() {
+    const pid = _pid();
+    if (pid == null) throw new Error(_L('El proyecto todavía no está listo', 'Project is not ready yet'));
     const [r1, r2] = await Promise.all([
-      fetch(`/api/projects/${_projectId}/review`),
-      fetch(`/api/projects/${_projectId}/review/by-agent`).catch(() => null),
+      fetch(`/api/projects/${pid}/review`),
+      fetch(`/api/projects/${pid}/review/by-agent`).catch(() => null),
     ]);
     if (!r1.ok) {
       const e = await r1.json().catch(() => ({}));
-      throw new Error(e.detail || `HTTP ${r1.status}`);
+      throw new Error(_errMsg(Object.assign({ message: `HTTP ${r1.status}` }, e)));
     }
+    if (_projectId == null) _projectId = pid;   // adoptamos el de la URL
     _data = await r1.json();
     _byAgent = (r2 && r2.ok) ? await r2.json() : null;
     _cargadoEn = Date.now();
@@ -320,7 +339,7 @@
         body: JSON.stringify({ archivos: [..._selected], mensaje: msg }),
       });
       const d = await r.json().catch(() => ({}));
-      if (!r.ok || d.ok === false) throw new Error(d.error || d.detail || `HTTP ${r.status}`);
+      if (!r.ok || d.ok === false) throw new Error(_errMsg(d.error ? d : Object.assign({ message: `HTTP ${r.status}` }, d)));
       toast(_L('Commiteado', 'Committed') + (d.commit ? ' ' + d.commit : ''), 'ok');
       _selected.clear();
       _activo = null;
@@ -328,7 +347,7 @@
       await _cargar();
       _render();
     } catch (e) {
-      toast(String(e.message || e), 'error');
+      toast(_errMsg(e), 'error');
     } finally {
       _renderCommitBtn();
     }
@@ -407,7 +426,7 @@
         </div>
       </div>`;
     pane.querySelector('.rv-refresh').addEventListener('click', async () => {
-      try { await _cargar(); _render(); } catch (e) { toast(e.message, 'error'); }
+      try { await _cargar(); _render(); } catch (e) { toast(_errMsg(e), 'error'); }
     });
     pane.querySelector('#rv-search').addEventListener('input', (e) => {
       _busqueda = e.target.value.trim().toLowerCase();
@@ -439,13 +458,13 @@
     _arrancarTimers();
     const lista = $('.rv-lista');
     if (lista) lista.innerHTML = `<div class="rv-vacio">${_L('Cargando…', 'Loading…')}</div>`;
-    const pid = _projectId;
+    const pid = _pid();
     try {
       await _cargar();
-      if (pid !== _projectId) return;
+      if (String(pid) !== String(_pid())) return;   // cambió de proyecto mientras cargaba
       _render();
     } catch (e) {
-      if (lista) lista.innerHTML = `<div class="rv-vacio">${_L('No se pudo cargar el review', 'Could not load review')}:<br>${esc(e.message)}</div>`;
+      if (lista) lista.innerHTML = `<div class="rv-vacio">${_L('No se pudo cargar el review', 'Could not load review')}:<br>${esc(_errMsg(e))}</div>`;
     }
   }
 

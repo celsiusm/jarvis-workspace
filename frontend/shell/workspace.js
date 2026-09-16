@@ -1064,6 +1064,12 @@ async function inicializar() {
     window.JarvisMemory?.init(projectId);
     window.JarvisReview?.init(projectId);
     window.JarvisSettings?.init(projectId);
+    // El dock puede haber restaurado una pestaña (p.ej. Review) en init()/
+    // setProject() ANTES de estas líneas: ahí onTabShown corrió mientras el
+    // módulo de la sección todavía no existía o no conocía el proyecto, y el
+    // pane quedaba en blanco (o cargaba con projectId null). Re-disparamos la
+    // pestaña activa ya con todo inicializado.
+    if (window.JarvisDock?.isOpen?.()) _onDockTabShown(window.JarvisDock.activeTab());
     document.getElementById('jw-gear')?.addEventListener('click', () => window.JarvisSettings?.open());
     window.JarvisGroqSetup?.init?.();
     // Adopta logins nativos (Grok, etc.) aunque nunca se tocó ⚙ → Cuentas.
