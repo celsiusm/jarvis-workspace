@@ -14,6 +14,7 @@
   let _workflows = new Map(); // workflow_id → { nombre, pasos[] } (en vivo)
   let _visible   = false;
   let _montado   = false;
+  let _picker    = null;      // { el, taskId } del picker de asignar abierto
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
@@ -171,7 +172,7 @@
       card.addEventListener('dragend', () => card.classList.remove('dragging'));
 
       card.querySelector('[data-act="asignar"]')?.addEventListener('click', (e) => {
-        e.stopPropagation(); _abrirPicker(e.clientX, e.clientY, id);
+        e.stopPropagation(); _abrirPicker(e.currentTarget, id);
       });
       card.querySelector('[data-act="reabrir"]')?.addEventListener('click', async (e) => {
         e.stopPropagation(); await _patch(id, { estado: 'backlog' });
@@ -207,7 +208,7 @@
         const destino = col.dataset.col;
         if (destino === 'running') {
           // "En curso" de verdad = un agente la agarra: pedir a cuál
-          _abrirPicker(e.clientX, e.clientY, id);
+          _abrirPicker(null, id, e.clientX, e.clientY);
           return;
         }
         await _patch(id, { estado: destino });
@@ -238,8 +239,19 @@
   }
 
   /* ── Picker de agente (asignar) ────────────────────────────── */
-  async function _abrirPicker(x, y, taskId) {
+  function _cerrarPicker() {
+    if (_picker) { try { _picker.el.remove(); } catch { /* ya estaba */ } _picker = null; }
     document.querySelectorAll('.tk-picker').forEach(p => p.remove());
+  }
+
+  // `anchor` = elemento disparador (se abre DEBAJO, así no lo tapa y el segundo
+  // click puede togglear); sin anchor (drop en "En curso") usa x/y del mouse.
+  async function _abrirPicker(anchor, taskId, x, y) {
+    // Toggle: si el picker YA está abierto para esta misma tarea, el segundo
+    // click lo cierra. Antes el mousedown global lo borraba y el click del
+    // mismo botón lo volvía a crear → quedaba pegado y no se podía ocultar.
+    if (_picker && _picker.taskId === String(taskId)) { _cerrarPicker(); return; }
+    _cerrarPicker();
 
     let terminales = [];
     try {
@@ -247,22 +259,30 @@
       if (r.ok) terminales = (await r.json()).terminals || [];
     } catch { /* red */ }
 
-    const picker = document.createElement('div');
-    picker.className = 'tk-picker';
-    picker.innerHTML = `
+    const el = document.createElement('div');
+    el.className = 'tk-picker';
+    el.innerHTML = `
       <div class="tk-picker-titulo">Asignar a un agente</div>
       ${terminales.length
         ? terminales.map(t => `<button data-tid="${t.id}">${icon('terminal', 12)} ${esc(t.nombre)}</button>`).join('')
         : '<div class="tk-picker-vacio">No hay terminales — creá una con + Terminal</div>'}`;
-    document.body.appendChild(picker);
+    document.body.appendChild(el);
 
-    const { offsetWidth: w, offsetHeight: h } = picker;
-    picker.style.left = `${Math.min(x, window.innerWidth - w - 8)}px`;
-    picker.style.top  = `${Math.min(y, window.innerHeight - h - 8)}px`;
+    const { offsetWidth: w, offsetHeight: h } = el;
+    let px = x, py = y;
+    if (anchor && anchor.getBoundingClientRect) {
+      const r = anchor.getBoundingClientRect();
+      px = r.left; py = r.bottom + 6;
+    }
+    el.style.left = `${Math.min(px, window.innerWidth - w - 8)}px`;
+    el.style.top  = `${Math.min(py, window.innerHeight - h - 8)}px`;
 
-    picker.querySelectorAll('[data-tid]').forEach(b =>
-      b.addEventListener('click', async () => {
-        picker.remove();
+    _picker = { el, taskId: String(taskId) };
+
+    el.querySelectorAll('[data-tid]').forEach(b =>
+      b.addEventListener('click', async (ev) => {
+        ev.stopPropagation();
+        _cerrarPicker();
         const r = await fetch(`/api/tasks/${taskId}/asignar`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -272,13 +292,16 @@
         else toast('No se pudo asignar la tarea.', 'error');
         await refrescar();
       }));
-
-    setTimeout(() => {
-      document.addEventListener('mousedown', (ev) => {
-        if (!picker.contains(ev.target)) picker.remove();
-      }, { once: true });
-    }, 0);
   }
+
+  // Un solo listener global: cierra al click afuera, pero IGNORA el botón que
+  // abre (así el click del botón alcanza a hacer su toggle en vez de que el
+  // mousedown lo anule) y el propio picker.
+  document.addEventListener('mousedown', (ev) => {
+    if (!_picker) return;
+    if (ev.target.closest('.tk-picker') || ev.target.closest('[data-act="asignar"]')) return;
+    _cerrarPicker();
+  });
 
   /* ── API pública ───────────────────────────────────────────── */
   async function refrescar() {
