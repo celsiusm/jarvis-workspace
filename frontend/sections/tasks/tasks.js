@@ -14,7 +14,9 @@
   let _workflows = new Map(); // workflow_id → { nombre, pasos[] } (en vivo)
   let _visible   = false;
   let _montado   = false;
-  let _picker    = null;      // { el, taskId } del picker de asignar abierto
+  let _picker        = null;  // { el, taskId } del picker de asignar abierto
+  let _pickerPending = null;  // taskId que se está abriendo (fetch en vuelo)
+  let _pickerGen     = 0;     // invalida aperturas viejas (doble click / cierre)
 
   const $ = (id) => document.getElementById(id);
   const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
@@ -240,6 +242,8 @@
 
   /* ── Picker de agente (asignar) ────────────────────────────── */
   function _cerrarPicker() {
+    _pickerGen++;                 // invalida cualquier _abrirPicker en vuelo
+    _pickerPending = null;
     if (_picker) { try { _picker.el.remove(); } catch { /* ya estaba */ } _picker = null; }
     document.querySelectorAll('.tk-picker').forEach(p => p.remove());
   }
@@ -247,17 +251,22 @@
   // `anchor` = elemento disparador (se abre DEBAJO, así no lo tapa y el segundo
   // click puede togglear); sin anchor (drop en "En curso") usa x/y del mouse.
   async function _abrirPicker(anchor, taskId, x, y) {
-    // Toggle: si el picker YA está abierto para esta misma tarea, el segundo
-    // click lo cierra. Antes el mousedown global lo borraba y el click del
-    // mismo botón lo volvía a crear → quedaba pegado y no se podía ocultar.
-    if (_picker && _picker.taskId === String(taskId)) { _cerrarPicker(); return; }
+    const id = String(taskId);
+    // Toggle: ya abierto para esta tarea → cerrar.
+    if (_picker && _picker.taskId === id) { _cerrarPicker(); return; }
+    // Doble click rápido: la 1ª apertura todavía espera el fetch (`_picker` aún
+    // null) → cancelar en vez de crear DOS pickers apilados.
+    if (_pickerPending === id) { _cerrarPicker(); return; }
     _cerrarPicker();
+    _pickerPending = id;
+    const gen = _pickerGen;       // _cerrarPicker ya incrementó
 
     let terminales = [];
     try {
       const r = await fetch(`/api/workspace/${_projectId}/state`);
       if (r.ok) terminales = (await r.json()).terminals || [];
     } catch { /* red */ }
+    if (gen !== _pickerGen) return;   // otra apertura/cierre ganó mientras esperábamos
 
     const el = document.createElement('div');
     el.className = 'tk-picker';
@@ -277,7 +286,8 @@
     el.style.left = `${Math.min(px, window.innerWidth - w - 8)}px`;
     el.style.top  = `${Math.min(py, window.innerHeight - h - 8)}px`;
 
-    _picker = { el, taskId: String(taskId) };
+    _pickerPending = null;
+    _picker = { el, taskId: id };
 
     el.querySelectorAll('[data-tid]').forEach(b =>
       b.addEventListener('click', async (ev) => {

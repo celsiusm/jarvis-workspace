@@ -1703,14 +1703,15 @@
       bar.style.bottom = 'auto';
       bar.style.top = Math.round(g.top + 12) + 'px';
       if (bar.hidden) { bar.hidden = false; void bar.offsetWidth; }
+      _lockHintWidth(bar, presets);   // fija el ancho (el hint dinámico no debe moverlo)
       // Clamp horizontal: `left` es el CENTRO del panel, así que media barra
-      // tiene que quedar dentro del viewport en los dos bordes.
+      // tiene que quedar dentro del viewport en los dos bordes. Se mide DESPUÉS
+      // de _lockHintWidth para usar el ancho final.
       const mitad = (bar.offsetWidth || 0) / 2;
       let left = g.left + g.width / 2;
       const minL = mitad + 8, maxL = window.innerWidth - mitad - 8;
       if (mitad && maxL > minL) left = Math.max(minL, Math.min(maxL, left));
       bar.style.left = Math.round(left) + 'px';
-      _lockHintWidth(bar, presets);   // el hint dinámico no debe mover el panel
       bar.classList.remove('tsnap-open'); void bar.offsetWidth;   // re-dispara el stagger
       bar.classList.add('tsnap-open');
       _dispOpen = true;
