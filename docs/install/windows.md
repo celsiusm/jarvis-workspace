@@ -92,7 +92,7 @@ Then open `http://localhost:3000`.
 
 ### 6. Link your CLI accounts (BYOK)
 
-In the UI: ⚙ → **Cuentas** → link Claude / Codex / etc. with **your** logins.
+In the UI: ⚙ → **Accounts** → link Claude / Codex / etc. with **your** logins.
 No API key is required for the main BYOK flow. An optional `ANTHROPIC_API_KEY`
 in `plotspace/.env` is only for the orchestrator chat extras.
 

@@ -4,11 +4,11 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "jarvis-workspace"
-# Fuente única de versión = archivo VERSION (el mismo que lee el motor en
-# runtime, ver plotspace/routers/system.py). Se resuelve más abajo, en
-# [tool.setuptools.dynamic]; nunca hardcodear acá o se desincroniza.
+# Single source of version = the VERSION file (the same one the engine reads at
+# runtime, see plotspace/routers/system.py). It is resolved below, in
+# [tool.setuptools.dynamic]; never hardcode it here or it drifts.
 dynamic = ["version"]
-description = "Jarvis Workspace — tu flota de agentes de código, en una app"
+description = "Jarvis Workspace — your fleet of coding agents, in one app"
 readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
@@ -25,10 +25,10 @@ classifiers = [
   "Topic :: Software Development",
 ]
 
-# Lo MÍNIMO para arrancar y trabajar. Todo lo pesado va en extras: sin eso, un
-# `pip install .` se baja 1,3 GB para alguien que quizá nunca use el
-# dictado local ni el browser remoto. Espejo de packaging/requirements-base.txt,
-# que es lo que viaja en el instalador.
+# The MINIMUM to start and work. Everything heavy goes in extras: without that, a
+# `pip install .` downloads 1.3 GB for someone who may never use local dictation
+# or the remote browser. Mirror of packaging/requirements-base.txt, which is what
+# ships in the installer.
 dependencies = [
   "fastapi>=0.104.0",
   "uvicorn>=0.24.0",
@@ -40,22 +40,22 @@ dependencies = [
   "httpx>=0.27.0",
   "python-dotenv>=1.0.0",
   "edge-tts>=6.0.0",
-  # Puertos en LISTEN, cwd y cmdline de procesos: reemplaza a `ss` y a leer
-  # /proc, que no existen fuera de Linux.
+  # LISTEN ports, cwd and process cmdline: replaces `ss` and reading /proc,
+  # neither of which exists outside Linux.
   "psutil>=5.9.0",
-  # Solo Unix (arrastra pty/termios/fcntl). En Windows el motor de terminales
-  # es el termhost y este paquete no hace falta.
+  # Unix only (pulls in pty/termios/fcntl). On Windows the terminal engine is
+  # termhost and this package is not needed.
   "ptyprocess>=0.7.0; sys_platform != 'win32'",
 ]
 
 [project.optional-dependencies]
-# Dictado con el modelo corriendo en tu máquina. Con STT_MOTOR=groq el dictado
-# es remoto y no hace falta nada de esto.
+# Dictation with the model running on your machine. With STT_MOTOR=groq dictation
+# is remote and none of this is needed.
 voice = ["onnx-asr[cpu,hub]>=0.11", "numpy>=1.24.0"]
-# Vía de escape del dictado local (STT_MOTOR=whisper).
+# Escape hatch for local dictation (STT_MOTOR=whisper).
 whisper = ["faster-whisper>=1.1.0", "numpy>=1.24.0"]
-# Browser remoto del Web Preview: para los sitios que bloquean el iframe.
-# Además del paquete hay que bajar el navegador: `playwright install chromium`.
+# Web Preview remote browser: for sites that block iframes.
+# Besides the package you must download the browser: `playwright install chromium`.
 browser = ["playwright>=1.50.0", "Pillow>=10.0.0"]
 all = ["jarvis-workspace[voice,browser]"]
 
@@ -67,9 +67,9 @@ Issues = "https://github.com/celsiusm/jarvis-workspace/issues"
 jarvis = "plotspace.cli:main"
 
 [tool.setuptools]
-# El paquete se llama como el producto. `frontend/` queda como hermano y no
-# adentro: moverlo cambiaría cada ruta relativa del repo sin aportar nada hoy
-# (el instalador lo toma igual, ver packaging/armar_bundle.py).
+# The package is named like the product. `frontend/` stays as a sibling, not
+# inside: moving it would change every relative path in the repo for no gain today
+# (the installer picks it up anyway, see packaging/armar_bundle.py).
 packages = ["plotspace", "plotspace.core", "plotspace.routers"]
 include-package-data = true
 
@@ -77,6 +77,6 @@ include-package-data = true
 plotspace = ["../frontend/**/*"]
 
 [tool.setuptools.dynamic]
-# La versión sale del archivo VERSION vía plotspace.__version__ (que lo lee y
-# hace strip del \n final). Una sola fuente de verdad, imposible de divergir.
+# The version comes from the VERSION file via plotspace.__version__ (which reads it
+# and strips the trailing \n). A single source of truth, impossible to diverge.
 version = { attr = "plotspace.__version__" }

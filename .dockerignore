@@ -1,45 +1,45 @@
-# ── .dockerignore — qué NO entra al build context (más chico = build más rápido,
-#    y NUNCA horneamos secretos/estado local en la imagen) ─────────────────────
+# ── .dockerignore — what does NOT enter the build context (smaller = faster
+#    build, and we NEVER bake secrets/local state into the image) ──────────────
 
-# Entorno virtual del host (se reinstala dentro de la imagen; pesa cientos de MB)
+# Host virtualenv (reinstalled inside the image; it weighs hundreds of MB)
 venv/
 .venv/
 
-# Estado local de la app: DB + WAL, token de acceso, secretos de cuentas de CLI,
-# perfil del browser remoto, scrollbacks. NUNCA debe quedar dentro de la imagen
-# (es un volumen en runtime). El Dockerfile crea /app/data vacío.
+# Local app state: DB + WAL, access token, CLI account secrets, remote browser
+# profile, scrollbacks. It must NEVER end up inside the image (it is a runtime
+# volume). The Dockerfile creates an empty /app/data.
 data/
 jarvis.db
 
-# Git: no shippeamos la historia a terceros. La app boota igual sin .git
-# (el updater queda inerte, que es lo correcto en un deploy por imagen).
+# Git: we do not ship history to third parties. The app boots fine without .git
+# (the updater goes inert, which is correct in an image deploy).
 .git/
 .gitignore
 .githooks/
 
-# Secretos / entorno
+# Secrets / environment
 .env
 plotspace/.env
 *.env
 
-# Bytecode / caches de Python
+# Python bytecode / caches
 __pycache__/
 **/__pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
 
-# Artefacto per-proyecto + estado de coordinación de agentes (efímero, dev-only)
+# Per-project artifact + agent coordination state (ephemeral, dev-only)
 .workspace/
 .jarvis/
 
 # Logs
 *.log
 
-# Node (defensivo: no debería haber en el repo)
+# Node (defensive: there should be none in the repo)
 node_modules/
 
-# Herramientas de análisis/review/IDE y notas de dev (no son parte del producto)
+# Analysis/review/IDE tooling and dev notes (not part of the product)
 .superpowers/
 static_analysis_semgrep_*/
 .full-review/
@@ -52,7 +52,7 @@ frase.txt
 .DS_Store
 Thumbs.db
 
-# Los propios archivos de Docker no hacen falta dentro del context
+# The Docker files themselves are not needed inside the context
 Dockerfile
 docker-compose.yml
 .dockerignore

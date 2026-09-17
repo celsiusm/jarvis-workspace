@@ -47,7 +47,7 @@ Use `--host 0.0.0.0` only if you intentionally want LAN access.
 ## What you need besides the app
 
 **Your own agent CLIs** (Claude Code, Codex, opencode, …), installed and logged
-in. Link them in ⚙ → **Cuentas** (BYOK). Jarvis orchestrates; it does not ship
+in. Link them in ⚙ → **Accounts** (BYOK). Jarvis orchestrates; it does not ship
 those products.
 
 **tmux** and **git** are required — the terminal grid is tmux, nothing else.

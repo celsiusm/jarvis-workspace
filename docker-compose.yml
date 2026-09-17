@@ -1,12 +1,12 @@
-# Jarvis Workspace — orquestación local con Docker Compose.
+# Jarvis Workspace — local orchestration with Docker Compose.
 #
-# Uso:
-#   cp .env.example .env      # editá PROYECTOS_DIR (y opcionalmente la API key)
+# Usage:
+#   cp .env.example .env      # edit PROYECTOS_DIR (and optionally the API key)
 #   docker compose up -d --build
 #   docker compose logs -f
-#   # abrí http://localhost:3000
+#   # open http://localhost:3000
 #
-# (compose v2: sin clave `version:`, está obsoleta)
+# (compose v2: no `version:` key, it is deprecated)
 
 services:
   jarvis:
@@ -15,36 +15,37 @@ services:
       dockerfile: Dockerfile
     image: jarvis-workspace:latest
     container_name: jarvis-workspace
-    # init=true → PID 1 que reapea zombies. Jarvis spawnea MUCHOS subprocesos
-    # (tmux, git, node, chromium, ffmpeg); sin un init se acumulan defunct.
+    # init=true → a PID 1 that reaps zombies. Jarvis spawns MANY subprocesses
+    # (tmux, git, node, chromium, ffmpeg); without an init they pile up as defunct.
     init: true
     restart: unless-stopped
-    # Chromium crashea con el /dev/shm default de Docker (64 MB). 1 GB es holgado.
+    # Chromium crashes with Docker's default /dev/shm (64 MB). 1 GB is roomy.
     shm_size: "1gb"
     ports:
-      # Con Docker Desktop el mapeo de puerto SÍ funciona aun en WSL (resuelve el
-      # dolor de que WSL no reenvía puertos nuevos a Windows). host:contenedor.
+      # With Docker Desktop, port mapping DOES work even on WSL (it solves the
+      # pain of WSL not forwarding new ports to Windows). host:container.
       - "3000:3000"
     env_file:
       - .env
     volumes:
-      # 1) HOME del contenedor (named volume) → AUTH de los CLIs de agente
-      #    (~/.claude, ~/.config, CODEX_HOME, etc.). El usuario vincula sus
-      #    cuentas DESDE la UI (⚙ → Cuentas, login en PTY); persisten reinicios.
-      #    NO se monta el ~/.claude del host: la auth vive solo en este volumen.
+      # 1) Container HOME (named volume) → the agent CLIs' AUTH
+      #    (~/.claude, ~/.config, CODEX_HOME, etc.). The user links their
+      #    accounts FROM the UI (⚙ → Accounts, login in a PTY); they persist
+      #    across restarts. The host's ~/.claude is NOT mounted: auth lives only
+      #    in this volume.
       - jarvis_home:/root
-      # 2) Estado local de la app (SQLite jarvis.db + perfil
-      #    del browser remoto + secretos de cuentas). Bind a ./data para que lo
-      #    veas/respaldés desde el host. Se auto-crea y auto-bootstrapea vacío.
+      # 2) Local app state (SQLite jarvis.db + remote
+      #    browser profile + account secrets). Bound to ./data so you can
+      #    see/back it up from the host. It auto-creates and bootstraps empty.
       - ./data:/app/data
-      # 3) Directorio de PROYECTOS del usuario (su código). Configurable por la
-      #    env var PROYECTOS_DIR del .env. DENTRO del contenedor queda en
-      #    /proyectos → al crear un proyecto en la UI, usá rutas como
-      #    /proyectos/mi-app. Default ./proyectos si no se setea.
+      # 3) The user's PROJECTS directory (their code). Configurable via the
+      #    PROYECTOS_DIR env var in .env. INSIDE the container it lives at
+      #    /proyectos → when creating a project in the UI, use paths like
+      #    /proyectos/my-app. Default ./proyectos if not set.
       - ${PROYECTOS_DIR:-./proyectos}:/proyectos
     healthcheck:
-      # /api/health es ruta ABIERTA (sin token). start_period holgado por el
-      # arranque (precarga de Whisper, reconciliación de tmux, etc.).
+      # /api/health is an OPEN route (no token). Generous start_period because of
+      # startup (Whisper preload, tmux reconciliation, etc.).
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
       interval: 30s
       timeout: 5s

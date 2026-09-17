@@ -43,7 +43,7 @@ Open `http://127.0.0.1:3000`.
 ## What you need besides the app
 
 **Your own agent CLIs** (Claude Code, Codex, opencode, …). Link them in
-⚙ → **Cuentas** (BYOK). Jarvis does not redistribute those products.
+⚙ → **Accounts** (BYOK). Jarvis does not redistribute those products.
 
 **tmux** and **git** are required.
 
