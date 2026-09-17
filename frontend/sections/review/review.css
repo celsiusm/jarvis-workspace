@@ -124,8 +124,36 @@
 }
 .rv-fila:hover { background: var(--ob-bg-3); }
 .rv-fila.activo { background: var(--ob-accent-08); border-color: var(--ob-accent-14); }
-.rv-fila.sel { background: var(--ob-bg-3); }
-.rv-check { flex-shrink: 0; accent-color: var(--ob-accent); cursor: pointer; }
+/* Seleccionada para commit: tinte de acento + barra izquierda. Se distingue del
+   activo (que es "el diff abierto"). */
+.rv-fila.sel { background: var(--ob-accent-08); box-shadow: inset 2px 0 0 var(--ob-accent); }
+.rv-fila.activo.sel { background: var(--ob-accent-14); }
+/* Checkbox propio: el nativo se ve BLANCO sobre el tema oscuro. Mismo lenguaje
+   que el selector de grupo (.rv-gsel): borde sutil, acento sólido al marcar y
+   el tilde que aparece con un pop. */
+.rv-check {
+  appearance: none; -webkit-appearance: none;
+  flex-shrink: 0; margin: 0; cursor: pointer;
+  width: 15px; height: 15px; border-radius: 4px;
+  border: 1px solid var(--ob-line-3);
+  background: var(--ob-bg-2);
+  display: inline-grid; place-content: center;
+  transition: background var(--dur-1) var(--ease-out),
+              border-color var(--dur-1) var(--ease-out),
+              box-shadow var(--dur-1) var(--ease-out);
+}
+.rv-check:hover { border-color: var(--ob-accent-24); background: var(--ob-bg-3); }
+.rv-check::after {
+  content: "";
+  width: 7px; height: 3.5px; translate: 0 -1px;
+  border-left: 1.6px solid var(--ob-on-accent, #fff);
+  border-bottom: 1.6px solid var(--ob-on-accent, #fff);
+  transform: rotate(-45deg) scale(0);
+  transition: transform 140ms var(--ease-out);
+}
+.rv-check:checked { background: var(--ob-accent); border-color: var(--ob-accent); }
+.rv-check:checked::after { transform: rotate(-45deg) scale(1); }
+.rv-check:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ob-accent-24); }
 .rv-estado {
   width: 16px; height: 16px; flex-shrink: 0;
   display: inline-flex; align-items: center; justify-content: center;
