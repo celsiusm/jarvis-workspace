@@ -258,4 +258,26 @@ test('mezclarCola con 0 o 1 pista por delante no rompe', () => {
   assert.deepStrictEqual(R.mezclarCola(l, Math.random).items.map((t) => t.id), ['a', 'b', 'c']);
 });
 
+// ─── localizarConteo: contadores de YouTube según el idioma de la app ─────────
+// El backend pide YouTube en español (Accept-Language: es), así que "vistas" y
+// "lo están viendo" salían crudos aunque la app esté en inglés.
+test('localizarConteo EN traduce vistas / viendo / suscriptores', () => {
+  assert.strictEqual(R.localizarConteo('20 k vistas', 'en'), '20 k views');
+  assert.strictEqual(R.localizarConteo('1,2 M de vistas', 'en'), '1,2 M views');
+  assert.strictEqual(R.localizarConteo('77 k lo están viendo', 'en'), '77 k watching');
+  assert.strictEqual(R.localizarConteo('3 suscriptores', 'en'), '3 subscribers');
+  assert.strictEqual(R.localizarConteo('1,2 mil vistas', 'en'), '1,2 K views');
+});
+
+test('localizarConteo ES deja el texto de YouTube tal cual', () => {
+  assert.strictEqual(R.localizarConteo('20 k vistas', 'es'), '20 k vistas');
+  assert.strictEqual(R.localizarConteo('77 k lo están viendo', 'es'), '77 k lo están viendo');
+});
+
+test('localizarConteo no toca números, duraciones ni vacíos', () => {
+  assert.strictEqual(R.localizarConteo('13:55', 'en'), '13:55');
+  assert.strictEqual(R.localizarConteo('', 'en'), '');
+  assert.strictEqual(R.localizarConteo(null, 'en'), '');
+});
+
 console.log(`preview-radio.test.js — ${n} tests OK`);

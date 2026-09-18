@@ -34,6 +34,33 @@
     return { track: base.track, sonando: base.sonando, t: (isFinite(n) && n > 0) ? n : 0 };
   }
 
+  // Los contadores que da YouTube vienen LOCALIZADOS por el Accept-Language del
+  // backend (siempre 'es'), así que "20 k vistas"/"77 k lo están viendo"
+  // aparecían en español aunque la app esté en inglés. Traducimos las PALABRAS
+  // (no los números: "77 k"/"1,2 M" quedan como los da YouTube).
+  const _CONTEO_PALABRAS = [
+    [/\blo est[áa]n viendo\b/gi, 'lo están viendo', 'watching'],
+    [/\bviendo ahora\b/gi, 'viendo ahora', 'watching'],
+    [/\bde espectadores\b/gi, 'de espectadores', 'viewers'],
+    [/\bespectadores\b/gi, 'espectadores', 'viewers'],
+    [/\bde reproducciones\b/gi, 'de reproducciones', 'plays'],
+    [/\breproducciones\b/gi, 'reproducciones', 'plays'],
+    [/\bde suscriptores\b/gi, 'de suscriptores', 'subscribers'],
+    [/\bsuscriptores\b/gi, 'suscriptores', 'subscribers'],
+    [/\bde me gusta\b/gi, 'de me gusta', 'likes'],
+    [/\bme gusta\b/gi, 'me gusta', 'likes'],
+    [/\bde vistas\b/gi, 'de vistas', 'views'],
+    [/\bvistas\b/gi, 'vistas', 'views'],
+  ];
+  function localizarConteo(texto, lang) {
+    let s = String(texto == null ? '' : texto);
+    if (!s) return s;
+    const en = lang === 'en';
+    for (const [re, esTxt, enTxt] of _CONTEO_PALABRAS) s = s.replace(re, en ? enTxt : esTxt);
+    if (en) s = s.replace(/\bmil millones\b/gi, 'B').replace(/\bmillones\b/gi, 'M').replace(/\bmil\b/gi, 'K');
+    return s;
+  }
+
   // Normaliza un resultado del backend (buscar_youtube: {id,url,titulo,canal,
   // duracion,thumb}) a una pista de la Radio. null si no trae id de video.
   function pistaDeResultado(r) {
@@ -225,7 +252,7 @@
 
   const _pure = {
     ESTACIONES, crearEstado, conPosicion, pistaDeResultado, pistaDeUrl, claveCancion, fuenteDe, elegir, alternar, urlEmbed, serializar, deserializar,
-    crearLista, siguienteIdx, anteriorIdx, saltarA, pistaEn, loQueViene, porDelante, anexar, mezclarCola,
+    crearLista, siguienteIdx, anteriorIdx, saltarA, pistaEn, loQueViene, porDelante, anexar, mezclarCola, localizarConteo,
   };
 
   root.WebPreviewRadio = { _pure };

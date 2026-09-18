@@ -70,6 +70,17 @@
 
   const _esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const _t = (s) => (root.JarvisI18n && root.JarvisI18n.t) ? root.JarvisI18n.t(s) : s;
+  const _lang = () => (root.JarvisI18n && root.JarvisI18n.lang && root.JarvisI18n.lang()) || 'es';
+  // Los contadores de YouTube llegan en el idioma del backend (es) — ver
+  // RY().localizarConteo. Sin esto "vistas"/"lo están viendo" salían crudos en
+  // inglés. La etiqueta de fuente usa su variante EN cuando corresponde.
+  const _vistas = (t) => {
+    const raw = t && t.vistas;
+    if (!raw) return '';
+    const r = RY();
+    return (r && r.localizarConteo) ? r.localizarConteo(raw, _lang()) : raw;
+  };
+  const _etiquetaFuente = (fu) => fu ? (_lang() === 'en' ? fu.etiqueta_en : fu.etiqueta_es) : 'Local';
   const $ = (sel, ctx) => (ctx || document).querySelector(sel);
 
   // ── Estado ──
@@ -792,6 +803,28 @@
       'Sesión de Spotify no iniciada': 'Spotify session not started',
       'YouTube · videos del canal': 'YouTube · channel videos', 'Canal': 'Channel', 'vistas': 'views',
       'estudiar': 'study', 'nocturno': 'night', 'café': 'coffee', 'calma': 'calm',
+      // Errores del backend (web_search / musica_local / spotify_api): llegan en
+      // español y se muestran como hint de la lista o toast. El observer de
+      // JarvisI18n los traduce al insertarlos, pero necesita la entrada acá.
+      'YouTube no respondió': 'YouTube did not respond',
+      'YouTube no devolvió resultados (challenge o formato nuevo)': 'YouTube returned no results (challenge or new format)',
+      'no se pudo leer la respuesta de YouTube': "couldn't read YouTube's response",
+      'consulta vacía': 'empty query',
+      'token de continuación inválido': 'invalid continuation token',
+      'id de video inválido': 'invalid video id',
+      'ruta vacía': 'empty path',
+      'ruta no permitida': 'path not allowed',
+      'ruta fuera de la biblioteca': 'path outside the library',
+      'archivo inexistente': 'file not found',
+      'portada no soportada': 'unsupported cover',
+      'portada inexistente': 'cover not found',
+      'carpeta inexistente': 'folder not found',
+      'Spotify no está configurado (SPOTIFY_CLIENT_ID)': 'Spotify is not configured (SPOTIFY_CLIENT_ID)',
+      'Spotify no respondió': 'Spotify did not respond',
+      'No se pudo validar la sesión de Spotify': "Couldn't validate the Spotify session",
+      'Sin sesión de Spotify — iniciá sesión en ⚙ → Radio': 'No Spotify session — sign in at ⚙ → Radio',
+      'Spotify está saturado — intentá de nuevo en un momento': 'Spotify is busy — try again in a moment',
+      'no se pudo leer la respuesta de Spotify': "couldn't read Spotify's response",
     });
   }
 
@@ -890,8 +923,14 @@
     _renderEstaciones();
     _renderNow(); _renderMini(); _renderPaneChrome();
     // El placeholder y los hints los setea el código (no el HTML): al cambiar
-    // de idioma hay que re-sincronizarlos con la fuente activa.
-    window.addEventListener('jarvis:lang', () => { _syncPlaceholder(); _renderHints(); });
+    // de idioma hay que re-sincronizarlos con la fuente activa. Además los
+    // contadores de YouTube (vistas/viendo) se localizan al render → re-pintamos
+    // el now-playing, la cola y las listas visibles para que cambien YA.
+    window.addEventListener('jarvis:lang', () => {
+      _syncPlaceholder(); _renderHints(); _renderFuentes(); _renderNow(); _renderMini();
+      if (_pane === 'q') _renderQueue();
+      _repintarListas();
+    });
 
     // Estado inicial: si el boot no lo levantó, restaurar cued desde storage.
     if (!_state) {
@@ -989,13 +1028,14 @@
     if (!t) { now.classList.remove('playing'); now.innerHTML = `<span class="jr-art ghost"></span><span class="jr-ninfo"><span class="jr-eyebrow">Lista para sonar</span><span class="jr-ntitle">Nada sonando todavía.</span></span>`; _renderTransport(); return; }
     const fid = _fuenteDe(t);
     const fu = _fuentes[fid];
-    const nomFuente = fu ? fu.etiqueta_es : 'Local';
+    const nomFuente = _etiquetaFuente(fu);
     // Canal (botón "Ver canal") es solo YouTube: el <audio> local no tiene canal.
     const chanlink = fid === 'youtube'
       ? `<button class="jr-chanlink" id="jr-chanlink" title="Ver el canal"><span class="jr-av"></span><span>${_esc(t.canal || 'YouTube')}</span><span class="jr-vercanal">Ver canal</span></button>`
       : `<span class="jr-chanlink" title=""><span class="jr-av"></span><span>${_esc(nomFuente)}</span></span>`;
+    const v = _vistas(t);
     const chipFuente = fid === 'youtube'
-      ? (t.vistas ? `<span class="jr-chip">${svg('eye')}<b>${_esc(t.vistas)}</b></span>` : `<span class="jr-chip">${svg('eye')}<b>YouTube</b></span>`)
+      ? (v ? `<span class="jr-chip">${svg('eye')}<b>${_esc(v)}</b></span>` : `<span class="jr-chip">${svg('eye')}<b>YouTube</b></span>`)
       : `<span class="jr-chip">${svg('note')}<b>${_esc(nomFuente)}</b></span>`;
     now.innerHTML =
       `<span class="jr-art">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}${viz(!!son)}</span>`
@@ -1055,7 +1095,7 @@
   function _filaHTML(t, i) {
     return `<button class="jr-row${_state && _state.track && _state.track.id === t.id ? ' activa' : ''}" data-i="${i}" data-vid="${_esc(t.id)}">`
       + `<span class="jr-thumb">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}${t.dur ? `<span class="jr-dur${/live|vivo/i.test(t.dur) ? ' live' : ''}">${_esc(t.dur)}</span>` : ''}</span>`
-      + `<span class="jr-rmeta"><b>${_esc(t.titulo)}</b><span class="s">${_esc(t.canal)}${t.vistas ? ' · ' + _esc(t.vistas) : ''}</span></span>`
+      + `<span class="jr-rmeta"><b>${_esc(t.titulo)}</b><span class="s">${_esc(t.canal)}${_vistas(t) ? ' · ' + _esc(_vistas(t)) : ''}</span></span>`
       + `<span class="jr-add" title="Agregar a la cola" data-add="${i}">${svg('addq')}</span></button>`;
   }
 
@@ -1094,10 +1134,21 @@
 
   function _renderFilas(box, items, error, fuente) {
     if (!box) return;
-    box._items = items || []; box._fuente = fuente || null; box._esPl = false;
+    box._items = items || []; box._fuente = fuente || null; box._esPl = false; box._error = error || null;
     box.innerHTML = (items && items.length) ? items.map((t, i) => _filaHTML(t, i)).join('')
       : `<div class="jr-hint">${_esc(error || 'Sin resultados')}</div>`;
     _pintarDots(box);
+  }
+  // Re-pinta las listas VISIBLES con el idioma actual (los contadores de YouTube
+  // y los hints del backend se localizan al render; el observer de i18n no puede
+  // "des-traducir" un texto que ya se insertó en inglés).
+  function _repintarListas() {
+    for (const box of [$('#jr-pane-rel'), $('#jr-cv-list'), $('#jr-pane-st')]) {
+      if (!box || !box._items) continue;
+      const eraPl = box._esPl;
+      _renderFilas(box, box._items, box._error, box._fuente);
+      if (eraPl) box._esPl = true;
+    }
   }
   // Pinta la PLAYLIST (lo que suena + lo que sigue) en un pane y lo marca como
   // "es la playlist": los dots de ahí rellenan la cola de verdad.
@@ -1371,7 +1422,7 @@
     const row = $('#jr-src'); if (!row) return;
     let html = _ordenFuentes.map((id) => {
       const fs = _fuentes[id];
-      return `<button type="button" class="jr-src-pill${id === _fuenteActiva ? ' on' : ''}" data-src="${id}" aria-pressed="${id === _fuenteActiva}">${_esc(fs.etiqueta_es)}</button>`;
+      return `<button type="button" class="jr-src-pill${id === _fuenteActiva ? ' on' : ''}" data-src="${id}" aria-pressed="${id === _fuenteActiva}">${_esc(_etiquetaFuente(fs))}</button>`;
     }).join('');
     row.innerHTML = html;
     // La subida de música NO vive en la fila de pills: es una card propia que
