@@ -1,43 +1,43 @@
 #!/usr/bin/env python3
-# Hook de PROVENANCE del enjambre (PreToolUse + PostToolUse) para Claude Code.
+# SWARM PROVENANCE hook (PreToolUse + PostToolUse) for Claude Code.
 #
-# POR QUÉ
-# -------
-# Jarvis deducía qué archivo tocaba cada agente parseando el pane tmux en busca
-# de `● Update(archivo)`. Claude Code 2.1.x dejó de imprimir eso: colapsa las
-# tool-calls en un resumen que ni nombra el archivo. Medido: 4,8 MB de log de
-# dos agentes → CERO operaciones detectadas, y con eso se murieron en silencio
-# la propiedad de archivos, el guard de commits y las alertas de conflicto.
+# WHY
+# ---
+# Jarvis inferred which file each agent touched by parsing the tmux pane looking
+# for `● Update(file)`. Claude Code 2.1.x stopped printing that: it collapses
+# tool-calls into a summary that doesn't even name the file. Measured: 4.8 MB of
+# log from two agents → ZERO operations detected, and with that, file ownership,
+# the commit guard and the conflict alerts died silently.
 #
-# Este hook lee el dato del CONTRATO de la herramienta (documentado y estable)
-# en vez de la pantalla (superficie de presentación que cambia cada semana).
+# This hook reads the data from the tool CONTRACT (documented and stable)
+# instead of the screen (a presentation surface that changes every week).
 #
-# DOS EVENTOS, DOS RESPONSABILIDADES
-# ----------------------------------
-#   PostToolUse  → POST /api/swarm/op    : registra la edición YA hecha.
-#   PreToolUse   → POST /api/swarm/check : pregunta ANTES de escribir; si Jarvis
-#                  contesta que no, se DENIEGA la herramienta con el motivo.
+# TWO EVENTS, TWO RESPONSIBILITIES
+# --------------------------------
+#   PostToolUse  → POST /api/swarm/op    : records the edit ALREADY made.
+#   PreToolUse   → POST /api/swarm/check : asks BEFORE writing; if Jarvis
+#                  answers no, the tool is DENIED with the reason.
 #
-# DOCTRINA: best-effort absoluto. Sin JARVIS_TERMINAL_ID (claude fuera de
-# Jarvis), sin server, con timeout o con cualquier excepción → NO-OP que deja
-# pasar. Un hook jamás puede frenar a un agente por un problema propio: el
-# server puede estar reiniciando justo cuando el agente escribe.
+# DOCTRINE: absolute best-effort. Without JARVIS_TERMINAL_ID (claude outside
+# Jarvis), without server, with timeout or with any exception → NO-OP that lets
+# it through. A hook must never stop an agent because of a problem of its own:
+# the server may be restarting right when the agent writes.
 #
-# Se instala solo (plotspace/core/hooks_cli.py, idempotente, al boot del server).
+# It installs itself (plotspace/core/hooks_cli.py, idempotent, at server boot).
 import json
 import os
 import sys
 
-TIMEOUT_POST_S = 1.0     # registrar: si tarda, no vale la pena esperar
-TIMEOUT_CHECK_S = 1.5    # frenar: vale esperar un poco más, pero poco
-TIMEOUT_BRIEF_S = 1.5    # briefing: corre una vez por tarea, no por edición
+TIMEOUT_POST_S = 1.0     # record: if it takes long, not worth waiting
+TIMEOUT_CHECK_S = 1.5    # block: worth waiting a bit longer, but not much
+TIMEOUT_BRIEF_S = 1.5    # briefing: runs once per task, not per edit
 
-# Corta-corriente: en WSL, conectar a un puerto cerrado NO se rechaza — se
-# descarta, y el intento se come el timeout entero. Sin esto, con Jarvis caído
-# CADA edición de CADA agente pagaría ~1s de nada. Medido: 2.165s por edición
-# con el server abajo vs 50ms cuando el hook se saltea solo.
+# Circuit breaker: on WSL, connecting to a closed port is NOT rejected — it's
+# dropped, and the attempt eats the whole timeout. Without this, with Jarvis
+# down EVERY edit of EVERY agent would pay ~1s of nothing. Measured: 2.165s per
+# edit with the server down vs 50ms when the hook skips itself.
 CAIDO_NOMBRE = ".hook-swarm-caido"
-CAIDO_S = 60             # tras un fallo, no reintentar por un minuto
+CAIDO_S = 60             # after a failure, don't retry for a minute
 
 
 def _dir_datos():
@@ -46,7 +46,7 @@ def _dir_datos():
 
 
 def _corta_corriente_abierto(data_dir):
-    """True si hubo un fallo hace poco → saltear sin tocar la red."""
+    """True if there was a failure recently → skip without touching the network."""
     try:
         import time
         return (time.time() - os.path.getmtime(
@@ -68,26 +68,26 @@ def _marcar_caido(data_dir, caido=True):
 
 
 def _anfitriones():
-    """A qué direcciones intentar, en orden.
+    """Which addresses to try, in order.
 
-    `127.0.0.1` primero: es el caso normal (agente y motor en la misma
-    máquina) y el único que existía hasta ahora.
+    `127.0.0.1` first: it's the normal case (agent and engine on the same
+    machine) and the only one that existed until now.
 
-    El segundo caso aparece con el port a Windows: un agente corriendo DENTRO
-    de una distro de WSL y el motor del lado de Windows. Ahí `127.0.0.1` es la
-    distro, no el host — y sin este respaldo el hook falla en silencio en cada
-    escritura, dejando al enjambre sin provenance justo en las terminales de
-    perfil WSL. Con `networkingMode=mirrored` el primero ya alcanza; sin él, la
-    IP del host es la que WSL deja como nameserver en /etc/resolv.conf.
+    The second case appears with the port to Windows: an agent running INSIDE
+    a WSL distro and the engine on the Windows side. There `127.0.0.1` is the
+    distro, not the host — and without this fallback the hook fails silently on
+    every write, leaving the swarm without provenance precisely on WSL-profile
+    terminals. With `networkingMode=mirrored` the first one is enough; without
+    it, the host IP is the one WSL leaves as nameserver in /etc/resolv.conf.
 
-    Se puede fijar a mano con JARVIS_HOST, que gana sobre todo lo demás.
+    It can be set by hand with JARVIS_HOST, which wins over everything else.
     """
     fijo = (os.environ.get("JARVIS_HOST") or "").strip()
     if fijo:
         return [fijo]
     hosts = ["127.0.0.1"]
     try:
-        # Solo tiene sentido buscar el host si estamos adentro de WSL.
+        # It only makes sense to look for the host if we're inside WSL.
         with open("/proc/version") as f:
             if "microsoft" not in f.read().lower():
                 return hosts
@@ -104,8 +104,8 @@ def _anfitriones():
 
 
 def _conectar(puerto, timeout):
-    """Socket al motor, probando cada anfitrión. None si ninguno responde —
-    el hook es best-effort absoluto y JAMÁS frena al agente."""
+    """Socket to the engine, trying each host. None if none responds —
+    the hook is absolute best-effort and NEVER stops the agent."""
     import socket
     for host in _anfitriones():
         try:
@@ -116,14 +116,14 @@ def _conectar(puerto, timeout):
 
 
 def _http_crudo(puerto, ruta, cuerpo, timeout):
-    """POST JSON por socket pelado. Devuelve el dict de respuesta.
+    """POST JSON over a bare socket. Returns the response dict.
 
-    Por qué no `urllib.request`: importarlo cuesta 82 ms (arrastra http.client →
-    todo el paquete `email`), y este hook corre DOS veces por escritura de CADA
-    agente. Con socket crudo el import sale 7 ms. Medido, no estimado.
+    Why not `urllib.request`: importing it costs 82 ms (it drags in http.client →
+    the whole `email` package), and this hook runs TWICE per write of EVERY
+    agent. With a raw socket the import takes 7 ms. Measured, not estimated.
 
-    `Connection: close` evita tener que interpretar Content-Length ni chunked:
-    se lee hasta que el server cierra."""
+    `Connection: close` avoids having to parse Content-Length or chunked:
+    it's read until the server closes."""
     import socket
     body = json.dumps(cuerpo).encode()
     pedido = (
@@ -151,7 +151,7 @@ def _http_crudo(puerto, ruta, cuerpo, timeout):
     datos = b"".join(trozos)
     corte = datos.find(b"\r\n\r\n")
     if corte < 0:
-        raise ValueError("respuesta HTTP incompleta")
+        raise ValueError("incomplete HTTP response")
     estado = datos[:datos.find(b"\r\n")].split()
     if len(estado) < 2 or not estado[1].startswith(b"2"):
         raise ValueError(f"HTTP {estado[1].decode() if len(estado) > 1 else '?'}")
@@ -159,8 +159,8 @@ def _http_crudo(puerto, ruta, cuerpo, timeout):
 
 
 def _http_get(puerto, ruta, timeout):
-    """GET JSON por socket pelado (mismo motivo que _http_crudo: urllib cuesta
-    82 ms de import y este hook corre en el camino caliente del agente)."""
+    """GET JSON over a bare socket (same reason as _http_crudo: urllib costs
+    82 ms to import and this hook runs on the agent's hot path)."""
     pedido = (
         f"GET {ruta} HTTP/1.1\r\n"
         f"Host: 127.0.0.1:{puerto}\r\n"
@@ -183,7 +183,7 @@ def _http_get(puerto, ruta, timeout):
     datos = b"".join(trozos)
     corte = datos.find(b"\r\n\r\n")
     if corte < 0:
-        raise ValueError("respuesta HTTP incompleta")
+        raise ValueError("incomplete HTTP response")
     estado = datos[:datos.find(b"\r\n")].split()
     if len(estado) < 2 or not estado[1].startswith(b"2"):
         raise ValueError(f"HTTP {estado[1].decode() if len(estado) > 1 else '?'}")
@@ -191,7 +191,7 @@ def _http_get(puerto, ruta, timeout):
 
 
 def _get(ruta, timeout):
-    """GET a Jarvis con el mismo corta-corriente que _post. None si está abierto."""
+    """GET to Jarvis with the same circuit breaker as _post. None if it's open."""
     data_dir = _dir_datos()
     if _corta_corriente_abierto(data_dir):
         return None
@@ -205,9 +205,9 @@ def _get(ruta, timeout):
 
 
 def _post(ruta, cuerpo, timeout):
-    """POST JSON a Jarvis. Devuelve el dict de respuesta, o None si el corta-
-    corriente está abierto. Propaga la excepción si falla la llamada (el caller
-    decide), pero deja marcado el fallo para no reintentar en cada edición."""
+    """POST JSON to Jarvis. Returns the response dict, or None if the circuit
+    breaker is open. Propagates the exception if the call fails (the caller
+    decides), but marks the failure so it won't retry on every edit."""
     data_dir = _dir_datos()
     if _corta_corriente_abierto(data_dir):
         return None
@@ -221,13 +221,13 @@ def _post(ruta, cuerpo, timeout):
 
 
 def _contexto(texto, evento="PostToolUse"):
-    """Inyecta texto en el contexto del agente. Se emite en las DOS formas
-    conocidas del contrato (top-level y dentro de hookSpecificOutput): los campos
-    que el CLI no conoce los ignora, y así el aviso sobrevive a un cambio de
-    formato — que es exactamente lo que nos dejó ciegos la vez pasada.
+    """Injects text into the agent's context. It's emitted in BOTH known forms
+    of the contract (top-level and inside hookSpecificOutput): fields the CLI
+    doesn't know are ignored, so the notice survives a format change — which is
+    exactly what left us blind last time.
 
-    `evento` tiene que ser el que disparó el hook: con el hookEventName cruzado
-    el CLI descarta el bloque y el texto muere mudo."""
+    `evento` must be the one that fired the hook: with a crossed hookEventName
+    the CLI discards the block and the text dies mute."""
     json.dump({
         "additionalContext": texto,
         "hookSpecificOutput": {"hookEventName": evento,
@@ -237,11 +237,11 @@ def _contexto(texto, evento="PostToolUse"):
 
 
 def datos_herramienta(payload):
-    """(tool_name, tool_input, es_antigravity) del payload, sea cual sea el CLI.
+    """(tool_name, tool_input, is_antigravity) from the payload, whatever the CLI.
 
-    Claude/qwen/Gemini mandan {tool_name, tool_input}; Antigravity manda
-    {toolCall: {name, args}} (protojson, camelCase). Sin traducirlo, el hook no
-    vería NINGUNA edición de Antigravity."""
+    Claude/qwen/Gemini send {tool_name, tool_input}; Antigravity sends
+    {toolCall: {name, args}} (protojson, camelCase). Without translating it, the
+    hook would see NONE of Antigravity's edits."""
     if not isinstance(payload, dict):
         return None, None, False
     tc = payload.get("toolCall")
@@ -253,13 +253,14 @@ def datos_herramienta(payload):
 
 
 def _permitir(texto=None):
-    """Antigravity exige JSON válido en stdout o BLOQUEA el loop del agente. Este
-    hook es un OBSERVADOR: nunca deniega, siempre deja pasar.
+    """Antigravity requires valid JSON on stdout or it BLOCKS the agent's loop.
+    This hook is an OBSERVER: it never denies, it always lets it through.
 
-    Si hay algo que contarle (briefing / colisión) viaja como `additionalContext`
-    al lado de la decisión: un campo que Antigravity no conozca lo ignora, y es
-    el ÚNICO canal que tiene — su hook no corre en el prompt. Mismo criterio
-    defensivo que `_contexto`: emitir de más nunca rompió nada; quedarse mudo sí."""
+    If there's something to tell it (briefing / collision) it travels as
+    `additionalContext` next to the decision: a field Antigravity doesn't know
+    it ignores, and it's the ONLY channel it has — its hook doesn't run on the
+    prompt. Same defensive criterion as `_contexto`: over-emitting never broke
+    anything; staying mute did."""
     salida = {"decision": "allow"}
     if texto:
         salida["additionalContext"] = str(texto)
@@ -270,10 +271,10 @@ def _permitir(texto=None):
 
 
 def _denegar(motivo):
-    """Formato de bloqueo de PreToolUse (Claude / qwen): exit 0 + JSON con la
-    decisión. (El motivo se lo lee el agente, así que tiene que decirle QUÉ
-    hacer.) Antigravity nunca deniega — este hook es un observador y le contesta
-    siempre `allow` (ver _permitir)."""
+    """PreToolUse block format (Claude / qwen): exit 0 + JSON with the
+    decision. (The agent reads the reason, so it has to tell it WHAT to do.)
+    Antigravity never denies — this hook is an observer and always answers
+    `allow` (see _permitir)."""
     json.dump({"hookSpecificOutput": {
         "hookEventName": "PreToolUse",
         "permissionDecision": "deny",
@@ -285,7 +286,7 @@ def _denegar(motivo):
 def main():
     tid = os.environ.get("JARVIS_TERMINAL_ID")
     if not tid:
-        return                      # claude fuera de Jarvis → no-op
+        return                      # claude outside Jarvis → no-op
     try:
         payload = json.load(sys.stdin)
     except Exception:
@@ -304,11 +305,11 @@ def main():
     evento = payload.get("hook_event_name") or ""
 
     if es_agy:
-        # Antigravity: su PostToolUse NO trae ni tool ni ruta, así que el ÚNICO
-        # momento con la ruta es PreToolUse → se REGISTRA ahí (antes de que la
-        # edición ocurra: es eso o no ver nada). Y su hook corre SÍNCRONO y BLOQUEA
-        # el loop del agente, así que el POST es fire-and-forget (corta-corriente +
-        # timeout de siempre) y se contesta `allow` SIEMPRE, pase lo que pase.
+        # Antigravity: its PostToolUse brings neither tool nor path, so the ONLY
+        # moment with the path is PreToolUse → it's RECORDED there (before the
+        # edit happens: that or seeing nothing). And its hook runs SYNCHRONOUSLY
+        # and BLOCKS the agent's loop, so the POST is fire-and-forget (circuit
+        # breaker + usual timeout) and it always answers `allow`, no matter what.
         r = None
         try:
             r = _post("/api/swarm/op", cuerpo, TIMEOUT_POST_S)
@@ -319,16 +320,16 @@ def main():
         _permitir("\n\n".join(str(p) for p in partes) if partes else None)
         return
 
-    # BRIEFING (UserPromptSubmit): el agente arranca una tarea nueva. Se le
-    # entrega el estado del enjambre ANTES de que piense — quién más está vivo,
-    # qué toca cada uno, qué territorio no puede pisar. Es el canal bueno: cero
-    # turnos, cero latencia, y no depende de que el agente se acuerde de
-    # preguntar (que es justamente lo que no hacía).
+    # BRIEFING (UserPromptSubmit): the agent starts a new task. It's handed the
+    # swarm state BEFORE it thinks — who else is alive, what each one touches,
+    # what territory it can't step on. It's the good channel: zero turns, zero
+    # latency, and it doesn't depend on the agent remembering to ask (which is
+    # precisely what it didn't do).
     if evento == "UserPromptSubmit":
         try:
             r = _get(f"/api/swarm/briefing/{tid}", TIMEOUT_BRIEF_S)
         except Exception:
-            return                  # server caído → el agente arranca sin briefing
+            return                  # server down → the agent starts without briefing
         texto = (r or {}).get("texto") if isinstance(r, dict) else None
         if texto:
             _contexto(str(texto), evento="UserPromptSubmit")
@@ -338,30 +339,30 @@ def main():
         try:
             r = _post("/api/swarm/check", cuerpo, TIMEOUT_CHECK_S)
         except Exception:
-            return                  # server caído/lento → dejar pasar
+            return                  # server down/slow → let it pass
         if isinstance(r, dict) and r.get("permitir") is False and r.get("motivo"):
             _denegar(str(r["motivo"]))
         return
 
-    # PostToolUse (y cualquier otro evento que se enganche acá): registrar.
+    # PostToolUse (and any other event hooked here): record.
     try:
         r = _post("/api/swarm/op", cuerpo, TIMEOUT_POST_S)
     except Exception:
-        return                      # la provenance de esta edición se pierde; el
-                                    # agente no se entera y sigue trabajando
+        return                      # this edit's provenance is lost; the
+                                    # agent doesn't find out and keeps working
 
     if not isinstance(r, dict):
         return
 
-    # Lo que se le inyecta al agente, pegado al resultado de su herramienta:
-    #   1. COLISIÓN DE SUPERFICIE: borró algo que otro usa. Antes se descubría
-    #      de casualidad (o rompiéndose) y costaba una saga de mensajes.
-    #   2. BRIEFING de piggyback: para los CLIs SIN hook de prompt (Antigravity,
-    #      opencode) este es el único canal que existe. Llega un poco tarde —el
-    #      agente ya arrancó— pero antes de que pueda romper algo, porque el
-    #      primer movimiento de cualquier agente es tocar un archivo. Solo viaja
-    #      cuando el estado CAMBIÓ (el server dedupea por firma), así que no
-    #      repite lo mismo en cada edición.
+    # What's injected into the agent, attached to its tool result:
+    #   1. SURFACE COLLISION: it deleted something another one uses. Before, this
+    #      was discovered by chance (or by breaking) and cost a saga of messages.
+    #   2. Piggyback BRIEFING: for CLIs WITHOUT a prompt hook (Antigravity,
+    #      opencode) this is the only channel that exists. It arrives a bit late
+    #      —the agent already started— but before it can break anything, because
+    #      any agent's first move is to touch a file. It only travels when the
+    #      state CHANGED (the server dedupes by signature), so it doesn't repeat
+    #      the same thing on every edit.
     partes = [p for p in (r.get("aviso_texto"), r.get("briefing")) if p]
     if partes:
         _contexto("\n\n".join(str(p) for p in partes))
@@ -371,4 +372,4 @@ if __name__ == "__main__":
     try:
         main()
     except Exception:
-        pass                        # jamás propagar: exit 0 = "sin decisión"
+        pass                        # never propagate: exit 0 = "no decision"

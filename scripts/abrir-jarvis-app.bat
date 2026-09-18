@@ -1,22 +1,22 @@
 @echo off
-REM ── Jarvis — LA puerta de entrada desde Windows (post-app nativa) ──
+REM ── Jarvis — THE entry door from Windows (post-native-app) ──
 REM
-REM Doble clic y listo: si el server no esta corriendo lo levanta dentro de
-REM WSL (scripts/reiniciar-server.sh) y despues abre el workspace como APP
-REM en Chrome (ventana limpia, sin barra de pestanas ni omnibox).
+REM Double click and done: if the server is not running it starts it inside
+REM WSL (scripts/reiniciar-server.sh) and then opens the workspace as an APP
+REM in Chrome (clean window, no tab bar or omnibox).
 REM
-REM Guarda este .bat en Windows (ej. el Escritorio) y hace doble clic.
+REM Save this .bat on Windows (e.g. the Desktop) and double click it.
 REM
-REM Paths (no hardcodear maquina ajena):
-REM   - Repo en WSL: $HOME/jarvis-workspace  (override: JARVIS_WSL_DIR)
-REM   - Distro: la default de WSL            (override: JARVIS_WSL_DISTRO)
+REM Paths (do not hardcode someone else's machine):
+REM   - Repo in WSL: $HOME/jarvis-workspace  (override: JARVIS_WSL_DIR)
+REM   - Distro: the WSL default              (override: JARVIS_WSL_DISTRO)
 REM
-REM Detalles:
-REM   - El health se chequea por 127.0.0.1 (el NOMBRE localhost resuelve ::1
-REM     primero y WSL no escucha ahi), pero la ventana abre por localhost:
-REM     Chrome cae solo a IPv4, y la Radio necesita ese origen para YouTube.
-REM   - Variante kiosk (pantalla completa total, salir con Alt+F4): comenta
-REM     la linea del start normal y descomenta la de --kiosk.
+REM Details:
+REM   - Health is checked via 127.0.0.1 (the NAME localhost resolves ::1
+REM     first and WSL does not listen there), but the window opens via localhost:
+REM     Chrome falls back to IPv4 on its own, and Radio needs that origin for YouTube.
+REM   - Kiosk variant (full fullscreen, exit with Alt+F4): comment
+REM     the normal start line and uncomment the --kiosk one.
 
 setlocal EnableExtensions
 set "URL=http://localhost:3000"
@@ -31,22 +31,22 @@ if defined JARVIS_WSL_DISTRO (
 
 curl -s -o NUL --max-time 2 %HEALTH% && goto abrir
 
-echo Levantando Jarvis en WSL...
-REM Warm-up primero: si la distro esta FRIA (Windows recien reiniciado, o un
-REM `wsl --shutdown`), el primer wsl.exe se va entero en bootearla y el comando
-REM de abajo se perderia. Y el log va a data/ del repo, NO a /tmp: /tmp en WSL
-REM es tmpfs y se borra en cada arranque de la distro — justo lo que uno
-REM necesita leer cuando esto falla.
+echo Starting Jarvis in WSL...
+REM Warm-up first: if the distro is COLD (Windows just rebooted, or a
+REM `wsl --shutdown`), the first wsl.exe is spent entirely booting it and the command
+REM below would be lost. And the log goes to the repo's data/, NOT to /tmp: /tmp in WSL
+REM is tmpfs and is wiped on every boot of the distro — exactly what you
+REM need to read when this fails.
 %WSL% -- true
 if errorlevel 1 (
-  echo No pude hablar con WSL. Instala una distro ^(wsl --install^) y reinicia.
+  echo Could not talk to WSL. Install a distro ^(wsl --install^) and reboot.
   pause
   exit /b 1
 )
 
-REM Repo = JARVIS_WSL_DIR, o $HOME/jarvis-workspace adentro de la distro.
-REM Windows reenvia JARVIS_WSL_DIR al entorno de WSL si esta seteada.
-REM (sin comillas anidadas: cmd.exe no escapa \" como bash)
+REM Repo = JARVIS_WSL_DIR, or $HOME/jarvis-workspace inside the distro.
+REM Windows forwards JARVIS_WSL_DIR to the WSL environment if it is set.
+REM (no nested quotes: cmd.exe does not escape \" like bash)
 %WSL% -- bash -lc "REPO=${JARVIS_WSL_DIR:-$HOME/jarvis-workspace}; test -f $REPO/scripts/reiniciar-server.sh || exit 42; cd $REPO && mkdir -p data && setsid nohup bash scripts/reiniciar-server.sh >>data/lanzador.log 2>&1 </dev/null & exit 0"
 if errorlevel 42 goto sin_repo
 if errorlevel 1 goto fallo
@@ -71,18 +71,18 @@ REM start "" "%CHROME%" --kiosk %URL% --new-window
 exit /b 0
 
 :sin_repo
-echo No encuentro Jarvis Workspace dentro de WSL.
-echo Clonalo ahi ^(nombre publico del repo^):
+echo I cannot find Jarvis Workspace inside WSL.
+echo Clone it there ^(public repo name^):
 echo   git clone https://github.com/celsiusm/jarvis-workspace.git ~/jarvis-workspace
-echo Si ya esta en otra ruta, setea la variable de entorno JARVIS_WSL_DIR
-echo a esa ruta Linux ^(ej. /home/vos/mis-apps/jarvis-workspace^).
+echo If it is already in another path, set the JARVIS_WSL_DIR environment variable
+echo to that Linux path ^(e.g. /home/you/my-apps/jarvis-workspace^).
 pause
 exit /b 1
 
 :fallo
-echo No pude levantar el server tras 90s. Proba a mano dentro de WSL:
+echo I could not start the server after 90s. Try manually inside WSL:
 echo   bash ~/jarvis-workspace/scripts/reiniciar-server.sh
-echo (log del intento: ~/jarvis-workspace/data/lanzador.log)
-echo Repo en otra ruta? setea JARVIS_WSL_DIR. Otra distro? setea JARVIS_WSL_DISTRO.
+echo (attempt log: ~/jarvis-workspace/data/lanzador.log)
+echo Repo in another path? set JARVIS_WSL_DIR. Another distro? set JARVIS_WSL_DISTRO.
 pause
 exit /b 1

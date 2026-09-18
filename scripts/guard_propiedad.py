@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
 """
-Candado de PROPIEDAD entre agentes (pedido del usuario, 2026-06-16).
+Ownership LOCK between agents (user request, 2026-06-16).
 
-La regla del CLAUDE.md «commiteá SOLO tus archivos» es disciplina blanda: un
-agente puede no leerla, ser otro CLI (Codex/Gemini no leen CLAUDE.md) o, como
-todo modelo, desviarse cada tanto. Este es el enforcement DURO, gemelo del
-escáner de secretos:
+The CLAUDE.md rule "commit ONLY your files" is soft discipline: an agent may
+not read it, may be another CLI (Codex/Gemini don't read CLAUDE.md) or, like
+any model, may drift now and then. This is the HARD enforcement, twin of the
+secrets scanner:
 
-  - El hook .githooks/pre-commit corre este script ANTES de cada commit.
-  - El script identifica al agente que commitea por su sesión tmux
-    (`jarvis_<terminal_id>`) y lee `.jarvis/LIVE.md`.
-  - Si entre lo staged hay un archivo cuyo 🔒 dueño es OTRO agente (y no hay un
-    permiso «→ OK» de ese dueño hacia mí sobre ese archivo) → BLOQUEA el commit.
+  - The .githooks/pre-commit hook runs this script BEFORE every commit.
+  - The script identifies the committing agent by its tmux session
+    (`jarvis_<terminal_id>`) and reads `.jarvis/LIVE.md`.
+  - If among the staged files there is one whose 🔒 owner is ANOTHER agent (and
+    there is no "→ OK" permission from that owner to me over that file) → it
+    BLOCKS the commit.
 
-Falla ABIERTO a propósito: sin tmux (lo commitea el usuario en su shell), sin
-LIVE.md, o ante cualquier error, PERMITE. Un bug en el guard jamás debe brickear
-los commits de todos los agentes; lo peor que pasa es volver al estado anterior
-(la disciplina blanda). El escape para falsos positivos legítimos:
-`git commit --no-verify`. Stdlib pura (como scan_secretos.py).
+Fails OPEN on purpose: without tmux (the user commits in their shell), without
+LIVE.md, or on any error, it ALLOWS. A bug in the guard must never brick
+everyone's commits; the worst that happens is going back to the previous state
+(soft discipline). The escape hatch for legitimate false positives:
+`git commit --no-verify`. Pure stdlib (like scan_secretos.py).
 """
 import os
 import re
@@ -25,21 +26,21 @@ import subprocess
 import sys
 
 
-# ── Parseo de LIVE.md (formato de plotspace/core/agent_live.py:generar_live_md) ──
-# Encabezado de agente:  «## <nombre> (<tipo>, terminal <id>) — <estado>»
+# ── Parsing of LIVE.md (format from plotspace/core/agent_live.py:generar_live_md) ──
+# Agent header:  «## <name> (<type>, terminal <id>) — <state>»
 _RE_AGENTE = re.compile(r'^##\s+(.+?)\s+\([^)]*terminal\s+(\d+)\)')
-# Línea de archivo:      «- `<path>` — write ×N (hace Xm)[ 🔒 dueño]»
+# File line:      «- `<path>` — write ×N (hace Xm)[ 🔒 dueño]»
 _RE_PATH = re.compile(r'^-\s+`([^`]+)`')
-# Línea de permiso:      «- <emoji> <pide> pidió PERMISO sobre `<archivo>` ... [→ OK/NO]»
+# Permission line:      «- <emoji> <asker> pidió PERMISO sobre `<archivo>` ... [→ OK/NO]»
 _RE_PERMISO = re.compile(r'^-\s+\S+\s+(.+?)\s+pidió PERMISO sobre `([^`]+)`')
-# Línea de reserva:      «- 🔖 `<path>` — <nombre> (hace Xm)»
+# Reservation line:      «- 🔖 `<path>` — <name> (hace Xm)»
 _RE_RESERVA = re.compile(r'^-\s+🔖\s+`([^`]+)`\s+—\s+(.+?)\s+\(hace')
 
 
 def parsear_reservas(texto):
-    """[(nombre, path)] de la sección «## Reservas» del LIVE.md — el lease
-    "voy a tocar X" del mailbox v2. Solo aparecen las vigentes (agent_live
-    poda por TTL), así que acá no hay que calcular tiempos."""
+    """[(nombre, path)] from the «## Reservas» section of LIVE.md — the lease
+    "I'm going to touch X" of mailbox v2. Only the current ones appear (agent_live
+    prunes by TTL), so there are no times to compute here."""
     reservas = []
     en_reservas = False
     for linea in (texto or '').splitlines():
@@ -56,12 +57,12 @@ def parsear_reservas(texto):
 def parsear_live(texto):
     """(agentes, permisos).
       agentes  = [{'tid': int, 'nombre': str, 'owned': [path, ...],
-                   'muerto': bool}]   (owned = solo los 🔒)
+                   'muerto': bool}]   (owned = only the 🔒 ones)
       permisos = [(pide_nombre, archivo, estado)]  estado ∈ {ok, no, pendiente}
 
-    `muerto` sale del 💀 del encabezado (agent_live._EMOJI_ESTADO): un agente
-    cuyo CLI se cerró o cuya sesión tmux ya no existe. Un LIVE.md viejo sin esa
-    marca deja a todos vivos — el comportamiento de antes."""
+    `muerto` comes from the 💀 in the header (agent_live._EMOJI_ESTADO): an agent
+    whose CLI was closed or whose tmux session no longer exists. An old LIVE.md
+    without that mark leaves everyone alive — the previous behavior."""
     agentes, permisos = [], []
     actual = None
     en_permisos = False
@@ -73,7 +74,7 @@ def parsear_live(texto):
             agentes.append(actual)
             en_permisos = False
             continue
-        if linea.startswith('## '):                 # otra sección (p. ej. Permisos)
+        if linea.startswith('## '):                 # another section (e.g. Permisos)
             en_permisos = linea.startswith('## Permisos')
             actual = None
             continue
@@ -100,39 +101,39 @@ def _quitar_prefijo_rel(p):
 
 
 def _match_archivo(a, b):
-    """Espejo de agent_live._match_archivo: el dueño suele responder con el
-    basename, así que 'frontend/shared/ui.js' matchea 'ui.js'."""
+    """Mirror of agent_live._match_archivo: the owner usually replies with the
+    basename, so 'frontend/shared/ui.js' matches 'ui.js'."""
     a, b = _quitar_prefijo_rel(a), _quitar_prefijo_rel(b)
     return a == b or a.endswith('/' + b) or b.endswith('/' + a)
 
 
 def _clave(p):
-    r"""Cómo se comparan dos rutas para decidir PROPIEDAD.
+    r"""How two paths are compared to decide OWNERSHIP.
 
-    En Windows el sistema de archivos no distingue mayúsculas: `Src\Index.js`
-    y `src/index.js` son EL MISMO archivo. Comparándolos como strings crudos,
-    el mismo archivo termina con dos dueños y el candado no ve la colisión.
-    En Linux son archivos distintos y unificarlos sería el bug opuesto — por
-    eso la regla sigue al sistema, no al gusto. Gemelo de
-    `plotspace/core/rutas.clave_propiedad` (acá no se importa: este script corre
-    como hook de git, sin el paquete del backend en el path).
+    On Windows the filesystem is case-insensitive: `Src\Index.js`
+    and `src/index.js` are THE SAME file. Comparing them as raw strings,
+    the same file ends up with two owners and the lock does not see the collision.
+    On Linux they are different files and merging them would be the opposite bug —
+    that is why the rule follows the system, not taste. Twin of
+    `plotspace/core/rutas.clave_propiedad` (not imported here: this script runs
+    as a git hook, without the backend package on the path).
     """
     p = (p or '').replace('\\', '/')
     return p.lower() if os.name == 'nt' else p
 
 
 def violaciones(staged, mi_tid, agentes, permisos, reservas=None):
-    """Archivos staged cuyo dueño es OTRO agente — o con RESERVA vigente
-    ajena — y para los que NO tengo un permiso ok.
-    → [{'path', 'dueno_tid', 'dueno_nombre'}] (dueno_tid None si es reserva)."""
-    dueno = {}                       # clave(path) -> (tid, nombre)
+    """Staged files whose owner is ANOTHER agent — or with a current foreign
+    RESERVATION — and for which I do NOT have an ok permission.
+    → [{'path', 'dueno_tid', 'dueno_nombre'}] (dueno_tid None if it is a reservation)."""
+    dueno = {}                       # _clave(path) -> (tid, name)
     mi_nombre = None
     for a in agentes:
         if a['tid'] == mi_tid:
             mi_nombre = a['nombre']
-        # Un agente MUERTO no defiende nada: su CLI se cerró y los commits que
-        # todos esperaban de él no van a llegar nunca. Dejarlo bloquear era
-        # convertir su muerte en un candado permanente sobre archivos vivos.
+        # A DEAD agent defends nothing: its CLI was closed and the commits
+        # everyone expected from it will never arrive. Letting it block was
+        # turning its death into a permanent lock over live files.
         if a.get('muerto'):
             continue
         for p in a['owned']:
@@ -143,7 +144,7 @@ def violaciones(staged, mi_tid, agentes, permisos, reservas=None):
     for f in staged:
         d = dueno.get(_clave(f))
         if d is None:
-            # ¿reserva vigente de OTRO? ("voy a tocar X" del mailbox v2)
+            # current reservation by ANOTHER? ("I'm going to touch X" of mailbox v2)
             r = next(((nom, path) for nom, path in (reservas or [])
                       if _match_archivo(path, f)), None)
             if r and (mi_nombre is None
@@ -152,15 +153,15 @@ def violaciones(staged, mi_tid, agentes, permisos, reservas=None):
         if not d or d[0] == mi_tid:
             continue
         if any(_match_archivo(arch, f) for arch in mis_oks):
-            continue                 # el dueño me dio permiso sobre este archivo
+            continue                 # the owner gave me permission over this file
         out.append({'path': f, 'dueno_tid': d[0], 'dueno_nombre': d[1]})
     return out
 
 
 def filtrar_guard_ok(viol, ok_env):
-    """Bypass SCOPED: GUARD_OK="ruta1,ruta2" exime SOLO esos archivos (con
-    constancia). Reemplaza al --no-verify total, que además apagaba el escáner
-    de secretos. Devuelve (violaciones_vigentes, eximidas)."""
+    """SCOPED bypass: GUARD_OK="path1,path2" exempts ONLY those files (with a
+    record). Replaces the total --no-verify, which also turned off the secrets
+    scanner. Returns (current_violations, exempted)."""
     if not ok_env:
         return viol, []
     eximidas = [v for v in viol
@@ -169,9 +170,9 @@ def filtrar_guard_ok(viol, ok_env):
 
 
 def registrar_bloqueo(raiz, mi_tid, viol):
-    """Deja el bloqueo en data/jarvis.log (mismo formato JSON-lines que
-    plotspace/core/logs.py) para que la señal de fricción no se evapore con el
-    output del commit. Best-effort y stdlib pura: JAMÁS rompe el hook."""
+    """Leaves the block in data/jarvis.log (same JSON-lines format as
+    plotspace/core/logs.py) so the friction signal does not evaporate with the
+    commit output. Best-effort and pure stdlib: NEVER breaks the hook."""
     try:
         import json
         from datetime import datetime
@@ -191,18 +192,18 @@ def registrar_bloqueo(raiz, mi_tid, viol):
         pass
 
 
-# ── Wiring con el entorno (git + tmux) ───────────────────────────────────────
+# ── Wiring with the environment (git + tmux) ─────────────────────────────────
 
 def detectar_terminal_id():
-    """El terminal_id del agente que commitea. None si no corre dentro de una
-    terminal de Jarvis (p. ej. el usuario commiteando desde su propio shell).
+    """The terminal_id of the committing agent. None if it does not run inside
+    a Jarvis terminal (e.g. the user committing from their own shell).
 
-    PRIMERO la variable de entorno, que Jarvis inyecta al crear la terminal y
-    funciona con CUALQUIER motor. El nombre de sesión tmux queda de respaldo
-    para las terminales creadas antes de que la variable existiera: cuando el
-    motor sea ConPTY (Windows) no habrá sesión tmux que consultar, y este guard
-    —que es el candado de propiedad del enjambre— no puede quedarse ciego.
-    Mismo orden que `scripts/jv.py`."""
+    FIRST the environment variable, which Jarvis injects when creating the
+    terminal and works with ANY engine. The tmux session name is the fallback
+    for terminals created before the variable existed: when the engine is
+    ConPTY (Windows) there will be no tmux session to query, and this guard
+    —which is the swarm's ownership lock— cannot go blind.
+    Same order as `scripts/jv.py`."""
     tid = (os.environ.get('JARVIS_TERMINAL_ID') or '').strip()
     if tid.isdigit():
         return int(tid)
@@ -235,37 +236,37 @@ def main():
     try:
         mi_tid = detectar_terminal_id()
         if mi_tid is None:
-            return 0                 # no es un agente identificable → permitir
+            return 0                 # not an identifiable agent → allow
         raiz = (_git('rev-parse', '--show-toplevel') or '').strip() or os.getcwd()
         try:
             with open(os.path.join(raiz, '.jarvis', 'LIVE.md'), encoding='utf-8') as f:
                 texto = f.read()
         except OSError:
-            return 0                 # sin LIVE.md → nada que proteger
+            return 0                 # without LIVE.md → nothing to protect
         agentes, permisos = parsear_live(texto)
         viol = violaciones(_staged(), mi_tid, agentes, permisos,
                            reservas=parsear_reservas(texto))
         ok_env = [p.strip() for p in os.environ.get('GUARD_OK', '').split(',') if p.strip()]
         viol, eximidas = filtrar_guard_ok(viol, ok_env)
         for v in eximidas:
-            print(f"[guard_propiedad] {v['path']} eximido por GUARD_OK "
-                  f"(dueño: {v['dueno_nombre']}) — constancia")
+            print(f"[guard_propiedad] {v['path']} exempted by GUARD_OK "
+                  f"(owner: {v['dueno_nombre']}) — record")
         if not viol:
             return 0
         registrar_bloqueo(raiz, mi_tid, viol)
-        print('✖ BLOQUEADO: estás por commitear archivos de OTRO agente (según .jarvis/LIVE.md):')
+        print('✖ BLOCKED: you are about to commit files owned by ANOTHER agent (per .jarvis/LIVE.md):')
         for v in viol:
-            term = f"terminal {v['dueno_tid']}" if v['dueno_tid'] is not None else 'reserva vigente'
-            print(f"   • {v['path']} — 🔒 dueño: {v['dueno_nombre']} ({term})")
+            term = f"terminal {v['dueno_tid']}" if v['dueno_tid'] is not None else 'current reservation'
+            print(f"   • {v['path']} — 🔒 owner: {v['dueno_nombre']} ({term})")
         print('')
-        print('Commiteá SOLO tus archivos: `git add <tus rutas>` (NO `git add -A` / `git commit -am`).')
-        print('Si el dueño te dio permiso y aun así se bloquea, eximí SOLO ese archivo:')
-        print('  GUARD_OK="ruta/del/archivo.py" git commit -m "..."   (NO uses --no-verify:')
-        print('  apaga también el escáner de secretos)')
+        print('Commit ONLY your files: `git add <your paths>` (NOT `git add -A` / `git commit -am`).')
+        print('If the owner gave you permission and it still blocks, exempt ONLY that file:')
+        print('  GUARD_OK="path/to/file.py" git commit -m "..."   (do NOT use --no-verify:')
+        print('  it also turns off the secrets scanner)')
         return 1
     except Exception as e:
-        # Falla abierto: el guard nunca debe brickear los commits por un bug suyo.
-        print(f'[guard_propiedad] aviso: chequeo omitido por error interno ({e})', file=sys.stderr)
+        # Fails open: the guard must never brick commits because of its own bug.
+        print(f'[guard_propiedad] warning: check skipped due to internal error ({e})', file=sys.stderr)
         return 0
 
 

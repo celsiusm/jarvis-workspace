@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-# SessionStart hook de Claude Code para Jarvis.
+# Claude Code SessionStart hook for Jarvis.
 #
-# claude rota su transcript (nuevo <uuid>.jsonl) cada vez que la conversación se
-# compacta o se continúa. Si Jarvis guardó el uuid INICIAL, al reanudar con
-# --resume trae contexto viejo/parcial. Este hook, que claude dispara en CADA
-# arranque (startup/resume/clear), le avisa a Jarvis el session-id VIVO para que
-# terminals.session_uuid apunte siempre al transcript actual — así al reabrir la
-# app la terminal vuelve con TODA la conversación.
+# claude rotates its transcript (new <uuid>.jsonl) every time the conversation
+# is compacted or continued. If Jarvis stored the INITIAL uuid, resuming with
+# --resume brings old/partial context. This hook, which claude fires on EVERY
+# start (startup/resume/clear), tells Jarvis the LIVE session-id so that
+# terminals.session_uuid always points to the current transcript — that way,
+# reopening the app brings the terminal back with the WHOLE conversation.
 #
-# Claude pasa un JSON por stdin: {session_id, transcript_path, cwd, source, ...}.
-# El hook solo actúa si corre dentro de una terminal de Jarvis (JARVIS_TERMINAL_ID
-# en el env, que Jarvis setea en la sesión tmux). Best-effort ABSOLUTO: cualquier
-# error se traga en silencio — un hook nunca debe romper el arranque de claude.
+# Claude passes a JSON over stdin: {session_id, transcript_path, cwd, source, ...}.
+# The hook only acts if it runs inside a Jarvis terminal (JARVIS_TERMINAL_ID
+# in the env, which Jarvis sets in the tmux session). ABSOLUTE best-effort: any
+# error is swallowed silently — a hook must never break claude's startup.
 import json
 import os
 import sys
@@ -20,7 +20,7 @@ import sys
 def main() -> None:
     tid = os.environ.get("JARVIS_TERMINAL_ID")
     if not tid:
-        return  # claude normal fuera de Jarvis → no-op
+        return  # normal claude outside Jarvis → no-op
     try:
         payload = json.load(sys.stdin)
     except Exception:
@@ -41,7 +41,7 @@ def main() -> None:
         )
         urllib.request.urlopen(req, timeout=2).read()
     except Exception:
-        pass  # el motor puede estar reiniciando; el próximo arranque reintenta
+        pass  # the engine may be restarting; the next start will retry
 
 
 if __name__ == "__main__":

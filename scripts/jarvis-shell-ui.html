@@ -4,22 +4,22 @@
 <meta charset="utf-8">
 <title>Jarvis Workspace</title>
 <style>
-  /* ── Jarvis Workspace — splash de arranque ─────────────────────────────────────
-     Composición: lockup chico + tagline → hero dos líneas (la 2ª apagada) →
-     slot de estado/botón → microcopy. Canvas noir violeta con grilla de
-     líneas y esquineros tipo viewfinder. LA FIRMA: la constelación del logo
-     se dibuja en loop mientras el motor arranca (el logo ES el spinner) y se
-     completa + flamea la chispa al quedar listo. Dos voces tipográficas: la
-     marca en Segoe, la máquina (estados/build) en monospace de terminal. */
+  /* ── Jarvis Workspace — startup splash ────────────────────────────────────────
+     Composition: small lockup + tagline → two-line hero (2nd one dimmed) →
+     status/button slot → microcopy. Violet noir canvas with a line grid and
+     viewfinder-style corner marks. THE SIGNATURE: the logo's constellation is
+     drawn in a loop while the engine starts (the logo IS the spinner) and it
+     completes + the spark flares once ready. Two typographic voices: the brand
+     in Segoe, the machine (states/build) in terminal monospace. */
   :root {
     --obs-0: #08070d;        /* canvas */
-    --obs-1: #14111d;        /* tile del mark */
+    --obs-1: #14111d;        /* tile of the mark */
     --violet: #7c5cff;
     --violet-lo: #5b3fd6;
     --violet-hi: #b9a6ff;
-    --tinta: #ece7fb;        /* titular */
-    --humo: #8f88ad;         /* secundario */
-    --humo-oscuro: #55506f;  /* hero línea 2 (apagada, como la referencia) */
+    --tinta: #ece7fb;        /* headline */
+    --humo: #8f88ad;         /* secondary */
+    --humo-oscuro: #55506f;  /* hero line 2 (dimmed, like the reference) */
     --faint: #47425f;
     --mono: ui-monospace, "Cascadia Mono", "SF Mono", Consolas, monospace;
     --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
@@ -35,7 +35,7 @@
     user-select: none; -webkit-user-select: none; cursor: default;
   }
 
-  /* ── Atmósfera: grilla de líneas + glow + vignette + esquineros ────────── */
+  /* ── Atmosphere: line grid + glow + vignette + corner marks ────────────── */
   .scene { position: fixed; inset: 0; display: grid; place-items: center; }
 
   .grid {
@@ -55,7 +55,7 @@
     background: radial-gradient(ellipse, rgba(124,92,255,.16) 0%, transparent 65%);
     filter: blur(40px); pointer-events: none;
   }
-  /* contraluz baja para dar profundidad al canvas */
+  /* low backlight to give the canvas depth */
   .aurora-b {
     position: absolute; width: 540px; height: 380px; border-radius: 50%;
     right: 6%; bottom: -12%;
@@ -68,7 +68,7 @@
     background: radial-gradient(ellipse 95% 95% at 50% 44%, transparent 52%, rgba(3,2,7,.92) 100%);
   }
 
-  /* esquineros viewfinder */
+  /* viewfinder corner marks */
   .marco { position: absolute; inset: 22px; pointer-events: none; opacity: 0; animation: aparecer .9s ease .15s forwards; }
   .marco i { position: absolute; width: 26px; height: 26px; border: 0 solid rgba(178,166,226,.22); }
   .marco .tl { top: 0;    left: 0;    border-top-width: 2px;    border-left-width: 2px; }
@@ -78,14 +78,14 @@
 
   @keyframes aparecer { to { opacity: 1; } }
 
-  /* ── Columna central ───────────────────────────────────────────────────── */
+  /* ── Central column ────────────────────────────────────────────────────── */
   .stage {
     position: relative; z-index: 2; text-align: center;
     display: flex; flex-direction: column; align-items: center;
     max-width: 620px; padding: 0 32px;
   }
 
-  /* Lockup: mark + nombre, tagline debajo */
+  /* Lockup: mark + name, tagline below */
   .lockup {
     display: flex; align-items: center; gap: 12px;
     opacity: 0; transform: translateY(10px) scale(.96);
@@ -101,10 +101,10 @@
     animation: subir .8s var(--ease-out) .2s forwards;
   }
 
-  /* El mark: cinta angular SUELTA (sin tile), la trayectoria del plot */
+  /* The mark: LOOSE angular ribbon (no tile), the trajectory of the plot */
   .mark { width: 42px; height: 42px; position: relative; flex: none; }
   .mark svg { display: block; width: 100%; height: 100%; overflow: visible; }
-  /* la cinta se dibuja en loop mientras carga (el logo ES el spinner) */
+  /* the ribbon is drawn in a loop while loading (the logo IS the spinner) */
   .mark .trazo, .mark .brillo {
     stroke-dasharray: 100;
     animation: trazar 2.1s var(--ease-out) infinite;
@@ -112,7 +112,7 @@
   .mark.listo .trazo, .mark.listo .brillo { animation: none; stroke-dashoffset: 0; }
   .mark .chispa-n { animation: latir 2.1s ease-in-out infinite; transform-origin: 50px 15px; }
   .mark.listo .chispa-n { animation: flamear 1.8s ease-in-out infinite; }
-  /* los rayos de la chispa se ENCIENDEN recién con el motor listo */
+  /* the spark's rays only LIGHT UP once the engine is ready */
   .mark .rayos { opacity: 0; transition: opacity .5s ease; transform-origin: 50px 15px; }
   .mark.listo .rayos { opacity: 1; animation: flamear 1.8s ease-in-out infinite; }
   @keyframes trazar {
@@ -126,14 +126,14 @@
     50%     { opacity: 1;  transform: scale(1.28); }
   }
 
-  /* Campo de constelaciones ambiente: nodos ploteados en la oscuridad */
+  /* Ambient constellation field: nodes plotted in the dark */
   .campo { position: absolute; inset: 0; pointer-events: none; opacity: 0; animation: aparecer 1.4s ease .3s forwards; }
   .campo svg { width: 100%; height: 100%; }
   .campo .tw1 { animation: titilar 4.2s ease-in-out 1.2s infinite; }
   .campo .tw2 { animation: titilar 5.6s ease-in-out 2.6s infinite; }
   @keyframes titilar { 0%,100% { opacity: .14; } 50% { opacity: .5; } }
 
-  /* ── Hero: dos líneas, la segunda apagada ──────────────────────────────── */
+  /* ── Hero: two lines, the second dimmed ────────────────────────────────── */
   .hero {
     margin: clamp(30px, 6vh, 52px) 0 0;
     font-size: clamp(40px, 5.2vw, 58px); font-weight: 800;
@@ -143,8 +143,8 @@
   .hero .l1, .hero .l2 { display: block; opacity: 0; transform: translateY(16px); }
   .hero .l1 { animation: subir .9s var(--ease-out) .28s forwards; }
   .hero .l2 { color: var(--humo-oscuro); animation: subir .9s var(--ease-out) .38s forwards; }
-  /* punto final geométrico (no el glifo "." — cambia por fuente): dot violeta
-     con glow, eco de la chispa del mark */
+  /* geometric full stop (not the "." glyph — it changes with the font): violet
+     dot with glow, an echo of the mark's spark */
   .hero .punto {
     display: inline-block; width: .13em; height: .13em; border-radius: 50%;
     background: var(--violet); margin-left: .06em;
@@ -157,14 +157,14 @@
     animation: subir .9s var(--ease-out) .5s forwards;
   }
 
-  /* ── Slot: estado de la máquina o botón Entrar ─────────────────────────── */
+  /* ── Slot: machine status or Enter button ──────────────────────────────── */
   .slot {
     margin-top: clamp(28px, 5.5vh, 46px); min-height: 76px; width: 100%;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     opacity: 0; animation: aparecer .9s ease .62s forwards;
   }
 
-  /* estado: voz de máquina (mono) con nodo pulsante */
+  /* state: machine voice (mono) with a pulsing node */
   #estado {
     margin: 0; display: inline-flex; align-items: center; gap: 9px;
     font-family: var(--mono); font-size: 12.5px; letter-spacing: .02em;
@@ -185,7 +185,7 @@
   }
   #estado.error::before { content: none; }
 
-  /* Botón primario: blanco, ancho, único (craft de la referencia) */
+  /* Primary button: white, wide, unique (craft from the reference) */
   .enter[hidden] { display: none; }
   .enter {
     position: relative; overflow: hidden;
@@ -213,15 +213,15 @@
   .enter .flecha { transition: transform .22s var(--ease-out); }
   .enter:hover .flecha { transform: translateX(4px); }
 
-  /* microcopy bajo el slot */
+  /* microcopy below the slot */
   .nota {
     margin: 26px 0 0; font-size: 11.5px; letter-spacing: .03em; color: var(--faint);
     opacity: 0; animation: aparecer 1s ease .75s forwards;
   }
 
-  /* ── Márgenes: marca madre + build ─────────────────────────────────────── */
-  /* rótulos de margen: SIEMPRE adentro del marco (inset 22px + 2px de línea)
-     para no quedar atravesados por el esquinero */
+  /* ── Margins: parent brand + build ─────────────────────────────────────── */
+  /* margin labels: ALWAYS inside the frame (inset 22px + 2px line) so they
+     don't get crossed by the corner mark */
   .madre, .build {
     position: fixed; bottom: 34px; z-index: 3;
     font: 10.5px/1 var(--mono); letter-spacing: .1em; color: var(--faint);
@@ -234,29 +234,29 @@
     box-shadow: 0 0 6px var(--violet); animation: latir 2.6s ease-in-out infinite;
   }
 
-  /* ── Chrome de ventana (sin decoración nativa) ─────────────────────────── */
-  /* Sin botones min/max/cerrar en el splash (pedido del usuario): lienzo
-     limpio como la referencia. La barra invisible sigue para poder ARRASTRAR
-     la ventana; cerrar durante el boot = Alt+F4. El workspace adentro tiene
-     su propio chrome (window-chrome.js). */
+  /* ── Window chrome (no native decoration) ──────────────────────────────── */
+  /* No min/max/close buttons on the splash (user request): clean canvas like
+     the reference. The invisible bar stays so the window can be DRAGGED;
+     closing during boot = Alt+F4. The workspace inside has its own chrome
+     (window-chrome.js). */
   .titlebar {
     position: fixed; top: 0; left: 0; right: 0; height: 40px; z-index: 5;
     -webkit-app-region: drag; app-region: drag;
   }
 
-  /* ── Secuencia de salida: zambullida EN la constelación ────────────────
-     Click en Entrar → la UI se apaga → la cámara se adentra en la
-     constelación (zoom hacia la chispa + warp de la grilla) → la
-     constelación sale volando → burst de luz → workspace. ~1.25s, una vez
-     por boot. Con reduced-motion: solo el flash de siempre. */
-  /* El warp es un CANVAS que se redibuja por frame (cámara real, vectores
-     siempre nítidos, parallax de profundidad). Nada de escalar una capa
-     rasterizada — eso se veía como un PNG estirado volando. */
+  /* ── Exit sequence: dive INTO the constellation ────────────────────────
+     Click on Enter → the UI fades out → the camera goes into the
+     constellation (zoom toward the spark + grid warp) → the constellation
+     flies away → light burst → workspace. ~1.25s, once per boot. With
+     reduced-motion: just the usual flash. */
+  /* The warp is a CANVAS redrawn per frame (real camera, vectors always
+     sharp, depth parallax). No scaling a rasterized layer — that looked like
+     a stretched PNG flying. */
   #warp {
     position: fixed; inset: 0; z-index: 4; pointer-events: none; display: none;
   }
 
-  /* la escena acompaña: UI afuera, grilla a velocidad warp, aurora que arde */
+  /* the scene follows: UI out, grid at warp speed, aurora that burns */
   .salida .stage { animation: stageOut .32s ease forwards; }
   @keyframes stageOut { to { opacity: 0; transform: scale(.94); filter: blur(3px); } }
   .salida .marco, .salida .madre, .salida .build, .salida .campo {
@@ -276,7 +276,7 @@
     100% { opacity: 0; transform: translateX(-50%) scale(1.9); }
   }
 
-  /* flash de salida al entrar */
+  /* exit flash on enter */
   .flash {
     position: fixed; inset: 0; z-index: 9; pointer-events: none;
     background: radial-gradient(circle at 50% 44%, rgba(185,166,255,.9), rgba(124,92,255,.5) 30%, transparent 70%);
@@ -287,7 +287,7 @@
 
   @keyframes subir { to { opacity: 1; transform: translateY(0) scale(1); } }
 
-  /* ── Accesibilidad: sin movimiento ─────────────────────────────────────── */
+  /* ── Accessibility: no motion ──────────────────────────────────────────── */
   @media (prefers-reduced-motion: reduce) {
     .grid, .marco, .lockup, .tagline, .hero .l1, .hero .l2, .sub, .slot,
     .nota, .madre, .build {
@@ -307,7 +307,7 @@
     <div class="grid"></div>
     <div class="aurora"></div>
     <div class="aurora-b"></div>
-    <!-- campo de constelaciones: nodos ploteados titilando en la oscuridad -->
+    <!-- constellation field: plotted nodes twinkling in the dark -->
     <div class="campo" aria-hidden="true">
       <svg viewBox="0 0 1400 860" preserveAspectRatio="xMidYMid slice" fill="none">
         <g stroke="rgba(124,92,255,.09)" stroke-width="1">
@@ -333,7 +333,7 @@
           <circle cx="1330" cy="330" r="1.3" opacity=".14"/>
           <circle cx="92" cy="430" r="1.4" opacity=".15"/>
         </g>
-        <!-- crosshairs de la retícula -->
+        <!-- grid crosshairs -->
         <g stroke="rgba(178,166,226,.12)" stroke-width="1">
           <path d="M352 396 h14 M359 389 v14"/>
           <path d="M1044 296 h14 M1051 289 v14"/>
@@ -354,23 +354,23 @@
                 <stop offset="1" stop-color="#b9a6ff"/>
               </linearGradient>
             </defs>
-            <!-- halo blando debajo de la cinta -->
+            <!-- soft halo under the ribbon -->
             <path d="M12 46 L24 35 L32 41 L50 15" stroke="rgba(124,92,255,.35)"
                   stroke-width="12" stroke-linecap="round" stroke-linejoin="round" filter="blur(4px)"/>
-            <!-- la cinta: trayectoria del plot, sólida y facetada -->
+            <!-- the ribbon: trajectory of the plot, solid and faceted -->
             <path class="trazo" d="M12 46 L24 35 L32 41 L50 15" pathLength="100"
                   stroke="url(#cinta)" stroke-width="7"
                   stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="5"/>
-            <!-- arista de luz en el borde superior (dimensión) -->
+            <!-- light edge on the top border (dimension) -->
             <path class="brillo" d="M12 46 L24 35 L32 41 L50 15" pathLength="100"
                   stroke="rgba(255,255,255,.38)" stroke-width="1.8"
                   stroke-linecap="round" stroke-linejoin="round" transform="translate(-0.7,-1.6)"/>
-            <!-- nodo ancla + puntos ploteados remachados en la cinta -->
+            <!-- anchor node + plotted points riveted on the ribbon -->
             <circle cx="12" cy="46" r="3.4" fill="#4a30b8"/>
             <circle cx="12" cy="46" r="1.6" fill="#c9bcff"/>
             <circle cx="24" cy="35" r="1.7" fill="#2c1e63"/>
             <circle cx="32" cy="41" r="1.7" fill="#2c1e63"/>
-            <!-- chispa cúspide: núcleo + halo; los rayos se encienden al estar listo -->
+            <!-- apex spark: core + halo; the rays light up when ready -->
             <circle class="chispa-n" cx="50" cy="15" r="7.5" fill="rgba(185,166,255,.30)"/>
             <circle class="chispa-n" cx="50" cy="15" r="3.4" fill="#ffffff"/>
             <g class="rayos" stroke="#ffffff" stroke-width="1.6" stroke-linecap="round">
@@ -411,7 +411,7 @@
     <span class="madre">LOCAL · BYOK</span>
     <div class="build" id="build" hidden><span class="dot"></span><span id="build-txt"></span></div>
   </div>
-  <!-- constelación warp: se redibuja por frame en el canvas (ver lanzarWarp) -->
+  <!-- warp constellation: redrawn per frame on the canvas (see lanzarWarp) -->
   <canvas id="warp" aria-hidden="true"></canvas>
 
   <div class="flash" id="flash"></div>
@@ -427,13 +427,14 @@
       var buildTx = document.getElementById('build-txt');
       var destino = null;
 
-      // ── Idioma: el splash sigue el idioma del SISTEMA (WebView2 hereda el
-      // de Windows vía navigator.language) — la misma señal que lee el shell
-      // (GetUserDefaultUILanguage), así todo el arranque habla un solo idioma.
-      // Si config.json trae un idioma EXPLÍCITO ("en"/"es"), el shell lo
-      // empuja con window.__idioma (idempotente: puede llegar en cualquier
-      // momento del boot y las veces que sea). Corre antes del primer paint
-      // (todo nace con opacity 0): no hay flash del otro idioma.
+      // ── Language: the splash follows the SYSTEM language (WebView2 inherits
+      // Windows' via navigator.language) — the same signal the shell reads
+      // (GetUserDefaultUILanguage), so the whole startup speaks a single
+      // language. If config.json brings an EXPLICIT language ("en"/"es"), the
+      // shell pushes it with window.__idioma (idempotent: it can arrive at any
+      // moment of the boot and as many times as needed). It runs before the
+      // first paint (everything is born with opacity 0): no flash of the other
+      // language.
       var IDIOMAS = {
         es: {
           '.tagline': 'tus agentes, en una sola app',
@@ -454,12 +455,12 @@
           '.madre': 'LOCAL · BYOK'
         }
       };
-      var estadoVivo = false;   // true tras el primer __estado real del shell
+      var estadoVivo = false;   // true after the shell's first real __estado
       function aplicarIdioma(lang) {
         lang = (lang === 'es') ? 'es' : 'en';
         var txt = IDIOMAS[lang];
         for (var sel in txt) {
-          if (sel === '#estado' && estadoVivo) continue; // no pisar el estado real
+          if (sel === '#estado' && estadoVivo) continue; // don't overwrite the real state
           var el = document.querySelector(sel);
           if (el) el.textContent = txt[sel];
         }
@@ -468,24 +469,24 @@
       if (!/^es/i.test(navigator.language || 'es')) aplicarIdioma('en');
       window.__idioma = aplicarIdioma;
 
-      // El shell (Rust) empuja el progreso mientras prepara el motor.
+      // The shell (Rust) pushes progress while it prepares the engine.
       window.__estado = function (msg, esError) {
         estadoVivo = true;
         entrar.hidden = true; entrar.classList.remove('show');
         estado.hidden = false; estado.classList.remove('oculto');
         estado.textContent = msg;
         estado.className = esError ? 'error' : '';
-        mark.classList.toggle('listo', !!esError);   // error: frenar el loop de trazo
+        mark.classList.toggle('listo', !!esError);   // error: stop the stroke loop
       };
 
-      // El shell nos pasa el número de build al arrancar.
+      // The shell passes us the build number at startup.
       window.__build = function (n) {
         buildTx.textContent = 'BUILD ' + n;
         build.hidden = false;
       };
 
-      // Motor listo: la constelación se completa, la chispa flamea y aparece
-      // el botón. El usuario decide cuándo entrar.
+      // Engine ready: the constellation completes, the spark flares and the
+      // button appears. The user decides when to enter.
       window.__listo = function (url) {
         destino = url;
         mark.classList.add('listo');
@@ -493,22 +494,21 @@
         setTimeout(function () {
           estado.hidden = true;
           entrar.hidden = false; entrar.setAttribute('aria-hidden', 'false');
-          void entrar.offsetWidth;   // reflow: dispara la animación de entrada
+          void entrar.offsetWidth;   // reflow: triggers the entrance animation
           entrar.classList.add('show');
-          // sin .focus() programático: pintaba el anillo de focus de entrada;
-          // Enter/Espacio ya funcionan por el keydown global de abajo
+          // no programmatic .focus(): it painted the focus ring on load;
+          // Enter/Space already work via the global keydown below
         }, 300);
       };
 
-      // ─── Zambullida: cámara real sobre canvas ─────────────────────────
-      // La constelación se REDIBUJA por frame (vectores nítidos a cualquier
-      // zoom) con parallax de profundidad: los satélites viajan en capas
-      // distintas y las estelas venden la velocidad. Coreografía:
-      // presentación (0-28%) → zambullida hacia la chispa (28-74%) → sale
-      // volando arriba-derecha con estelas (74-100%).
+      // ─── Dive: real camera over canvas ────────────────────────────────
+      // The constellation is REDRAWN per frame (vectors sharp at any zoom) with
+      // depth parallax: the satellites travel in different layers and the
+      // trails sell the speed. Choreography: presentation (0-28%) → dive
+      // toward the spark (28-74%) → flies off top-right with trails (74-100%).
       var TRAY = [[12, 46], [24, 35], [32, 41], [50, 15]];
       var CHISPA = [50, 15], CENTRO = [31, 31];
-      // satélites: [x0,y0 → x1,y1, profundidad] (z<1 lejos, z>1 cerca)
+      // satellites: [x0,y0 → x1,y1, depth] (z<1 far, z>1 near)
       var SATS = [[12, 46, 2, 55, .8], [24, 35, 18, 24, 1.3], [32, 41, 38, 52, .7],
                   [50, 15, 60, 6, 1.45], [50, 15, 62, 22, 1.1]];
 
@@ -530,8 +530,8 @@
           ctx.clearRect(0, 0, cv.width, cv.height);
           ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-          // cámara: zoom (px por unidad de mundo), foco, rotación, deriva, alpha
-          var zBase = Math.min(W, H) / 120;          // presentación ≈ logo de ~1/3 de pantalla
+          // camera: zoom (px per world unit), focus, rotation, drift, alpha
+          var zBase = Math.min(W, H) / 120;          // presentation ≈ logo at ~1/3 of the screen
           var zoom, fx, fy, rot = 0, ox = 0, oy = 0, alpha = 1, vuelo = 0;
           if (t < .28) {
             var k = _outCubic(t / .28);
@@ -540,7 +540,7 @@
             alpha = Math.min(1, t / .09);
           } else if (t < .74) {
             var k = _inCubic((t - .28) / .46);
-            zoom = zBase * (1.14 + 11 * k);          // la zambullida
+            zoom = zBase * (1.14 + 11 * k);          // the dive
             var fk = Math.min(1, k * 1.2);
             fx = CENTRO[0] + (CHISPA[0] - CENTRO[0]) * fk;
             fy = CENTRO[1] + (CHISPA[1] - CENTRO[1]) * fk;
@@ -550,7 +550,7 @@
             zoom = zBase * 12.14 * (1 - .3 * vuelo);
             fx = CHISPA[0]; fy = CHISPA[1];
             rot = -.05 + .22 * vuelo;
-            ox = vuelo * W * 1.15; oy = -vuelo * H * .9;   // sale volando ↗
+            ox = vuelo * W * 1.15; oy = -vuelo * H * .9;   // flies off ↗
             alpha = 1 - vuelo * vuelo;
           }
 
@@ -563,7 +563,7 @@
           ctx.globalAlpha = alpha;
           ctx.lineCap = 'round';
 
-          // satélites con parallax (detrás de la cinta)
+          // satellites with parallax (behind the ribbon)
           SATS.forEach(function (s) {
             var a = S(s[0], s[1], s[4]), b = S(s[2], s[3], s[4]);
             ctx.strokeStyle = 'rgba(124,92,255,' + (.32 * s[4]) + ')';
@@ -573,7 +573,7 @@
             ctx.beginPath(); ctx.arc(b[0], b[1], Math.max(1.2, .9 * zoom * s[4]), 0, 7); ctx.fill();
           });
 
-          // la cinta (glow en 3 pasadas + gradiente + arista de luz)
+          // the ribbon (glow in 3 passes + gradient + light edge)
           var pts = TRAY.map(function (p) { return S(p[0], p[1], 1); });
           var g = ctx.createLinearGradient(pts[0][0], pts[0][1], pts[3][0], pts[3][1]);
           g.addColorStop(0, '#5b3fd6'); g.addColorStop(.55, '#7c5cff'); g.addColorStop(1, '#b9a6ff');
@@ -591,7 +591,7 @@
           cinta(1.8, 'rgba(255,255,255,.38)', 'round');
           ctx.restore();
 
-          // nodo ancla + remaches
+          // anchor node + rivets
           function dot(p, r, color) {
             var q = S(p[0], p[1], 1);
             ctx.fillStyle = color;
@@ -600,7 +600,7 @@
           dot(TRAY[0], 3.4, '#4a30b8'); dot(TRAY[0], 1.6, '#c9bcff');
           dot(TRAY[1], 1.7, '#2c1e63'); dot(TRAY[2], 1.7, '#2c1e63');
 
-          // chispa: halo radial + núcleo + rayos
+          // spark: radial halo + core + rays
           var sp = S(CHISPA[0], CHISPA[1], 1);
           var halo = ctx.createRadialGradient(sp[0], sp[1], 0, sp[0], sp[1], 7.5 * zoom);
           halo.addColorStop(0, 'rgba(185,166,255,.5)'); halo.addColorStop(1, 'rgba(185,166,255,0)');
@@ -617,7 +617,7 @@
               ctx.stroke();
             });
 
-          // estelas de velocidad durante la huida
+          // speed trails during the escape
           if (vuelo > 0) {
             ctx.globalAlpha = alpha * .5;
             for (var i = 0; i < 10; i++) {
@@ -648,7 +648,7 @@
           setTimeout(nav, 260);
           return;
         }
-        // Zambullida: UI afuera + cámara del canvas → burst → workspace.
+        // Dive: UI out + canvas camera → burst → workspace.
         document.body.classList.add('salida');
         lanzarWarp(1450);
         setTimeout(function () { flash.classList.add('go'); }, 1150);

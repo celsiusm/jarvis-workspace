@@ -1,32 +1,32 @@
 #!/usr/bin/env python3
 """
-Escáner de secretos — el candado anti-fuga del repo (pedido 2026-06-12).
+Secret scanner — the repo's anti-leak lock (requested 2026-06-12).
 
-NUNCA debe salir hacia el remoto una API key (Anthropic, MCP, la que sea),
-el token de Jarvis ni credenciales de ningún proveedor: son de la persona y
-cuestan plata. Este script es la pieza pura; lo corren los hooks de
-.githooks/ (pre-commit sobre lo staged, pre-push sobre TODO el rango de
-commits salientes) y BLOQUEAN la operación si encuentra algo.
+An API key (Anthropic, MCP, whatever), the Jarvis token, or credentials of any
+provider must NEVER leave for the remote: they belong to the person and cost
+money. This script is the pure piece; the .githooks/ hooks run it (pre-commit
+on what is staged, pre-push on the ENTIRE range of outgoing commits) and BLOCK
+the operation if they find anything.
 
-Detecta dos cosas:
-1. FORMATOS de credenciales de proveedores + asignaciones genéricas de un
-   literal largo a una variable tipo secreto.
-2. Los VALORES REALES de los secretos locales (data/jarvis_token.txt,
-   plotspace/.env, data/telegram.json) — leídos en runtime, jamás guardados acá.
+It detects two things:
+1. Provider credential FORMATS + generic assignments of a long literal to a
+   secret-like variable.
+2. The REAL VALUES of the local secrets (data/jarvis_token.txt,
+   plotspace/.env, data/telegram.json) — read at runtime, never stored here.
 
-Uso: <texto por stdin> | python3 scripts/scan_secretos.py [--origen etiqueta]
-Exit 0 = limpio · exit 1 = hay secretos (la salida los muestra ENMASCARADOS).
+Usage: <text on stdin> | python3 scripts/scan_secretos.py [--origen label]
+Exit 0 = clean · exit 1 = secrets found (the output shows them MASKED).
 
-Tests: plotspace/tests/test_scan_secretos.py. Sin dependencias (stdlib pura):
-los hooks tienen que andar aunque el venv no esté activado.
+Tests: plotspace/tests/test_scan_secretos.py. No dependencies (pure stdlib):
+the hooks must work even when the venv is not activated.
 """
 import json
 import os
 import re
 import sys
 
-# Los char classes de estas regex hacen que el PROPIO archivo no se
-# auto-detecte al commitearse (después de cada prefijo viene '[').
+# The char classes in these regexes keep the FILE itself from
+# self-detecting when committed (after each prefix comes '[').
 PATRONES = [
     ('api-anthropic',  re.compile(r'sk-ant-[A-Za-z0-9_-]{20,}')),
     ('api-openai',     re.compile(r'\bsk-(?:proj-)?[A-Za-z0-9]{32,}')),
@@ -42,14 +42,14 @@ PATRONES = [
         r'["\'][A-Za-z0-9+/=_-]{20,}["\']')),
 ]
 
-# Claves de .env cuyo valor NO es un secreto (nombres de modelo, flags).
+# .env keys whose value is NOT a secret (model names, flags).
 _ENV_NO_SECRETAS = re.compile(r'(?i)(_MODEL|_MOTOR|_ENABLED|_DEBUG|_LEVEL)$')
 
 
 def valores_locales(raiz):
-    """[(nombre, valor)] de los secretos reales del entorno local. Cualquier
-    aparición literal de uno de estos en lo que sale del repo es fuga segura,
-    tenga el formato que tenga."""
+    """[(name, value)] of the real secrets in the local environment. Any
+    literal occurrence of one of these in what leaves the repo is a certain
+    leak, whatever format it has."""
     vals = []
     try:
         tok = open(os.path.join(raiz, 'data', 'jarvis_token.txt'),
@@ -77,9 +77,9 @@ def valores_locales(raiz):
             vals.append(('telegram-token', cfg['token']))
     except (OSError, ValueError):
         pass
-    # Snapshots de cuentas de CLIs (data/cli-accounts/<id>/*.json): los tokens
-    # OAuth de claude/codex/gemini/etc. Defensa en profundidad — si alguien los
-    # pega por error en un archivo TRACKEADO, el hook lo caza por valor literal.
+    # Snapshots of CLI accounts (data/cli-accounts/<id>/*.json): the OAuth
+    # tokens of claude/codex/gemini/etc. Defense in depth — if someone pastes
+    # them by mistake into a TRACKED file, the hook catches them by literal value.
     try:
         base = os.path.join(raiz, 'data', 'cli-accounts')
         for root, _dirs, files in os.walk(base):
@@ -93,10 +93,10 @@ def valores_locales(raiz):
                 hojas = []
                 _hojas_str(data, hojas)
                 for h in hojas:
-                    # ~/.claude.json (snapshoteado) trae hojas que NO son
-                    # secretos y también viven en el repo (URLs de vendors,
-                    # el email del dueño, slugs de skills, nombres humanos)
-                    # → bloqueaban el push por falso positivo.
+                    # ~/.claude.json (snapshotted) brings leaves that are NOT
+                    # secrets and also live in the repo (vendor URLs,
+                    # the owner's email, skill slugs, human names)
+                    # → they blocked the push as false positives.
                     if _hoja_inocua(h):
                         continue
                     vals.append(('cli-account', h))
@@ -106,10 +106,10 @@ def valores_locales(raiz):
 
 
 def _url_inocua(s):
-    """URL simple de vendor (dominio + ≤2 segmentos de path, sin query ni
-    fragment): metadata, no un secreto. Un webhook con token en el path
-    (estilo Slack: /services/T…/B…/xxx, 3+ segmentos) o cualquier URL con
-    query string NO es inocua y se sigue cazando por valor literal."""
+    """Simple vendor URL (domain + ≤2 path segments, no query or
+    fragment): metadata, not a secret. A webhook with a token in the path
+    (Slack style: /services/T…/B…/xxx, 3+ segments) or any URL with a
+    query string is NOT harmless and is still caught by literal value."""
     if not s.startswith(('http://', 'https://')):
         return False
     if '?' in s or '#' in s:
@@ -121,15 +121,15 @@ def _url_inocua(s):
 
 _EMAIL_RE = re.compile(r'^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
 
-# Un segmento de ruta normal: nombres de carpeta/archivo. Corto y sin la mezcla
-# de mayúsculas+dígitos larga que delata un token.
+# A normal path segment: folder/file names. Short and without the long
+# uppercase+digit mix that gives away a token.
 _SEGMENTO_RUTA = re.compile(r'^[A-Za-z0-9._+-]{1,64}$')
 _ARRANQUE_RUTA = re.compile(r'^(/|~/|\./|\.\./|[A-Za-z]:[\\/])')
 
 
 def _parece_token(seg):
-    """Segmento con pinta de credencial: largo y con mezcla de mayúsculas,
-    minúsculas y dígitos. Ninguna carpeta real se llama así."""
+    """Segment that looks like a credential: long and with a mix of uppercase,
+    lowercase and digits. No real folder is named like that."""
     if len(seg) < 20:
         return False
     return (any(c.isupper() for c in seg) and any(c.islower() for c in seg)
@@ -137,22 +137,22 @@ def _parece_token(seg):
 
 
 def _ruta_inocua(s):
-    """Ruta del filesystem: es metadata, no una credencial.
+    """Filesystem path: it is metadata, not a credential.
 
-    Codex guarda en su snapshot los directorios donde trabajaste. Sin esto,
-    esas rutas entran como "secretos" y bloquean CUALQUIER commit del repo que
-    las mencione — un test, un script, un comentario — con un mensaje que habla
-    de API keys y no ayuda a entender nada.
+    Codex stores in its snapshot the directories where you worked. Without this,
+    those paths come in as "secrets" and block ANY commit in the repo that
+    mentions them — a test, a script, a comment — with a message that talks
+    about API keys and does not help to understand anything.
 
-    Dos guardas contra el agujero obvio (esconder el token en la ruta):
-    exige 2+ segmentos, y ninguno puede tener pinta de credencial. Y no alcanza
-    con empezar con '/': el alfabeto base64 incluye la barra, así que un token
-    real puede arrancar igual — por eso cada segmento tiene que ser tame.
+    Two guards against the obvious hole (hiding the token in the path):
+    it requires 2+ segments, and none of them may look like a credential. And
+    starting with '/' is not enough: the base64 alphabet includes the slash, so
+    a real token can start the same way — that is why each segment has to be tame.
     """
     if not _ARRANQUE_RUTA.match(s):
         return False
-    # La letra de unidad ("C:") no es un segmento: sacarla antes de partir, o
-    # los dos puntos hacen fallar el patrón y toda ruta de Windows queda afuera.
+    # The drive letter ("C:") is not a segment: remove it before splitting, or
+    # the colon makes the pattern fail and every Windows path is left out.
     resto = s[2:] if re.match(r'^[A-Za-z]:[\\/]', s) else s
     segmentos = [p for p in re.split(r'[\\/]+', resto) if p and p not in ('~', '.', '..')]
     if len(segmentos) < 2:
@@ -161,29 +161,29 @@ def _ruta_inocua(s):
 
 
 def _hoja_inocua(s):
-    """Hojas de snapshots que NO son tokens: URLs simples de vendors, texto
-    humano con espacios ("…'s Organization"), emails, y slugs kebab-case sin
-    entropía (subagent-driven-development). Un token real (mezcla de mayúsculas
-    y dígitos, sin espacios) nunca cae en estas categorías."""
+    """Snapshot leaves that are NOT tokens: simple vendor URLs, human
+    text with spaces ("…'s Organization"), emails, and kebab-case slugs
+    without entropy (subagent-driven-development). A real token (mix of
+    uppercase and digits, no spaces) never falls into these categories."""
     if _url_inocua(s):
         return True
-    if _ruta_inocua(s):                  # dónde trabajaste, no con qué te logueás
+    if _ruta_inocua(s):                  # where you worked, not what you log in with
         return True
-    if any(c.isspace() for c in s):      # los tokens no tienen espacios
+    if any(c.isspace() for c in s):      # tokens have no spaces
         return True
-    if _EMAIL_RE.match(s):               # email del dueño de la cuenta
+    if _EMAIL_RE.match(s):               # account owner's email
         return True
-    # Slug de skill/plugin: palabras minúsculas con 2+ guiones y sin dígitos
-    # (subagent-driven-development). Más laxo NO: "snap-zzz…" (1 guión) debe
-    # seguir cazándose — lo fija el test de snapshots.
+    # Skill/plugin slug: lowercase words with 2+ hyphens and no digits
+    # (subagent-driven-development). Looser is NOT allowed: "snap-zzz…" (1
+    # hyphen) must still be caught — the snapshot test pins it.
     if re.fullmatch(r'[a-z]+(-[a-z]+){2,}', s):
         return True
     return False
 
 
 def _hojas_str(obj, out, prof=0):
-    """Acumula en `out` los strings hoja >= 20 chars de un JSON anidado (los
-    candidatos a token). Acotado en profundidad para no colgarse."""
+    """Accumulates into `out` the leaf strings >= 20 chars of a nested JSON
+    (the token candidates). Bounded in depth so it does not hang."""
     if prof > 8 or len(out) > 500:
         return
     if isinstance(obj, str):
@@ -198,8 +198,8 @@ def _hojas_str(obj, out, prof=0):
 
 
 def encontrar_secretos(texto, valores=()):
-    """Hallazgos en `texto`: [{'patron', 'linea', 'valor'}]. `valores` son
-    pares (nombre, valor_real) extra a buscar literal."""
+    """Findings in `text`: [{'patron', 'linea', 'valor'}]. `valores` are extra
+    (name, real_value) pairs to search for literally."""
     hallazgos = []
     for num, linea in enumerate(texto.splitlines(), 1):
         for nombre, pat in PATRONES:
@@ -219,11 +219,11 @@ def _mascara(valor):
 
 
 def formatear(hallazgos):
-    """Reporte legible. El valor completo JAMÁS se imprime."""
+    """Readable report. The full value is NEVER printed."""
     lineas = []
     for h in hallazgos:
         lineas.append(
-            f"  línea {h['linea']}: [{h['patron']}] {_mascara(h['valor'])}")
+            f"  line {h['linea']}: [{h['patron']}] {_mascara(h['valor'])}")
     return '\n'.join(lineas)
 
 
@@ -236,13 +236,13 @@ def main():
     hallazgos = encontrar_secretos(texto, valores=valores_locales(raiz))
     if not hallazgos:
         return 0
-    print(f'\n🛑 SECRETOS DETECTADOS{f" en {origen}" if origen else ""} '
-          f'— operación BLOQUEADA:\n', file=sys.stderr)
+    print(f'\n🛑 SECRETS DETECTED{f" in {origen}" if origen else ""} '
+          f'— operation BLOCKED:\n', file=sys.stderr)
     print(formatear(hallazgos), file=sys.stderr)
-    print('\nLas API keys / tokens son personales y cuestan plata: NUNCA '
-          'van al repo.\nSacá el secreto del cambio (usá plotspace/.env o '
-          'data/, que están gitignoreados).\nSi es un falso positivo real, '
-          'ajustá el patrón en scripts/scan_secretos.py\n(con su test en '
+    print('\nAPI keys / tokens are personal and cost money: they NEVER '
+          'go to the repo.\nRemove the secret from the change (use plotspace/.env or '
+          'data/, which are gitignored).\nIf it is a real false positive, '
+          'adjust the pattern in scripts/scan_secretos.py\n(with its test in '
           'plotspace/tests/test_scan_secretos.py).', file=sys.stderr)
     return 1
 

@@ -1,21 +1,21 @@
-// Jarvis.exe — el shell de escritorio FINO (ventana WebView2 sobre el workspace).
+// Jarvis.exe — the THIN desktop shell (WebView2 window over the workspace).
 //
-// Una app de VERDAD con ventana propia (WebView2, el mismo runtime que usaba
-// la app vieja) que muestra el workspace que vive en Linux. Al abrir te recibe
-// el MISMO splash de siempre —scripts/jarvis-shell-ui.html, rescatado verbatim
-// de f6ffabd8— con su constelación, su "Entrar al workspace" y su zambullida.
+// A REAL app with its own window (WebView2, the same runtime the old app used)
+// that shows the workspace living on Linux. On open it greets you with the SAME
+// splash as always —scripts/jarvis-shell-ui.html, rescued verbatim from
+// f6ffabd8— with its constellation, its "Enter the workspace" and its dive.
 //
-// NADA nativo adentro: sin motor, sin terminales propias, sin Rust. La lección
-// del 2026-08-06 es que el quilombo empezó cuando la app quiso ser más que una
-// ventana; esto son 700 KB que solo abren una ventana.
+// NOTHING native inside: no engine, no terminals of its own, no Rust. The
+// lesson from 2026-08-06 is that the mess started when the app tried to be more
+// than a window; this is 700 KB that only opens a window.
 //
-// Contrato con el splash (lo que la UI espera del shell, igual que en Tauri):
-//   window.__build(n)          número de build en el margen
-//   window.__estado(msg, err)  progreso mientras se prepara el motor
-//   window.__listo(url)        motor arriba → aparece el botón; navega sola
+// Contract with the splash (what the UI expects from the shell, as in Tauri):
+//   window.__build(n)          build number in the margin
+//   window.__estado(msg, err)  progress while the engine is being prepared
+//   window.__listo(url)        engine up → the button appears; navigates on its own
 //
-// Se compila con el csc.exe de fábrica de Windows + las DLLs del SDK de
-// WebView2 EMBEBIDAS en el exe (un solo archivo, sin instalador):
+// Compiled with Windows' stock csc.exe + the WebView2 SDK DLLs EMBEDDED in the
+// exe (a single file, no installer):
 //   bash scripts/compilar-lanzador-windows.sh
 using System;
 using System.Collections.Generic;
@@ -38,7 +38,7 @@ static class Programa
     [DllImport("user32.dll")]
     static extern bool SetProcessDpiAwarenessContext(IntPtr valor);
 
-    // Perfil del WebView (cookies, caché): propio de la app, no del browser.
+    // WebView profile (cookies, cache): the app's own, not the browser's.
     internal static string CarpetaApp()
     {
         return Path.Combine(
@@ -46,17 +46,17 @@ static class Programa
             "Jarvis");
     }
 
-    // La 2ª instancia le avisa a la 1ª por esta señal con nombre y se va.
+    // The 2nd instance notifies the 1st via this named signal and exits.
     internal const string SenalMostrar = "JarvisShellMostrar";
     static Mutex unica;
 
     [STAThread]
     static void Main()
     {
-        // INSTANCIA ÚNICA: con la ✕ mandando la app a la bandeja, el doble clic
-        // siguiente abría un SEGUNDO Jarvis.exe — dos vigías pisándose las
-        // recuperaciones del motor (medido 2026-08-08: health checks de a pares
-        // en el log del server). La 2ª instancia despierta a la 1ª y muere.
+        // SINGLE INSTANCE: with the ✕ sending the app to the tray, the next
+        // double click opened a SECOND Jarvis.exe — two watchers stepping on
+        // each other's engine recoveries (measured 2026-08-08: paired health
+        // checks in the server log). The 2nd instance wakes the 1st and dies.
         bool nueva;
         unica = new Mutex(true, "JarvisShellUnica", out nueva);
         if (!nueva)
@@ -70,19 +70,19 @@ static class Programa
             return;
         }
 
-        // Las DLLs del SDK viven AL LADO del exe, como en cualquier app
-        // instalada (y como estaba la app vieja). NO se embeben ni se extraen
-        // en runtime: un exe sin firma que escupe DLLs a disco es la firma de
-        // comportamiento de un dropper y Defender lo mata por heurística
-        // (Trojan:Win32/Sabsik.FL.A!ml, visto 2026-08-06).
+        // The SDK DLLs live NEXT TO the exe, as in any installed app (and as
+        // the old app had it). They are NOT embedded nor extracted at runtime:
+        // an unsigned exe that spews DLLs to disk is the behavioral signature
+        // of a dropper and Defender kills it on heuristics
+        // (Trojan:Win32/Sabsik.FL.A!ml, seen 2026-08-06).
         try { SetProcessDpiAwarenessContext((IntPtr)(-4)); } catch { }  // PerMonitorV2
 
         Application.EnableVisualStyles();
         Correr();
     }
 
-    // Separado y sin inline para que el JIT no toque tipos de WebView2 antes de
-    // que el AssemblyResolve esté registrado.
+    // Split out and not inlined so the JIT doesn't touch WebView2 types before
+    // the AssemblyResolve is registered.
     [MethodImpl(MethodImplOptions.NoInlining)]
     static void Correr() { Application.Run(new VentanaJarvis()); }
 }
@@ -118,7 +118,7 @@ static class JarvisWsl
             string home = Capturar("printf %s \"$HOME\"").Trim()
                 .Replace("\r", "").Replace("\n", "");
             if (string.IsNullOrEmpty(home))
-                throw new InvalidOperationException("no pude resolver $HOME en WSL");
+                throw new InvalidOperationException("couldn't resolve $HOME in WSL");
             repoLinux = home + "/jarvis-workspace";
             return repoLinux;
         }
@@ -135,7 +135,7 @@ static class JarvisWsl
                 string unc = Capturar("wslpath -w " + ShQuote(linux)).Trim()
                     .Replace("\r", "").Replace("\n", "");
                 if (string.IsNullOrEmpty(unc))
-                    throw new InvalidOperationException("wslpath -w fallo para " + linux);
+                    throw new InvalidOperationException("wslpath -w failed for " + linux);
                 repoUnc = unc.TrimEnd('\\');
             }
             return repoUnc + "\\" + relativo.Replace('/', '\\');
@@ -177,21 +177,21 @@ static class JarvisWsl
 
 class VentanaJarvis : Form
 {
-    // El health va por 127.0.0.1: el NOMBRE localhost resuelve ::1 primero y
-    // WSL no escucha ahí. El workspace SÍ abre por localhost — la Radio
-    // necesita ese origen para los embeds de YouTube.
+    // Health goes over 127.0.0.1: the NAME localhost resolves ::1 first and
+    // WSL doesn't listen there. The workspace DOES open via localhost — the
+    // Radio needs that origin for YouTube embeds.
     const string Salud = "http://127.0.0.1:3000/api/health";
     const string Url = "http://localhost:3000";
 
-    // ── Ventana SIN marco nativo ─────────────────────────────────────────
-    // Los controles (minimizar/maximizar/cerrar), el arrastre y el resize
-    // viven ADENTRO de la app: los dibuja frontend/shell/window-chrome.js en
-    // la propia #jw-bar del workspace, como en la app vieja. Acá está el
-    // lado nativo de ese puente.
+    // ── Window WITHOUT native frame ──────────────────────────────────────
+    // The controls (minimize/maximize/close), dragging and resizing live
+    // INSIDE the app: frontend/shell/window-chrome.js draws them on the
+    // workspace's own #jw-bar, as in the old app. Here is the native side of
+    // that bridge.
     const int WM_NCLBUTTONDOWN = 0x00A1, WM_GETMINMAXINFO = 0x0024;
     const int WM_NCCALCSIZE = 0x0083, WM_ERASEBKGND = 0x0014, WM_EXITSIZEMOVE = 0x0232;
     const int HTCAPTION = 2;
-    // Estilos que FormBorderStyle.None borra y el gesto nativo necesita de vuelta.
+    // Styles FormBorderStyle.None erases and the native gesture needs back.
     const int WS_MINIMIZEBOX = 0x00020000, WS_MAXIMIZEBOX = 0x00010000;
     const int WS_THICKFRAME = 0x00040000, WS_SYSMENU = 0x00080000;
     const int WS_CAPTION = 0x00C00000, WS_CLIPCHILDREN = 0x02000000;
@@ -201,23 +201,23 @@ class VentanaJarvis : Form
     [DllImport("user32.dll")] static extern IntPtr MonitorFromWindow(IntPtr h, int flags);
     [DllImport("user32.dll")] static extern bool GetMonitorInfo(IntPtr mon, ref MONITORINFO mi);
     [DllImport("dwmapi.dll")] static extern int DwmSetWindowAttribute(IntPtr h, int attr, ref int val, int size);
-    // El estado REAL de la ventana según Windows. En WM_NCCALCSIZE no sirve
-    // `WindowState`: ese mensaje llega ANTES de que WinForms actualice su
-    // propiedad, así que preguntarle a la clase da "Normal" en plena maximización.
+    // The REAL window state according to Windows. In WM_NCCALCSIZE
+    // `WindowState` is useless: that message arrives BEFORE WinForms updates
+    // its property, so asking the class returns "Normal" mid-maximization.
     [DllImport("user32.dll")] static extern bool IsZoomed(IntPtr h);
 
     [StructLayout(LayoutKind.Sequential)] struct RECT { public int left, top, right, bottom; }
     [StructLayout(LayoutKind.Sequential)] struct MONITORINFO
     { public int cbSize; public RECT rcMonitor; public RECT rcWork; public int dwFlags; }
     [StructLayout(LayoutKind.Sequential)] struct POINT { public int x, y; }
-    // Lo que Windows manda en WM_NCCALCSIZE: rgrc0 es el rect que, al volver,
-    // pasa a ser el ÁREA CLIENTE.
+    // What Windows sends in WM_NCCALCSIZE: rgrc0 is the rect that, on return,
+    // becomes the CLIENT AREA.
     [StructLayout(LayoutKind.Sequential)] struct NCCALCSIZE_PARAMS
     { public RECT rgrc0, rgrc1, rgrc2; public IntPtr lppos; }
     [StructLayout(LayoutKind.Sequential)] struct MINMAXINFO
     { public POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize; }
 
-    // Nombre de zona → borde nativo que arranca el resize (HTLEFT=10 … HTBOTTOMRIGHT=17)
+    // Zone name → native border that starts the resize (HTLEFT=10 … HTBOTTOMRIGHT=17)
     static int BordeDeZona(string z)
     {
         switch (z)
@@ -235,17 +235,17 @@ class VentanaJarvis : Form
     public VentanaJarvis()
     {
         Text = "Jarvis";
-        BackColor = Color.FromArgb(8, 7, 13);       // --obs-0 del splash
-        FormBorderStyle = FormBorderStyle.None;     // el chrome lo dibuja la app
-        // Abre EN VENTANA (1440×900 centrada), como la app vieja. Nace sin
-        // maximizar a propósito: el splash de bienvenida se ve mejor contenido
-        // que ocupando la pantalla entera, y maximizar queda a un clic en el
-        // botón que dibuja la propia app. Pedido del usuario, 2026-08-07.
+        BackColor = Color.FromArgb(8, 7, 13);       // --obs-0 from the splash
+        FormBorderStyle = FormBorderStyle.None;     // the chrome is drawn by the app
+        // Opens WINDOWED (1440×900 centered), like the old app. It's born
+        // unmaximized on purpose: the welcome splash looks better contained
+        // than filling the whole screen, and maximizing is one click away on
+        // the button the app itself draws. User request, 2026-08-07.
         StartPosition = FormStartPosition.CenterScreen;
-        // El tamaño se clampea al área de trabajo real: en una pantalla chica
-        // —o con la escala de Windows en 125/150%— 1440×900 desborda y la
-        // ventana se vería otra vez a pantalla completa, que es justo lo que
-        // se quiso evitar. El 90% deja ver el escritorio alrededor.
+        // The size is clamped to the real working area: on a small screen —or
+        // with Windows scaling at 125/150%— 1440×900 overflows and the window
+        // would again look fullscreen, which is exactly what was meant to be
+        // avoided. 90% leaves the desktop visible around it.
         Rectangle area = Screen.PrimaryScreen.WorkingArea;
         Size = new Size(Math.Min(1440, (int)(area.Width * 0.9)),
                         Math.Min(900, (int)(area.Height * 0.9)));
@@ -253,7 +253,7 @@ class VentanaJarvis : Form
 
         Stream ico = Assembly.GetExecutingAssembly().GetManifestResourceStream("jarvis.ico");
         if (ico != null) Icon = new Icon(ico);
-        MontarBandeja();   // necesita el Icon ya cargado
+        MontarBandeja();   // needs the Icon already loaded
         MontarDespertador();
 
         web = new Microsoft.Web.WebView2.WinForms.WebView2();
@@ -261,28 +261,28 @@ class VentanaJarvis : Form
         web.DefaultBackgroundColor = Color.FromArgb(8, 7, 13);
         Controls.Add(web);
 
-        AplicarEsquinas();   // redondeadas en ventana, cuadradas si ocupa todo
+        AplicarEsquinas();   // rounded when windowed, square when it fills everything
 
         Resize += delegate { AvisarEstado(); };
-        // El límite del maximizado se recalcula al cambiar de monitor (cada uno
-        // tiene su área de trabajo, y la barra de tareas puede estar en otro lado).
+        // The maximize bound is recalculated when changing monitors (each one
+        // has its working area, and the taskbar may be elsewhere).
         LocationChanged += delegate { AjustarLimiteMaximizado(); };
         Load += delegate { AjustarLimiteMaximizado(); };
         Load += AlCargar;
     }
 
-    // ── Ventana sin marco A LA VISTA, pero NORMAL para el sistema ─────────
-    // `FormBorderStyle.None` no solo saca el marco: le borra al HWND los estilos
-    // con los que Windows decide si una ventana puede moverse, restaurarse y
-    // snapear. Sin WS_THICKFRAME|WS_MAXIMIZEBOX, el move loop del sistema NO
-    // des-maximiza al arrastrar — que es exactamente el gesto que este archivo
-    // reimplementaba a mano, con dos movimientos de ventana y sin umbral.
+    // ── Borderless window VISUALLY, but NORMAL to the system ─────────────
+    // `FormBorderStyle.None` doesn't just remove the frame: it erases from the
+    // HWND the styles Windows uses to decide whether a window can move, restore
+    // and snap. Without WS_THICKFRAME|WS_MAXIMIZEBOX, the system's move loop
+    // does NOT un-maximize when dragging — which is exactly the gesture this
+    // file reimplemented by hand, with two window moves and no threshold.
     //
-    // Se los devolvemos y el marco se borra VISUALMENTE en WM_NCCALCSIZE (área
-    // cliente = ventana entera). Para el usuario sigue sin marco; para el SO es
-    // una ventana común, así que aporta gratis: drag-to-restore con su propio
-    // umbral y su propio cálculo de posición, Aero Snap, sombra y animaciones.
-    // Referencia: melak47/BorderlessWindow y widget_hwnd_utils.cc de Chromium.
+    // We give them back and the frame is erased VISUALLY in WM_NCCALCSIZE
+    // (client area = whole window). To the user it stays borderless; to the OS
+    // it's a common window, so it brings in for free: drag-to-restore with its
+    // own threshold and position calculation, Aero Snap, shadow and animations.
+    // Reference: melak47/BorderlessWindow and Chromium's widget_hwnd_utils.cc.
     protected override CreateParams CreateParams
     {
         get
@@ -294,21 +294,22 @@ class VentanaJarvis : Form
         }
     }
 
-    // Sin marco, "maximizar" tapa la barra de tareas: hay que clavar el tamaño
-    // al ÁREA DE TRABAJO del monitor donde está la ventana.
+    // Borderless, "maximize" covers the taskbar: the size must be pinned to
+    // the WORK AREA of the monitor where the window is.
     protected override void WndProc(ref Message m)
     {
-        // Área cliente = ventana entera: el marco existe para el SO pero no se
-        // dibuja. Es lo que mantiene la ventana "sin marco" con los estilos
-        // nativos puestos.
+        // Client area = whole window: the frame exists for the OS but isn't
+        // drawn. That's what keeps the window "borderless" with the native
+        // styles in place.
         if (m.Msg == WM_NCCALCSIZE && m.WParam != IntPtr.Zero)
         {
-            // MAXIMIZADA hay que clampear: con WS_THICKFRAME, Windows agranda la
-            // ventana el grosor del marco (medido acá: 1936×1048 en (-8,-8) para
-            // un área de trabajo de 1920×1032). Si el cliente copiara ese rect,
-            // los íconos anclados a la derecha quedarían 8px FUERA de la pantalla
-            // y el borde de abajo taparía la barra de tareas. El cliente se clava
-            // al área de trabajo; el marco sobrante queda afuera, invisible.
+            // MAXIMIZED must be clamped: with WS_THICKFRAME, Windows grows the
+            // window by the frame thickness (measured here: 1936×1048 at
+            // (-8,-8) for a 1920×1032 working area). If the client copied that
+            // rect, the right-anchored icons would end up 8px OUTSIDE the
+            // screen and the bottom edge would cover the taskbar. The client is
+            // pinned to the working area; the leftover frame stays outside,
+            // invisible.
             if (IsZoomed(Handle) && !enFullscreen)
             {
                 var ncp = (NCCALCSIZE_PARAMS)Marshal.PtrToStructure(
@@ -326,40 +327,40 @@ class VentanaJarvis : Form
             return;
         }
 
-        // El fondo lo pinta WebView2. Que Windows lo borre antes es una pasada
-        // de más que se ve como flash al redimensionar. Devolver 1 = "ya está
-        // borrado, no hagas nada" (lo mismo hace Chromium en OnEraseBkgnd,
-        // con el comentario "Needed to prevent resize flicker").
+        // WebView2 paints the background. Windows erasing it first is an extra
+        // pass that shows as a flash when resizing. Returning 1 = "already
+        // erased, do nothing" (same as Chromium does in OnEraseBkgnd, with the
+        // comment "Needed to prevent resize flicker").
         if (m.Msg == WM_ERASEBKGND)
         {
             m.Result = (IntPtr)1;
             return;
         }
 
-        // Terminó de moverse/redimensionarse: el navegador pudo quedar con el
-        // :hover pegado en lo que estaba bajo el cursor cuando la ventana saltó
-        // (durante el gesto nativo NO le llegan eventos de mouse a la página).
+        // Done moving/resizing: the browser may have left :hover stuck on
+        // whatever was under the cursor when the window jumped (during the
+        // native gesture the page does NOT receive mouse events).
         if (m.Msg == WM_EXITSIZEMOVE) LimpiarHover();
 
         base.WndProc(ref m);
     }
 
-    // Maximizada = EXACTAMENTE el área de trabajo del monitor donde está la
-    // ventana. Se hace con `MaximizedBounds` (la API de WinForms, que sí se
-    // respeta) y no escribiendo WM_GETMINMAXINFO a mano: con WS_THICKFRAME,
-    // Windows llena esa estructura agrandada el grosor del marco y pisaba lo
-    // nuestro, escribiéramos antes o después de base.WndProc.
+    // Maximized = EXACTLY the working area of the monitor where the window is.
+    // Done with `MaximizedBounds` (the WinForms API, which is respected) and
+    // not by writing WM_GETMINMAXINFO by hand: with WS_THICKFRAME, Windows
+    // fills that structure grown by the frame thickness and overwrote ours,
+    // whether we wrote before or after base.WndProc.
     void AjustarLimiteMaximizado()
     {
         try { MaximizedBounds = Screen.FromHandle(Handle).WorkingArea; }
         catch { }
     }
 
-    // ── Pantalla completa ────────────────────────────────────────────────
-    // Distinta de "maximizada": maximizada respeta el área de trabajo (deja ver
-    // la barra de tareas, ver WM_GETMINMAXINFO); pantalla completa tapa el
-    // monitor ENTERO. Como la ventana ya es sin marco, alcanza con estirar los
-    // bounds — no hay que tocar estilos nativos.
+    // ── Fullscreen ───────────────────────────────────────────────────────
+    // Different from "maximized": maximized respects the working area (leaves
+    // the taskbar visible, see WM_GETMINMAXINFO); fullscreen covers the ENTIRE
+    // monitor. Since the window is already borderless, stretching the bounds is
+    // enough — no need to touch native styles.
     bool enFullscreen;
     FormWindowState estadoPreFS = FormWindowState.Normal;
     Rectangle boundsPreFS;
@@ -368,20 +369,20 @@ class VentanaJarvis : Form
     {
         if (!enFullscreen)
         {
-            // Des-maximizar ANTES de estirar: entrar a pantalla completa encima
-            // de una ventana maximizada dejaba la barra de tareas en NEGRO
-            // (glitch de repintado de Windows). Se guarda el estado para volver.
+            // Un-maximize BEFORE stretching: entering fullscreen on top of a
+            // maximized window left the taskbar BLACK (a Windows repaint
+            // glitch). The state is saved to return.
             estadoPreFS = WindowState;
             if (WindowState == FormWindowState.Maximized) WindowState = FormWindowState.Normal;
             boundsPreFS = Bounds;
-            Bounds = Screen.FromHandle(Handle).Bounds;      // el monitor completo
+            Bounds = Screen.FromHandle(Handle).Bounds;      // the whole monitor
             enFullscreen = true;
         }
         else
         {
-            // Al salir: primero los bounds chicos y RECIÉN maximizar si venía
-            // así. Al revés, Windows restaura el placement guardado y se come
-            // el maximize.
+            // On exit: first the small bounds and ONLY THEN maximize if that's
+            // how it came. The other way around, Windows restores the saved
+            // placement and eats the maximize.
             enFullscreen = false;
             Bounds = boundsPreFS;
             WindowState = estadoPreFS;
@@ -389,25 +390,25 @@ class VentanaJarvis : Form
         AvisarEstado();
     }
 
-    // ── Bandeja del sistema ──────────────────────────────────────────────
-    // La ✕ NO mata la app: la manda a la bandeja, viva. De ahí se retoma con un
-    // click, y el «Cerrar» del menú es el único punto que apaga de verdad.
-    // Pedido del usuario (2026-08-07).
+    // ── System tray ──────────────────────────────────────────────────────
+    // The ✕ does NOT kill the app: it sends it to the tray, alive. From there
+    // it's resumed with a click, and the menu's "Close" is the only place that
+    // truly shuts down. User request (2026-08-07).
     NotifyIcon bandeja;
     bool cerrandoDeVerdad;
 
     void MontarBandeja()
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Abrir Jarvis", null, delegate { VolverDeBandeja(); });
+        menu.Items.Add("Open Jarvis", null, delegate { VolverDeBandeja(); });
         menu.Items.Add(new ToolStripSeparator());
-        menu.Items.Add("Cerrar", null, delegate { ApagarTodo(); });
+        menu.Items.Add("Close", null, delegate { ApagarTodo(); });
 
         bandeja = new NotifyIcon();
         bandeja.Icon = Icon;
         bandeja.Text = "Jarvis";
         bandeja.ContextMenuStrip = menu;
-        // Un click (o doble) sobre el ícono retoma; el derecho abre el menú.
+        // A click (or double) on the icon resumes; right-click opens the menu.
         bandeja.MouseUp += delegate (object s, MouseEventArgs ev)
         {
             if (ev.Button == MouseButtons.Left) VolverDeBandeja();
@@ -417,9 +418,9 @@ class VentanaJarvis : Form
 
     void IrABandeja()
     {
-        // Primero avisarle a la página, MIENTRAS todavía se la puede ejecutar:
-        // apaga la radio y lo que gaste de gusto con la ventana escondida.
-        // Las terminales siguen: viven en tmux, del lado del server.
+        // First notify the page, WHILE it can still be executed: it turns off
+        // the radio and whatever would waste resources with the window hidden.
+        // The terminals keep going: they live in tmux, on the server side.
         try
         {
             if (web != null && web.CoreWebView2 != null)
@@ -427,10 +428,10 @@ class VentanaJarvis : Form
         }
         catch { }
         if (bandeja != null) bandeja.Visible = true;
-        // Solo Hide(): una ventana oculta ya no figura en la barra de tareas, y
-        // tocar ShowInTaskbar en caliente hace que WinForms RECREE el handle —
-        // con un WebView2 hospedado adentro eso lo re-parenta y es pedir
-        // problemas (medido: el handle viejo quedaba muerto).
+        // Just Hide(): a hidden window no longer shows in the taskbar, and
+        // touching ShowInTaskbar on the fly makes WinForms RECREATE the handle
+        // — with a WebView2 hosted inside that re-parents it and is asking for
+        // trouble (measured: the old handle ended up dead).
         Hide();
     }
 
@@ -447,9 +448,9 @@ class VentanaJarvis : Form
         catch { }
     }
 
-    // La 2ª instancia (doble clic con la app ya viva, quizás en bandeja) no
-    // abre otra ventana: manda la señal con nombre y muere — acá se la escucha
-    // para retomar la que ya existe.
+    // The 2nd instance (double click with the app already alive, maybe in the
+    // tray) doesn't open another window: it sends the named signal and dies —
+    // here it's listened for to resume the one that already exists.
     EventWaitHandle despertador;
     void MontarDespertador()
     {
@@ -467,16 +468,16 @@ class VentanaJarvis : Form
         t.Start();
     }
 
-    // Apagar de verdad: la app, el server y la distro. El usuario eligió este
-    // alcance sabiendo que se lleva puestas las sesiones tmux de los agentes
-    // (2026-08-07). El pkill primero para que uvicorn cierre ordenado; el
-    // `wsl --shutdown` después barre todo lo que quede.
+    // Truly shut down: the app, the server and the distro. The user chose this
+    // scope knowing it takes the agents' tmux sessions with it (2026-08-07).
+    // The pkill first so uvicorn closes gracefully; the `wsl --shutdown`
+    // afterwards sweeps up whatever's left.
     void ApagarTodo()
     {
         cerrandoDeVerdad = true;
         if (bandeja != null) bandeja.Visible = false;
-        presencia.Parar();   // que la tarjeta de Discord no sobreviva a la app
-        SoltarAncla();   // que el ancla no quede peleándole al --shutdown
+        presencia.Parar();   // so the Discord card doesn't outlive the app
+        SoltarAncla();   // so the anchor doesn't fight the --shutdown
         try { Wsl("pkill -f 'uvicorn plotspace' || true", 10000); } catch { }
         try { WslApagar(); } catch { }
         Close();
@@ -492,8 +493,8 @@ class VentanaJarvis : Form
         using (var p = Process.Start(psi)) p.WaitForExit(20000);
     }
 
-    // Alt+F4 y cualquier otro cierre del sistema también van a la bandeja: el
-    // único camino que termina el proceso es el «Cerrar» del menú.
+    // Alt+F4 and any other system close also go to the tray: the only path
+    // that ends the process is the menu's "Close".
     protected override void OnFormClosing(FormClosingEventArgs e)
     {
         if (!cerrandoDeVerdad && e.CloseReason == CloseReason.UserClosing)
@@ -506,10 +507,10 @@ class VentanaJarvis : Form
         base.OnFormClosing(e);
     }
 
-    // Al soltar el gesto nativo, el :hover del navegador puede haber quedado
-    // pegado en el botón que estaba bajo el cursor cuando la ventana cambió de
-    // tamaño: durante el move loop de Windows la página NO recibe eventos de
-    // mouse, así que nunca se entera de que el cursor ya no está ahí.
+    // On releasing the native gesture, the browser's :hover may have gotten
+    // stuck on the button that was under the cursor when the window resized:
+    // during Windows' move loop the page does NOT receive mouse events, so it
+    // never finds out the cursor is no longer there.
     void LimpiarHover()
     {
         if (web == null || web.CoreWebView2 == null) return;
@@ -517,18 +518,18 @@ class VentanaJarvis : Form
         catch { }
     }
 
-    // Esquinas redondeadas de Windows 11: SOLO en ventana. Ocupando toda la
-    // pantalla hay que cuadrarlas — el redondeo deja cuatro huecos por los que
-    // se ve el ESCRITORIO, y con eso deja de sentirse pantalla completa
-    // (reportado por el usuario, 2026-08-07). 1 = DONOTROUND · 2 = ROUND.
+    // Windows 11 rounded corners: ONLY when windowed. Filling the whole screen
+    // they must be squared — the rounding leaves four gaps through which the
+    // DESKTOP shows, and with that it stops feeling fullscreen (reported by the
+    // user, 2026-08-07). 1 = DONOTROUND · 2 = ROUND.
     void AplicarEsquinas()
     {
         int pref = (enFullscreen || WindowState == FormWindowState.Maximized) ? 1 : 2;
         try { DwmSetWindowAttribute(Handle, 33, ref pref, 4); } catch { }
     }
 
-    // Último estado avisado al frontend, para no spamear ExecuteScriptAsync en
-    // cada tick de un resize con el mouse: solo hablamos cuando algo CAMBIA.
+    // Last state reported to the frontend, to avoid spamming ExecuteScriptAsync
+    // on every tick of a mouse resize: we only talk when something CHANGES.
     string ultimoEstado = "";
 
     void AvisarEstado()
@@ -544,7 +545,7 @@ class VentanaJarvis : Form
         {
             web.CoreWebView2.ExecuteScriptAsync(
                 "window.__shellEstado && window.__shellEstado(" + maxi + "," + fs + ")");
-            // compat con el contrato viejo del chrome
+            // compat with the old chrome contract
             web.CoreWebView2.ExecuteScriptAsync(
                 "window.__shellMaximizado && window.__shellMaximizado(" + maxi + ")");
         }
@@ -552,22 +553,23 @@ class VentanaJarvis : Form
     }
 
 
-    // Los pedidos de la UI: mover, redimensionar y los tres botones.
+    // UI requests: move, resize and the three buttons.
     void AlMensaje(object o, Microsoft.Web.WebView2.Core.CoreWebView2WebMessageReceivedEventArgs e)
     {
         string m;
         try { m = e.TryGetWebMessageAsString(); } catch { return; }
         if (m == null) return;
 
-        // Mover: solo se prohíbe a PANTALLA COMPLETA (moverla la descoloca).
-        // Maximizada NO se toca acá: con los estilos nativos puestos, el move
-        // loop de Windows la des-maximiza SOLO —con su umbral de arrastre, así
-        // que un click simple ya no la achica— y calcula él la posición. Hacerlo
-        // a mano era la causa del parpadeo y del cursor cayendo sobre un ícono.
+        // Move: only forbidden in FULLSCREEN (moving it knocks it out of place).
+        // Maximized is NOT touched here: with the native styles in place,
+        // Windows' move loop un-maximizes it ON ITS OWN —with its drag
+        // threshold, so a simple click no longer shrinks it— and calculates the
+        // position itself. Doing it by hand was the cause of the flicker and
+        // the cursor landing on an icon.
         //
-        // Las coordenadas REALES del cursor van en el lParam: es lo que la doc
-        // de WM_NCLBUTTONDOWN espera, y evita el salto por los milisegundos que
-        // tarda el mensaje en viajar del JS hasta acá.
+        // The REAL cursor coordinates go in lParam: that's what the
+        // WM_NCLBUTTONDOWN doc expects, and it avoids the jump from the
+        // milliseconds the message takes to travel from JS to here.
         if (m == "drag")
         {
             if (enFullscreen) return;
@@ -587,9 +589,9 @@ class VentanaJarvis : Form
         else if (m == "min") { WindowState = FormWindowState.Minimized; }
         else if (m == "max")
         {
-            // Maximizar "inteligente", como la app vieja: estando en pantalla
-            // completa el botón SALE de ahí y deja la ventana chica (restaurada),
-            // no maximizada. Fuera de pantalla completa, toggle normal.
+            // "Smart" maximize, like the old app: being in fullscreen the
+            // button EXITS it and leaves the window small (restored), not
+            // maximized. Outside fullscreen, normal toggle.
             if (enFullscreen)
             {
                 estadoPreFS = FormWindowState.Normal;
@@ -606,9 +608,9 @@ class VentanaJarvis : Form
         else if (m == "close") { IrABandeja(); }
     }
 
-    // Puente que ve TODA página cargada en la app (splash y workspace): el
-    // frontend habla con el shell por acá y en un browser normal no existe,
-    // así que window-chrome.js se apaga solo.
+    // Bridge that EVERY page loaded in the app sees (splash and workspace): the
+    // frontend talks to the shell through here and in a normal browser it
+    // doesn't exist, so window-chrome.js turns itself off.
     const string Puente =
         "(function(){var wv=window.chrome&&window.chrome.webview;if(!wv)return;" +
         "window.__shell={min:function(){wv.postMessage('min')}," +
@@ -616,7 +618,7 @@ class VentanaJarvis : Form
         "drag:function(){wv.postMessage('drag')}," +
         "fullscreen:function(){wv.postMessage('fullscreen')}," +
         "resize:function(d){wv.postMessage('resize:'+d)}};" +
-        // el splash trae su propia barra invisible de arrastre (.titlebar)
+        // the splash brings its own invisible drag bar (.titlebar)
         "document.addEventListener('mousedown',function(e){if(e.button)return;" +
         "var t=e.target;if(t&&t.closest&&t.closest('.titlebar'))window.__shell.drag()});" +
         "document.addEventListener('dblclick',function(e){var t=e.target;" +
@@ -630,51 +632,52 @@ class VentanaJarvis : Form
         await web.EnsureCoreWebView2Async(entorno);
 
         var s = web.CoreWebView2.Settings;
-        s.AreDefaultContextMenusEnabled = false;   // menú de browser: no, es una app
+        s.AreDefaultContextMenusEnabled = false;   // browser menu: no, this is an app
         s.IsStatusBarEnabled = false;
-        // Los aceleradores DE BROWSER se apagan: esto es una app, no una pestaña.
-        // El que molestaba de verdad era F11 — WebView2 lo tomaba para SU propio
-        // fullscreen del contenido (que, con la ventana ya sin marco, no cambia
-        // nada a la vista) y competía con el nuestro: hacía falta apretarlo dos
-        // veces para que la VENTANA se fuera a pantalla completa. Apagarlos no
-        // toca los eventos del DOM, así que los atajos del workspace (Ctrl+P,
-        // Ctrl+K, F11) siguen llegando al JS como siempre.
+        // BROWSER accelerators are turned off: this is an app, not a tab. The
+        // one that really bothered was F11 — WebView2 took it for ITS own
+        // content fullscreen (which, with the window already borderless, changes
+        // nothing visually) and competed with ours: you had to press it twice
+        // for the WINDOW to go fullscreen. Turning them off doesn't touch DOM
+        // events, so the workspace shortcuts (Ctrl+P, Ctrl+K, F11) still reach
+        // the JS as always.
         s.AreBrowserAcceleratorKeysEnabled = false;
 
         web.CoreWebView2.WebMessageReceived += AlMensaje;
         await web.CoreWebView2.AddScriptToExecuteOnDocumentCreatedAsync(Puente);
 
-        // Anclar ANTES de leer el repo / mirar el motor: si la distro está fría,
-        // el ancla ya la bootea (y desbloquea wslpath / $HOME); si está tibia,
-        // evita que se apague en el medio del chequeo.
+        // Anchor BEFORE reading the repo / checking the engine: if the distro is
+        // cold, the anchor already boots it (and unblocks wslpath / $HOME); if
+        // it's warm, it prevents it from shutting down in the middle of the check.
         AnclarDistro();
 
 
         web.CoreWebView2.NavigateToString(Splash());
-        await Task.Delay(150);                     // que el <script> del splash exista
+        await Task.Delay(150);                     // so the splash's <script> exists
 
         string build = Build();
         if (build != null) await Js("window.__build && window.__build(" + build + ")");
 
         if (!await Task.Run((Func<bool>)Responde) && !await LevantarYEsperar()) return;
 
-        // Motor arriba: el splash completa la constelación y muestra el botón.
-        // De ahí en adelante manda la UI — el usuario entra cuando quiere.
+        // Engine up: the splash completes the constellation and shows the button.
+        // From there on the UI leads — the user enters whenever they want.
         await Js("window.__listo && window.__listo('" + Url + "')");
         IniciarVigilancia();
-        presencia.Iniciar();   // "Jugando Jarvis" en Discord (si Discord corre)
+        presencia.Iniciar();   // "Playing Jarvis" on Discord (if Discord is running)
     }
 
-    // ── Ancla de vida de la distro ───────────────────────────────────────
-    // WSL apaga la distro ENTERA ~60s después de que se desconecta su último
-    // cliente wsl.exe. El motor que levanta esta app queda setsid'd (NO es
-    // cliente) y los wsl.exe que lo lanzan terminan al toque: sin ancla, WSL
-    // enterraba al server SANO cada ~85s (journal 2026-08-08: "The system
-    // will power off now!" en serie, calzado con cada relanzo del vigía) y el
-    // vigía lo revivía en la misma trampa — el loop eterno de "El servidor se
-    // está reiniciando". Un cliente wsl.exe dormido, vivo mientras la app
-    // viva, sostiene la distro (y las sesiones tmux de los agentes). Mismo
-    // truco que wsl-vpnkit. Muere solo con la app (hijo) o con SoltarAncla().
+    // ── Distro life anchor ───────────────────────────────────────────────
+    // WSL shuts down the ENTIRE distro ~60s after its last wsl.exe client
+    // disconnects. The engine this app launches ends up setsid'd (it is NOT a
+    // client) and the wsl.exe that launch it exit immediately: without an
+    // anchor, WSL buried the HEALTHY server every ~85s (journal 2026-08-08:
+    // "The system will power off now!" in series, matching each watcher
+    // relaunch) and the watcher revived it into the same trap — the eternal
+    // loop of "The server is restarting". A sleeping wsl.exe client, alive as
+    // long as the app lives, holds the distro (and the agents' tmux sessions).
+    // Same trick as wsl-vpnkit. It dies on its own with the app (child) or with
+    // SoltarAncla().
     Process ancla;
 
     void AnclarDistro()
@@ -694,16 +697,16 @@ class VentanaJarvis : Form
         ancla = null;
     }
 
-    // Levanta el motor y espera a que responda, con DOS intentos de verdad.
-    // El de antes lanzaba una sola vez y después solo miraba el reloj 90s: si
-    // ese único intento se perdía (distro fría que tardó más que el warm-up),
-    // no había segunda oportunidad, solo el cartel de error.
+    // Starts the engine and waits for it to respond, with TWO real attempts.
+    // The previous one launched only once and then just watched the clock for
+    // 90s: if that single attempt was lost (cold distro that took longer than
+    // the warm-up), there was no second chance, only the error banner.
     async Task<bool> LevantarYEsperar()
     {
         for (int intento = 1; intento <= 2; intento++)
         {
-            string rotulo = intento == 1 ? "Levantando el motor en WSL… "
-                                         : "El motor tarda — reintentando… ";
+            string rotulo = intento == 1 ? "Starting the engine in WSL… "
+                                         : "The engine is slow — retrying… ";
             await Estado(rotulo.TrimEnd(' ', '…') + "…", false);
             await Task.Run((Action)LevantarServer);
             for (int i = 0; i < 60; i++)
@@ -713,20 +716,20 @@ class VentanaJarvis : Form
                 await Task.Delay(1000);
             }
         }
-        await Estado("No pude levantar el motor tras dos intentos.\n\n" +
-            "Cloná el repo en WSL a ~/jarvis-workspace (o setea JARVIS_WSL_DIR).\n" +
-            "Probá a mano:\n  bash ~/jarvis-workspace/scripts/reiniciar-server.sh\n\n" +
+        await Estado("Couldn't start the engine after two attempts.\n\n" +
+            "Clone the repo in WSL to ~/jarvis-workspace (or set JARVIS_WSL_DIR).\n" +
+            "Try manually:\n  bash ~/jarvis-workspace/scripts/reiniciar-server.sh\n\n" +
             "(log: ~/jarvis-workspace/data/lanzador.log)", true);
         return false;
     }
 
-    // ── Vigilancia del motor ─────────────────────────────────────────────
-    // El chequeo de arranque era ÚNICO. Si el motor se caía con la app YA
-    // abierta (se cayó WSL, se apagó la distro, se reinició Windows), la
-    // ventana se quedaba para siempre en la pantalla "El servidor se está
-    // reiniciando" que dibuja el frontend, esperando un boot_id que no iba a
-    // llegar porque del otro lado no había nadie. Este timer es el camino de
-    // vuelta: detecta la caída y vuelve a levantar el motor solo.
+    // ── Engine watchdog ──────────────────────────────────────────────────
+    // The startup check was ONE-OFF. If the engine went down with the app
+    // ALREADY open (WSL crashed, the distro shut off, Windows restarted), the
+    // window would stay forever on the "The server is restarting" screen the
+    // frontend draws, waiting for a boot_id that was never going to arrive
+    // because there was nobody on the other side. This timer is the way back:
+    // it detects the crash and restarts the engine on its own.
     System.Windows.Forms.Timer vigia;
     bool recuperando;
     int fallos;
@@ -743,43 +746,44 @@ class VentanaJarvis : Form
     async void Vigilar(object o, EventArgs e)
     {
         if (recuperando || web == null || web.CoreWebView2 == null) return;
-        AnclarDistro();   // si alguien apagó la distro a mano, volver a sostenerla
+        AnclarDistro();   // if someone shut the distro down by hand, hold it again
         if (await Task.Run((Func<bool>)Responde)) { fallos = 0; return; }
 
-        // 6 fallos seguidos (~30s) antes de mover un dedo. El umbral NO es
-        // paranoia: "Actualizar ahora" reinicia el server in-place (os.execv) y
-        // lo deja caído varios segundos. Con un umbral corto el vigía se metía
-        // en el medio de una actualización normal, tiraba el splash encima y
-        // llamaba a reiniciar-server.sh, que al encontrar el server YA de vuelta
-        // pedía OTRO reinicio. Una caída de verdad (se fue WSL) igual se
-        // recupera sola en medio minuto, que es lo que importa.
+        // 6 failures in a row (~30s) before lifting a finger. The threshold is
+        // NOT paranoia: "Update now" restarts the server in-place (os.execv)
+        // and leaves it down for several seconds. With a short threshold the
+        // watcher got in the middle of a normal update, threw the splash on top
+        // and called reiniciar-server.sh, which on finding the server ALREADY
+        // back asked for ANOTHER restart. A real crash (WSL went away) still
+        // recovers on its own in half a minute, which is what matters.
         if (++fallos < 6) return;
 
-        // recuperando se prende ACÁ, antes de los chequeos lentos: el de WSL
-        // tarda hasta ~8s y con el flag apagado otro tick del timer se metía en
-        // paralelo y podía disparar una SEGUNDA recuperación encima.
+        // recuperando is set HERE, before the slow checks: the WSL one takes up
+        // to ~8s and with the flag off another timer tick ran in parallel and
+        // could fire a SECOND recovery on top.
         recuperando = true;
         try
         {
-            // Última chance antes de intervenir: si volvió recién, no hacemos nada.
+            // Last chance before intervening: if it just came back, we do nothing.
             if (await Task.Run((Func<bool>)Responde)) { fallos = 0; return; }
-            // Segunda opinión desde ADENTRO de la distro: si el server está sano
-            // y el roto es el puente Windows↔WSL (proxy, firewall de Hyper-V,
-            // localhost IPv6), relanzar no arregla nada — y molestar a un motor
-            // vivo es exactamente el bug que este vigía no debe causar.
+            // Second opinion from INSIDE the distro: if the server is healthy
+            // and the broken thing is the Windows↔WSL bridge (proxy, Hyper-V
+            // firewall, localhost IPv6), relaunching fixes nothing — and
+            // bothering a live engine is exactly the bug this watchdog must not
+            // cause.
             if (await Task.Run((Func<bool>)RespondeDesdeWsl)) { fallos = 0; return; }
 
-            bool estaba = EnWorkspace();      // ¿ya había entrado, o sigue en el splash?
+            bool estaba = EnWorkspace();      // had they entered, or is it still on the splash?
             web.CoreWebView2.NavigateToString(Splash());
             await Task.Delay(150);
             string build = Build();
             if (build != null) await Js("window.__build && window.__build(" + build + ")");
-            await Estado("El motor se cayó — levantándolo…", false);
+            await Estado("The engine went down — starting it…", false);
 
             if (await LevantarYEsperar())
             {
                 fallos = 0;
-                if (estaba) web.CoreWebView2.Navigate(Url);   // devolverlo donde estaba
+                if (estaba) web.CoreWebView2.Navigate(Url);   // return it where it was
                 else await Js("window.__listo && window.__listo('" + Url + "')");
             }
         }
@@ -787,7 +791,7 @@ class VentanaJarvis : Form
         finally { recuperando = false; }
     }
 
-    // Con NavigateToString el Source queda en about:blank; el workspace es http.
+    // With NavigateToString the Source stays at about:blank; the workspace is http.
     bool EnWorkspace()
     {
         try { var u = web.Source; return u != null && u.Scheme.StartsWith("http"); }
@@ -807,9 +811,10 @@ class VentanaJarvis : Form
         try
         {
             var req = (HttpWebRequest)WebRequest.Create(Salud);
-            req.Proxy = null;       // sin auto-detect de proxy de .NET: es 127.0.0.1
-            // 3s y no 1.5: el box sufre CPU starvation medida — bajo carga un
-            // health sano puede tardar más que 1.5s y contaba como caída.
+            req.Proxy = null;       // no .NET proxy auto-detect: it's 127.0.0.1
+            // 3s and not 1.5: the box suffers measured CPU starvation — under
+            // load a healthy health check can take longer than 1.5s and counted
+            // as a crash.
             req.Timeout = 3000;
             req.ReadWriteTimeout = 3000;
             using (var resp = (HttpWebResponse)req.GetResponse())
@@ -818,9 +823,10 @@ class VentanaJarvis : Form
         catch { return false; }
     }
 
-    // Segunda opinión desde ADENTRO de la distro: curl al mismo endpoint. Si
-    // esto da 200, el motor está vivo y el roto es el puente Windows↔WSL —
-    // relanzar no arregla nada. stdout capturado (el Wsl() común lo tira).
+    // Second opinion from INSIDE the distro: curl to the same endpoint. If this
+    // returns 200, the engine is alive and the broken thing is the Windows↔WSL
+    // bridge — relaunching fixes nothing. stdout captured (the common Wsl()
+    // drops it).
     bool RespondeDesdeWsl()
     {
         try
@@ -842,23 +848,23 @@ class VentanaJarvis : Form
         catch { return false; }
     }
 
-    // Levanta el motor adentro de WSL. Dos cuidados que no son de adorno:
+    // Starts the engine inside WSL. Two precautions that aren't decorative:
     //
-    // 1) La distro puede estar FRÍA (apagada del todo: se reinició Windows, se
-    //    corrió `wsl --shutdown`). Ahí el primer `wsl.exe` no arranca nada: se
-    //    le va todo el tiempo booteando la distro. Por eso el warm-up aparte,
-    //    con su propia espera larga, ANTES del comando que importa.
-    // 2) Todo va en try/catch. Si `wsl.exe` no está en el PATH o la distro no
-    //    responde, `Process.Start` TIRA — y antes esa excepción subía sin dueño
-    //    desde el Task.Run, dejando la ventana clavada en "Levantando el motor…"
-    //    sin decir nunca por qué.
+    // 1) The distro may be COLD (fully off: Windows restarted, `wsl --shutdown`
+    //    was run). Then the first `wsl.exe` starts nothing: all its time goes
+    //    into booting the distro. Hence the separate warm-up, with its own long
+    //    wait, BEFORE the command that matters.
+    // 2) Everything is in try/catch. If `wsl.exe` isn't in the PATH or the
+    //    distro doesn't respond, `Process.Start` THROWS — and before, that
+    //    exception bubbled up unowned from Task.Run, leaving the window stuck
+    //    on "Starting the engine…" without ever saying why.
     //
-    // El log NO va a /tmp: en WSL /tmp es tmpfs y se borra en CADA arranque de
-    // la distro — justo el caso que uno necesita depurar. Va a data/ del repo
-    // (gitignored), y en append para conservar los intentos anteriores.
+    // The log does NOT go to /tmp: in WSL /tmp is tmpfs and is wiped on EVERY
+    // distro boot — exactly the case you need to debug. It goes to the repo's
+    // data/ (gitignored), and in append mode to keep the earlier attempts.
     void LevantarServer()
     {
-        try { Wsl("true", 90000); } catch { }          // despierta la distro fría
+        try { Wsl("true", 90000); } catch { }          // wake the cold distro
         try
         {
             // JARVIS_WSL_DIR from Windows is visible inside WSL; otherwise $HOME/jarvis-workspace.
@@ -875,9 +881,9 @@ class VentanaJarvis : Form
         JarvisWsl.Ejecutar(comando, esperaMs);
     }
 
-    // El número de build sale del VERSION del repo, leído por el share de WSL.
-    // Si no se puede (distro dormida, ruta movida) el margen queda sin badge:
-    // el splash nace con ese bloque hidden.
+    // The build number comes from the repo's VERSION, read through the WSL
+    // share. If it can't be done (distro asleep, path moved) the margin stays
+    // without a badge: the splash is born with that block hidden.
     static string Build()
     {
         try
@@ -899,31 +905,31 @@ class VentanaJarvis : Form
     }
 }
 
-// ── Discord Rich Presence ("Jugando Jarvis") ─────────────────────────────────
-// Port del presence.rs de la app vieja (5a0bccaf, borrado en dc707f4f): el pipe
-// de Discord (discord-ipc-N) vive en Windows y WSL no lo alcanza, así que el
-// cliente IPC corre acá, en el lanzador. Se poletea el backend
-// (GET /api/system/presence, que arma details/state bilingües + conteo de
-// agentes) cada ~15s y se empuja la Activity. El timer "hace cuánto" lo fija el
-// arranque de la app (inicioEpoch), estable entre updates. Si Discord no está
-// corriendo, se reintenta en silencio: NUNCA rompe el shell.
+// ── Discord Rich Presence ("Playing Jarvis") ─────────────────────────────────
+// Port of the old app's presence.rs (5a0bccaf, deleted in dc707f4f): Discord's
+// pipe (discord-ipc-N) lives in Windows and WSL can't reach it, so the IPC
+// client runs here, in the launcher. The backend is polled
+// (GET /api/system/presence, which builds bilingual details/state + agent
+// count) every ~15s and the Activity is pushed. The "how long" timer is set by
+// the app start (inicioEpoch), stable across updates. If Discord isn't running,
+// it retries silently: it NEVER breaks the shell.
 class PresenciaDiscord
 {
-    // La App "Jarvis" del Discord Developer Portal: de ahí salen el nombre
-    // visible ("Jarvis") y los art assets (el icono). Sin esa App, Discord no
-    // muestra nada. Las keys de los assets las decide el backend (large_image /
-    // small_image en el JSON) → no se hardcodean acá.
+    // The "Jarvis" App from the Discord Developer Portal: from there come the
+    // visible name ("Jarvis") and the art assets (the icon). Without that App,
+    // Discord shows nothing. The asset keys are decided by the backend
+    // (large_image / small_image in the JSON) → they are not hardcoded here.
     const string AppId = "1524623263798525982";
 
-    // Discord throttlea las actualizaciones (~1 cada 15s). Con 15s vamos justos
-    // y sin spamear; además solo se manda set_activity si algo CAMBIÓ.
+    // Discord throttles updates (~1 every 15s). With 15s we're just right and
+    // without spamming; also set_activity is only sent if something CHANGED.
     const int PollMs = 15000;
     const string UrlPresence = "http://127.0.0.1:3000/api/system/presence";
 
     Thread hilo;
     volatile bool parar;
     NamedPipeClientStream pipe;
-    string ultimaFirma;   // firma del último envío: no quemar el rate-limit
+    string ultimaFirma;   // signature of the last send: don't burn the rate limit
     long inicioEpoch;
     readonly JavaScriptSerializer json = new JavaScriptSerializer();
 
@@ -948,7 +954,7 @@ class PresenciaDiscord
         while (!parar)
         {
             try { Tick(); }
-            catch { CerrarPipe(); }   // cualquier hipo → reconectar en la próxima
+            catch { CerrarPipe(); }   // any hiccup → reconnect next time
             Thread.Sleep(PollMs);
         }
     }
@@ -956,15 +962,15 @@ class PresenciaDiscord
     void Tick()
     {
         Dictionary<string, object> datos = TraerPresence();
-        if (datos == null) return;                 // motor caído: nada que mostrar
-        if (pipe == null && !Conectar()) return;   // Discord cerrado: silencio
+        if (datos == null) return;                 // engine down: nothing to show
+        if (pipe == null && !Conectar()) return;   // Discord closed: silence
 
         string firma = Campo(datos, "details") + "|" + Campo(datos, "state") + "|" +
                        Campo(datos, "large_image") + "|" + Campo(datos, "small_image") + "|" +
                        Campo(datos, "small_text");
         if (firma == ultimaFirma) return;
         if (MandarActividad(datos)) { ultimaFirma = firma; }
-        else { CerrarPipe(); ultimaFirma = null; } // Discord se reinició: reconectar
+        else { CerrarPipe(); ultimaFirma = null; } // Discord restarted: reconnect
     }
 
     Dictionary<string, object> TraerPresence()
@@ -988,7 +994,7 @@ class PresenciaDiscord
         catch { return null; }
     }
 
-    // Discord escucha en discord-ipc-0…9 (varios clientes = varios slots).
+    // Discord listens on discord-ipc-0…9 (several clients = several slots).
     bool Conectar()
     {
         for (int i = 0; i < 10; i++)
@@ -1020,8 +1026,8 @@ class PresenciaDiscord
         assets["large_image"] = Campo(datos, "large_image");
         string hover = Campo(datos, "large_text");
         assets["large_text"] = hover.Length > 0 ? hover : "Jarvis";
-        // El punto de estado (small_*) es opcional: el backend manda "" cuando
-        // no se subieron los assets del punto — ahí no se agrega.
+        // The status dot (small_*) is optional: the backend sends "" when the
+        // dot assets weren't uploaded — then it's not added.
         string punto = Campo(datos, "small_image");
         if (punto.Length > 0)
         {
@@ -1041,13 +1047,13 @@ class PresenciaDiscord
         try
         {
             Mandar(1, json.Serialize(msg));
-            LeerFrame(2000);   // la respuesta se drena y descarta (no llenar el pipe)
+            LeerFrame(2000);   // the response is drained and discarded (don't fill the pipe)
             return true;
         }
         catch { return false; }
     }
 
-    // Frame del IPC: int32 LE opcode + int32 LE largo + JSON UTF-8.
+    // IPC frame: int32 LE opcode + int32 LE length + UTF-8 JSON.
     void Mandar(int op, string cuerpo)
     {
         byte[] bytes = Encoding.UTF8.GetBytes(cuerpo);
@@ -1069,8 +1075,8 @@ class PresenciaDiscord
         return cuerpo == null ? null : Encoding.UTF8.GetString(cuerpo);
     }
 
-    // Read con timeout de verdad: PipeStream no soporta ReadTimeout, así que se
-    // espera el ReadAsync — un Discord mudo no puede colgar el hilo para siempre.
+    // Read with a real timeout: PipeStream doesn't support ReadTimeout, so it
+    // waits on ReadAsync — a mute Discord can't hang the thread forever.
     byte[] LeerExacto(int n, int esperaMs)
     {
         byte[] buf = new byte[n];

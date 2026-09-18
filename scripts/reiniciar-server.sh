@@ -1,33 +1,33 @@
 #!/usr/bin/env bash
-# JARVIS — Reinicio del server SIN robarle el proceso a la terminal del usuario.
+# JARVIS — Server restart WITHOUT stealing the process from the user's terminal.
 #
-# ⚠️ HERRAMIENTA DEL USUARIO (o de Jarvis mismo). LOS AGENTES NO REINICIAN EL
-# SERVER: verifican con pytest (corre el código de disco) + el smoke
-# `python -c "import plotspace.main"`, y la actualización la aplica el usuario
-# desde el banner "Actualizar ahora" de la UI.
+# ⚠️ USER TOOL (or Jarvis's own). AGENTS DO NOT RESTART THE
+# SERVER: they verify with pytest (runs the code from disk) + the smoke
+# `python -c "import plotspace.main"`, and the user applies the update
+# from the "Update now" banner in the UI.
 #
-# Camino correcto (server vivo): POST /api/system/restart → canary de arranque
-# (si el código nuevo no importa, rechaza con 409 y NO reinicia) → bump de
-# VERSION (1.5.0→1.5.1; hotfix 1.5.1→1.5.1.1) → os.execv re-exec in-place
-# (plotspace/routers/system.py): mismo PID, misma sesión, MISMA TERMINAL.
-# El server sigue alojado donde el usuario lo levantó — exactamente lo que hace
-# el botón "Actualizar" de la UI.
+# Correct path (live server): POST /api/system/restart → startup canary
+# (if the new code does not import, it rejects with 409 and does NOT restart) → VERSION
+# bump (1.5.0→1.5.1; hotfix 1.5.1→1.5.1.1) → os.execv re-exec in place
+# (plotspace/routers/system.py): same PID, same session, SAME TERMINAL.
+# The server stays hosted where the user started it — exactly what the
+# "Update" button in the UI does.
 #
-# PROHIBIDO `pkill -f uvicorn` + relanzar: eso re-aloja el server en TU shell
-# y el usuario pierde el mando de su terminal.
+# `pkill -f uvicorn` + relaunch is FORBIDDEN: that re-hosts the server in YOUR shell
+# and the user loses control of their terminal.
 #
-# Fallback (server muerto): lo levanta nohup'd en esta shell — única opción si
-# no hay proceso vivo — y avisa que quedó alojado acá.
+# Fallback (dead server): it starts it nohup'd in this shell — the only option if
+# there is no live process — and warns that it is now hosted here.
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
-# 127.0.0.1 y NO localhost: en este box el nombre resuelve IPv6-first (::1) y
-# uvicorn escucha solo IPv4 — la regla de la casa (ver memorias wsl-*).
+# 127.0.0.1 and NOT localhost: on this box the name resolves IPv6-first (::1) and
+# uvicorn listens only on IPv4 — the house rule (see wsl-* memories).
 BASE='http://127.0.0.1:3000'
 
 vivo() { curl -s -o /dev/null -w '%{http_code}' --max-time 3 "$BASE/api/health" 2>/dev/null; }
 
-esperar_arriba() {  # pollea /api/health hasta 120s; exit code 0 si volvió
+esperar_arriba() {  # polls /api/health up to 120s; exit code 0 if it came back
   for _ in $(seq 1 120); do
     [ "$(vivo)" = '200' ] && return 0
     sleep 1
@@ -36,48 +36,48 @@ esperar_arriba() {  # pollea /api/health hasta 120s; exit code 0 si volvió
 }
 
 if [ "$(vivo)" = '200' ]; then
-  echo "[reiniciar-server] server vivo → reinicio in-place vía POST /api/system/restart"
-  # --max-time 150: el endpoint corre un canary de arranque (importa backend.main
-  # en un subproceso) antes de responder — tarda varios segundos, no es un cuelgue.
+  echo "[reiniciar-server] server alive → in-place restart via POST /api/system/restart"
+  # --max-time 150: the endpoint runs a startup canary (imports backend.main
+  # in a subprocess) before responding — it takes several seconds, it is not a hang.
   code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 150 -X POST \
          "$BASE/api/system/restart")
   if [ "$code" = '409' ]; then
-    echo "[reiniciar-server] RECHAZADO: el código nuevo no arranca (canary). El server viejo sigue vivo." >&2
+    echo "[reiniciar-server] REJECTED: the new code does not start (canary). The old server is still alive." >&2
     exit 1
   fi
   if [ "$code" != '200' ]; then
-    echo "[reiniciar-server] ERROR: /api/system/restart devolvió '$code'" >&2
+    echo "[reiniciar-server] ERROR: /api/system/restart returned '$code'" >&2
     exit 1
   fi
-  sleep 3   # el re-exec dispara a ~1s; dejarlo morir antes de pollear
+  sleep 3   # the re-exec fires at ~1s; let it die before polling
   if esperar_arriba; then
-    echo "[reiniciar-server] listo: server de vuelta, mismo proceso/terminal del usuario"
+    echo "[reiniciar-server] done: server back, same process/terminal as the user"
     exit 0
   fi
-  echo "[reiniciar-server] ERROR: el server no volvió tras ~120s — revisá la terminal del usuario" >&2
+  echo "[reiniciar-server] ERROR: the server did not come back after ~120s — check the user's terminal" >&2
   exit 1
 fi
 
-echo "[reiniciar-server] no hay server vivo → lo levanto en esta shell (fallback)"
-echo "[reiniciar-server] AVISO: el server queda alojado ACÁ, no en la terminal del usuario."
+echo "[reiniciar-server] no live server → starting it in this shell (fallback)"
+echo "[reiniciar-server] WARNING: the server stays hosted HERE, not in the user's terminal."
 source venv/bin/activate
-# `setsid` y no solo `nohup`: cuando quien nos llama es Jarvis.exe (o el .bat),
-# del otro lado hay un `wsl.exe` que termina apenas dispara esto. Con el uvicorn
-# como hijo en la MISMA sesión, ese cierre se lo puede llevar puesto; con setsid
-# queda en una sesión propia, sin terminal de control, y sobrevive a todo el
-# árbol que lo lanzó. Es lo único que hace falta para que el doble clic ande.
-# El log NO va a /tmp: en WSL es tmpfs y se borra en CADA arranque de la distro,
-# justo el caso que uno necesita depurar (un motor que se cayó viene casi siempre
-# con un boot en el medio — el 2026-08-08 el log del arranque fallido ya no
-# existía). Va a data/ del repo (gitignored), con un truncado simple para que no
-# crezca sin techo. Misma lección que data/lanzador.log.
+# `setsid` and not just `nohup`: when the caller is Jarvis.exe (or the .bat),
+# on the other side there is a `wsl.exe` that exits as soon as it fires this. With
+# uvicorn as a child in the SAME session, that exit can take it down; with setsid
+# it stays in its own session, with no controlling terminal, and survives the whole
+# tree that launched it. It is the only thing needed for the double click to work.
+# The log does NOT go to /tmp: in WSL it is tmpfs and is wiped on EVERY boot of
+# the distro, exactly the case you need to debug (a motor that crashed almost always
+# comes with a boot in between — on 2026-08-08 the failed-boot log was already
+# gone). It goes to the repo's data/ (gitignored), with a simple truncation so it
+# does not grow without a ceiling. Same lesson as data/lanzador.log.
 LOG='data/uvicorn.log'
 [ -f "$LOG" ] && [ "$(stat -c%s "$LOG" 2>/dev/null || echo 0)" -gt 5242880 ] && mv -f "$LOG" "$LOG.1"
 setsid nohup python3 -m uvicorn plotspace.main:app --host 0.0.0.0 --port 3000 \
   --loop asyncio >>"$LOG" 2>&1 </dev/null &
 if esperar_arriba; then
-  echo "[reiniciar-server] listo: server arriba (logs en $LOG)"
+  echo "[reiniciar-server] done: server up (logs in $LOG)"
   exit 0
 fi
-echo "[reiniciar-server] ERROR: no levantó — mirá $LOG" >&2
+echo "[reiniciar-server] ERROR: it did not start — see $LOG" >&2
 exit 1

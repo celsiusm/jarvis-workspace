@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
 """
-Aviso de mailbox en el pre-commit — SOLO advierte, JAMÁS bloquea.
+Mailbox warning in the pre-commit hook — it ONLY warns, it NEVER blocks.
 
-El momento del commit es donde un mensaje no leído duele: si otro agente te
-avisó "cambié la interfaz que usás" y no lo viste, tu commit nace roto. El
-server mantiene `.jarvis/mailbox-pendientes.json` (por terminal destino); este
-script identifica al agente por su sesión tmux (mismo mecanismo que
-guard_propiedad) y le imprime sus pendientes — con énfasis si un mensaje
-menciona un archivo que está por commitear. Exit SIEMPRE 0 (es un aviso).
-Stdlib pura.
+The commit moment is where an unread message hurts: if another agent warned
+you "I changed the interface you use" and you didn't see it, your commit is
+born broken. The server keeps `.jarvis/mailbox-pendientes.json` (per target
+terminal); this script identifies the agent by its tmux session (same
+mechanism as guard_propiedad) and prints its pending items — with emphasis if
+a message mentions a file about to be committed. Exit is ALWAYS 0 (it is a
+warning). Pure stdlib.
 """
 import json
 import os
@@ -19,8 +19,8 @@ import guard_propiedad as gp
 
 
 def avisos(msgs: list, staged: list) -> list:
-    """Líneas de aviso para los mensajes pendientes. Un mensaje que menciona
-    el basename de un archivo staged va primero y marcado."""
+    """Warning lines for the pending messages. A message that mentions
+    the basename of a staged file goes first and flagged."""
     urgentes, normales = [], []
     basenames = {os.path.basename(s) for s in staged}
     for m in msgs:
@@ -38,7 +38,7 @@ def main():
     try:
         tid = gp.detectar_terminal_id()
         if tid is None:
-            return 0                      # el usuario en su shell: silencio
+            return 0                      # the user in their shell: silence
         raiz = (gp._git('rev-parse', '--show-toplevel') or '').strip()
         if not raiz:
             return 0
@@ -49,10 +49,10 @@ def main():
         if not msgs:
             return 0
         lineas = avisos(msgs, gp._staged())
-        print(f"— Tenés {len(msgs)} mensaje(s) sin leer en .jarvis/MAILBOX.md —")
+        print(f"— You have {len(msgs)} unread message(s) in .jarvis/MAILBOX.md —")
         for l in lineas[:6]:
             print('  ' + l)
-        print("  (aviso, no bloquea: leelos antes de seguir)")
+        print("  (warning, does not block: read them before continuing)")
     except Exception:
         pass
     return 0

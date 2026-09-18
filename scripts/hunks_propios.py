@@ -1,38 +1,38 @@
 #!/usr/bin/env python3
-"""Filtrado de un `git diff -U0` para quedarse SOLO con los hunks propios.
+"""Filtering of a `git diff -U0` to keep ONLY your own hunks.
 
-POR QUÉ
--------
-Todos los agentes trabajan sobre la misma rama y el mismo working tree, así que
-`git add <archivo>` no significa "lo mío": arrastra el archivo ENTERO con el
-trabajo sin commitear del otro adentro. Ya pasó, y quedó documentado en el
-MAILBOX del proyecto: un agente filtró sus hunks por NÚMERO DE LÍNEA («los míos
-están arriba de la 4400») y se llevó puesta una función ajena que vivía en la
-5739, porque las zonas están intercaladas, no en bloques por agente.
+WHY
+---
+All agents work on the same branch and the same working tree, so
+`git add <file>` does not mean "mine": it drags the WHOLE file with the
+other's uncommitted work inside. It already happened, and it was documented
+in the project MAILBOX: an agent filtered its hunks by LINE NUMBER ("mine
+are above 4400") and took out someone else's function that lived at 5739,
+because the zones are interleaved, not in per-agent blocks.
 
-La conclusión a la que llegaron a los golpes es la correcta: filtrar por
-CONTENIDO y con `-U0` (hunks mínimos; con -U3 se pega la línea del vecino). Lo
-que faltaba era el DATO — saber qué texto escribió cada uno. Eso ahora lo tiene
-el libro de provenance (`plotspace/core/provenance.py`), alimentado por el hook
-del CLI.
+The conclusion they reached the hard way is the right one: filter by
+CONTENT and with `-U0` (minimal hunks; with -U3 the neighbor's line gets
+stuck on). What was missing was the DATA — knowing what text each one
+wrote. The provenance ledger (`plotspace/core/provenance.py`) now has that,
+fed by the CLI hook.
 
-INVARIANTE DE ORO
------------------
-Ante la duda, el hunk NO es mío. Dejar afuera un cambio propio cuesta un segundo
-commit; llevarse uno ajeno le borra el trabajo a otro agente.
+GOLDEN INVARIANT
+----------------
+When in doubt, the hunk is NOT mine. Leaving out a change of your own costs
+a second commit; taking someone else's erases another agent's work.
 
-Stdlib pura (como guard_propiedad.py): los hooks y el script de commit tienen
-que andar aunque el venv no esté activado.
+Pure stdlib (like guard_propiedad.py): the hooks and the commit script have
+to work even when the venv is not activated.
 """
 import re
 
-# Líneas demasiado comunes para atribuir un hunk a nadie: aparecen en el diff
-# de cualquiera. Sin esto, un hunk que solo cierra una llave se lo lleva el
-# primero que pase.
+# Lines too common to attribute a hunk to anyone: they show up in anyone's
+# diff. Without this, a hunk that only closes a brace gets taken by the
+# first one who passes.
 _TRIVIALES = {'', '}', '{', '};', ')', '(', '),', '];', '[', ']', ',', ';',
               '*/', '/*', '"""', "'''", 'return', 'pass', 'else:', 'else {',
               '});', '})', '>', '<div>', '</div>'}
-_LARGO_MIN = 8          # menos que esto no identifica a nadie
+_LARGO_MIN = 8          # less than this identifies no one
 
 _RE_HUNK = re.compile(r'^@@ ', re.MULTILINE)
 
@@ -43,8 +43,8 @@ def _significativa(linea: str) -> bool:
 
 
 def partir_diff(diff_texto):
-    """(cabecera, [hunk, ...]). La cabecera son las líneas `diff --git`/`---`/
-    `+++`/`index` que git necesita para saber a qué archivo aplicar."""
+    """(header, [hunk, ...]). The header is the `diff --git`/`---`/
+    `+++`/`index` lines git needs to know which file to apply to."""
     texto = diff_texto or ''
     if not texto:
         return '', []
@@ -62,7 +62,7 @@ def partir_diff(diff_texto):
 def _lineas(hunk: str, signo: str):
     otro = '-' if signo == '+' else '+'
     out = []
-    for linea in (hunk or '').splitlines()[1:]:      # [0] es el `@@ ... @@`
+    for linea in (hunk or '').splitlines()[1:]:      # [0] is the `@@ ... @@`
         if not linea.startswith(signo):
             continue
         if linea.startswith(signo * 3) or linea.startswith(otro * 3):
@@ -80,9 +80,9 @@ def lineas_quitadas(hunk):
 
 
 def _aparece(linea: str, fragmentos) -> bool:
-    """¿Esta línea está adentro de algún fragmento que escribió el agente?
-    Se compara SIN indentación: el CLI reporta el texto tal cual lo insertó, y
-    un reformateo posterior no debe romper la atribución."""
+    """Is this line inside some fragment the agent wrote?
+    It is compared WITHOUT indentation: the CLI reports the text just as it
+    inserted it, and a later reformat must not break attribution."""
     objetivo = linea.strip()
     if not objetivo:
         return False
@@ -91,28 +91,28 @@ def _aparece(linea: str, fragmentos) -> bool:
             continue
         if objetivo in f:
             return True
-        # comparación línea a línea, tolerante a indentación
+        # line-by-line comparison, tolerant of indentation
         if any(objetivo == l.strip() for l in str(f).splitlines()):
             return True
     return False
 
 
 def hunk_es_mio(hunk, fragmentos_mios, fragmentos_ajenos=()) -> bool:
-    """¿Este hunk lo produje YO? Requiere evidencia positiva y ausencia de
-    evidencia ajena — un hunk mezclado se deja afuera a propósito."""
+    """Did I produce this hunk? It requires positive evidence and the absence
+    of other people's evidence — a mixed hunk is left out on purpose."""
     agregadas = [l for l in lineas_agregadas(hunk) if _significativa(l)]
     quitadas = [l for l in lineas_quitadas(hunk) if _significativa(l)]
-    candidatas = agregadas or quitadas          # un hunk que solo borra vale
+    candidatas = agregadas or quitadas          # a hunk that only deletes counts
     if not candidatas:
         return False
     if any(_aparece(l, fragmentos_ajenos) for l in candidatas):
-        return False                            # ambiguo o directamente ajeno
+        return False                            # ambiguous or outright someone else's
     return any(_aparece(l, fragmentos_mios) for l in candidatas)
 
 
 def filtrar_parche(diff_texto, fragmentos_mios, fragmentos_ajenos=()):
-    """Parche aplicable con `git apply --cached --unidiff-zero` que contiene
-    SOLO mis hunks, o None si no hay ninguno."""
+    """Patch applicable with `git apply --cached --unidiff-zero` containing
+    ONLY my hunks, or None if there are none."""
     cabecera, hunks = partir_diff(diff_texto)
     mios = [h for h in hunks if hunk_es_mio(h, fragmentos_mios, fragmentos_ajenos)]
     if not mios:
