@@ -4107,7 +4107,7 @@ let _tlFsPath = '/home/user', _tlFsParent = null, _tlFsTarget = 'path';
 // El front NO hardcodea /home/user de la máquina del autor: se lo pide al
 // backend (expanduser) y siembra con eso. Fallback final: solo antes de
 // que la API responda.
-const _TL_LOC_DEF = '/home/user/proyectos';
+const _TL_LOC_DEF = '/home/user/projects';
 let _tlEnvP = null;
 function _tlEnviron() {
   _tlEnvP ||= (async () => {
@@ -4181,7 +4181,7 @@ function _tlSlug(s) { return (s || '').trim().toLowerCase().replace(/\s+/g, '-')
 async function _tlUpdatePrev() {
   const env = (await _tlEnviron()) || {};
   const loc = ((document.getElementById('tl-new-loc')?.value || '').trim() || env.proyectos || _TL_LOC_DEF).replace(/\/+$/, '');
-  const nm = _tlSlug(document.getElementById('tl-new-name')?.value) || 'mi-app';
+  const nm = _tlSlug(document.getElementById('tl-new-name')?.value) || 'my-app';
   const el = document.getElementById('tl-new-prev'); if (el) el.textContent = loc + '/' + nm;
   // Botón de base (.tl2-path): muestra la ubicación acortada (~) y su ruta completa
   // en el tooltip. La fuente sigue siendo el input oculto #tl-new-loc.

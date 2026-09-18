@@ -139,7 +139,7 @@ def hogar_de_la_maquina() -> dict:
     sembrar sus valores por-defecto y dejar de hardcodear /home/user — en una
     máquina ajena (o macOS) el launcher debe proponer el homedir de ESA gente."""
     home = os.path.expanduser('~')
-    return {'home': home, 'proyectos': os.path.join(home, 'proyectos')}
+    return {'home': home, 'proyectos': os.path.join(home, 'projects')}
 
 
 @router.get("/hogar")
