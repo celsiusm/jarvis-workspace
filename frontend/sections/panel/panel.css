@@ -255,7 +255,10 @@ body.jw-rail .jw-door .jw-door-fill { opacity: 0; }
   left: calc(50% - var(--jw-strip-w) / 2);
   top: 50%;
   transform: translate(-50%, -50%);
-  display: flex; align-items: center; gap: 8px;
+  /* Baseline, no center: el nombre (11.5px UI) y la ruta (10px mono) tienen
+     métricas de línea distintas y con `center` la ruta quedaba unos px más
+     arriba. Sobre la MISMA baseline se leen alineados. */
+  display: flex; align-items: baseline; gap: 8px;
   /* Dos topes, gana el más chico: el histórico (36% del ancho útil) y el que
      mide la CANCHA REAL — el breadcrumb está centrado en el viewport, así que
      no puede pasarse del cluster de la marca (franja + ~206px). Sin el segundo,
@@ -272,7 +275,7 @@ body.jw-rail .gh-crumb-center { left: calc(50% - 29px); }
 /* min-width:0 + ellipsis: cuando el tope de arriba muerde, el nombre se recorta
    con puntos suspensivos en vez de desbordar (o de cortarse a cuchillo). */
 .gh-crumb-ws { color: var(--ob-fg-1); font: 600 11.5px var(--font-ui); min-width: 0; overflow: hidden; text-overflow: ellipsis; }
-.gh-crumb-center .gh-crumb-sep { color: var(--ob-fg-4); font-size: 10px; }
+.gh-crumb-center .gh-crumb-sep { color: var(--ob-fg-4); font-size: 10px; align-self: center; }
 .gh-crumb-center .gh-project {
   font: 500 10px var(--font-mono);
   color: var(--ob-fg-3);
