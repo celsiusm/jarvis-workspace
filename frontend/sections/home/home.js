@@ -6,7 +6,6 @@ const elGreeting   = document.getElementById('hc-greeting');
 const elStatProj   = document.getElementById('stat-projects');
 const elStatAgents = document.getElementById('stat-agents');
 const elHost       = document.getElementById('hc-host');
-const elFootHost   = document.getElementById('hc-footer-host');
 
 const elGrid       = document.getElementById('hc-grid');
 const elEmpty      = document.getElementById('hc-empty');
@@ -75,24 +74,6 @@ function pintarSaludo() {
               :          'Tarde por aquí.';
   if (elGreeting) elGreeting.textContent = saludo;
   if (elHost)     elHost.textContent     = location.host;
-  if (elFootHost) elFootHost.textContent = location.host;
-}
-
-// ─── Versión real en el footer (mismo endpoint que el chip del workspace) ──
-// Sin fallback falso: si no resuelve, el número simplemente no se muestra.
-async function pintarVersion() {
-  const elVer = document.getElementById('hc-footer-ver');
-  const elSep = document.getElementById('hc-footer-ver-sep');
-  if (!elVer) return;
-  try {
-    const r = await fetch('/api/system/version');
-    if (!r.ok) return;
-    const info = await r.json();
-    if (!info || !info.corriendo) return;
-    elVer.textContent = `v${info.corriendo}`;
-    elVer.hidden = false;
-    if (elSep) elSep.hidden = false;
-  } catch (_) { /* mejor nada que algo falso */ }
 }
 
 // ─── Carga proyectos ───────────────────────────────────────────
@@ -402,5 +383,4 @@ window.addEventListener('resize', () => { _spotRect = _spotCard?.getBoundingClie
 
 // ─── Init ──────────────────────────────────────────────────────
 pintarSaludo();
-pintarVersion();
 cargarProyectos();

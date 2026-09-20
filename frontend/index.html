@@ -15,7 +15,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif:ital@1&family=JetBrains+Mono:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="/static/shared/tokens.css?v=18">
-  <link rel="stylesheet" href="/static/sections/home/home.css?v=16">
+  <link rel="stylesheet" href="/static/sections/home/home.css?v=17">
 </head>
 <body>
 <script src="/static/shared/themes.js?v=9"></script>
@@ -32,7 +32,20 @@
   <!-- ═══ TOP BAR (52px) ═══════════════════════════════════════ -->
   <header class="hc-top">
     <div class="hc-brand">
-      <div class="hc-mark" aria-hidden="true">J</div>
+      <span class="hc-mark" aria-hidden="true" title="Jarvis">
+        <svg viewBox="0 0 64 64" fill="none">
+          <defs><linearGradient id="hc-brand-cinta" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#5b3fd6"/><stop offset=".55" stop-color="#7c5cff"/><stop offset="1" stop-color="#b9a6ff"/>
+          </linearGradient></defs>
+          <path d="M12 46 L24 35 L32 41 L50 15" stroke="rgba(124,92,255,.35)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" filter="blur(4px)"/>
+          <path d="M12 46 L24 35 L32 41 L50 15" stroke="url(#hc-brand-cinta)" stroke-width="7" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="5"/>
+          <path d="M12 46 L24 35 L32 41 L50 15" stroke="rgba(255,255,255,.38)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(-0.7,-1.6)"/>
+          <circle cx="12" cy="46" r="3.4" fill="#4a30b8"/><circle cx="12" cy="46" r="1.6" fill="#c9bcff"/>
+          <circle cx="24" cy="35" r="1.7" fill="#2c1e63"/><circle cx="32" cy="41" r="1.7" fill="#2c1e63"/>
+          <circle cx="50" cy="15" r="7.5" fill="rgba(185,166,255,.3)"/><circle cx="50" cy="15" r="3.4" fill="#fff"/>
+          <g stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M50 5.5 V9.5"/><path d="M50 20.5 V24.5"/><path d="M40.5 15 H44.5"/><path d="M55.5 15 H59.5"/></g>
+        </svg>
+      </span>
       <span class="hc-brand-name">Jarvis</span>
       <span class="hc-brand-divider">·</span>
       <span class="hc-brand-sub">Workspace</span>
@@ -97,7 +110,20 @@
 
     <!-- Empty state (visible si no hay proyectos) -->
     <div class="hc-empty" id="hc-empty">
-      <div class="hc-empty-mark" aria-hidden="true">J</div>
+      <span class="hc-empty-mark" aria-hidden="true">
+        <svg viewBox="0 0 64 64" fill="none">
+          <defs><linearGradient id="hc-empty-cinta" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#5b3fd6"/><stop offset=".55" stop-color="#7c5cff"/><stop offset="1" stop-color="#b9a6ff"/>
+          </linearGradient></defs>
+          <path d="M12 46 L24 35 L32 41 L50 15" stroke="rgba(124,92,255,.35)" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" filter="blur(4px)"/>
+          <path d="M12 46 L24 35 L32 41 L50 15" stroke="url(#hc-empty-cinta)" stroke-width="7" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="5"/>
+          <path d="M12 46 L24 35 L32 41 L50 15" stroke="rgba(255,255,255,.38)" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" transform="translate(-0.7,-1.6)"/>
+          <circle cx="12" cy="46" r="3.4" fill="#4a30b8"/><circle cx="12" cy="46" r="1.6" fill="#c9bcff"/>
+          <circle cx="24" cy="35" r="1.7" fill="#2c1e63"/><circle cx="32" cy="41" r="1.7" fill="#2c1e63"/>
+          <circle cx="50" cy="15" r="7.5" fill="rgba(185,166,255,.3)"/><circle cx="50" cy="15" r="3.4" fill="#fff"/>
+          <g stroke="#fff" stroke-width="1.6" stroke-linecap="round"><path d="M50 5.5 V9.5"/><path d="M50 20.5 V24.5"/><path d="M40.5 15 H44.5"/><path d="M55.5 15 H59.5"/></g>
+        </svg>
+      </span>
       <h2 class="hc-empty-title">Tu console está vacía.</h2>
       <p class="hc-empty-text">
         Conectá tu primera carpeta para empezar a orquestar agentes de IA en paralelo.
@@ -113,17 +139,6 @@
 
   </main>
 
-  <!-- ═══ FOOTER ═══════════════════════════════════════════════ -->
-  <footer class="hc-footer">
-    <div class="hc-footer-left">
-      <span>Jarvis Workspace</span>
-      <span class="hc-footer-dot" id="hc-footer-ver-sep" hidden>·</span>
-      <span id="hc-footer-ver" hidden></span>
-      <span class="hc-footer-dot">·</span>
-      <span id="hc-footer-host">localhost:3000</span>
-    </div>
-  </footer>
-
 </div>
 
 
@@ -132,7 +147,7 @@
 <script src="/static/shared/i18n-dict.js?v=30"></script>
 <script src="/static/shared/strands.js?v=1"></script>
 <script src="/static/sections/home/bienvenida.js?v=3"></script>
-<script src="/static/sections/home/home.js?v=16"></script>
+<script src="/static/sections/home/home.js?v=17"></script>
 <!-- Chrome de ventana de la APP (Jarvis.exe): minimizar/maximizar/cerrar, F11 y
      arrastre. La app ATERRIZA acá, no en el workspace — sin esto la ventana
      quedaba sin botones y sin poder moverse hasta entrar a un proyecto. En un
