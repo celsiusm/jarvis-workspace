@@ -146,14 +146,6 @@ a { color: inherit; text-decoration: none; }
   align-items: center;
   gap: 12px;
 }
-.hc-host {
-  font: 500 11px var(--hc-mono);
-  color: var(--hc-fg-2);
-  padding: 4px 10px;
-  border: 1px solid var(--hc-line-1);
-  border-radius: var(--radius-pill);
-  letter-spacing: 0.04em;
-}
 .hc-cta {
   display: inline-flex;
   align-items: center;
@@ -293,18 +285,6 @@ a { color: inherit; text-decoration: none; }
   caret-color: var(--hc-violet);
 }
 .hc-search input::placeholder { color: var(--hc-fg-4); }
-.hc-kbd {
-  font: 500 10px var(--hc-mono);
-  color: var(--hc-fg-3);
-  background: var(--hc-bg-2);
-  border: 1px solid var(--hc-line-2);
-  padding: 2px 6px;
-  border-radius: var(--radius-sm);
-  letter-spacing: 0.02em;
-  user-select: none;
-  flex-shrink: 0;
-  box-shadow: 0 1px 0 var(--ob-line-2); /* tecla física */
-}
 
 /* Filter pills */
 .hc-filters {
@@ -679,7 +659,6 @@ body.saliendo { opacity: 0; transition: opacity 160ms var(--ease-out); }
 @media (max-width: 800px) {
   .hc-top         { padding: 0 16px; height: 48px; }
   .hc-main        { padding: 18px 16px 28px; }
-  .hc-host        { display: none; }
   .hc-hero        { flex-wrap: wrap; }
   .hc-hero-stats  { width: 100%; margin-left: 0; }
   .hc-toolbar     { flex-direction: column; align-items: stretch; }

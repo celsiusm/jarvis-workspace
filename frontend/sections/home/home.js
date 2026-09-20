@@ -5,7 +5,6 @@
 const elGreeting   = document.getElementById('hc-greeting');
 const elStatProj   = document.getElementById('stat-projects');
 const elStatAgents = document.getElementById('stat-agents');
-const elHost       = document.getElementById('hc-host');
 
 const elGrid       = document.getElementById('hc-grid');
 const elEmpty      = document.getElementById('hc-empty');
@@ -73,7 +72,6 @@ function pintarSaludo() {
               : h < 23 ? 'Buenas noches.'
               :          'Tarde por aquí.';
   if (elGreeting) elGreeting.textContent = saludo;
-  if (elHost)     elHost.textContent     = location.host;
 }
 
 // ─── Carga proyectos ───────────────────────────────────────────
@@ -265,7 +263,7 @@ function _cardNewHTML(idx = 0) {
           <line x1="2.5" y1="7" x2="11.5" y2="7"/>
         </svg>
       </div>
-      <span>Nuevo proyecto</span>
+      <span>${_t('Nuevo proyecto')}</span>
     </button>`;
 }
 
@@ -360,13 +358,6 @@ elGrid?.addEventListener('mousemove', (e) => {
 window.addEventListener('scroll', () => { _spotRect = _spotCard?.getBoundingClientRect() || null; }, { passive: true });
 window.addEventListener('resize', () => { _spotRect = _spotCard?.getBoundingClientRect() || null; });
 
-// ─── kbd hint según plataforma (antes: '⌘K' fijo en Windows/WSL) ──
-(function () {
-  const esMac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-  const kbd = document.querySelector('.hc-kbd');
-  if (kbd) kbd.textContent = esMac ? '⌘K' : 'Ctrl K';
-})();
-
 // ─── Strands: cintas de luz detrás del hero (shared/strands.js) ──
 // Paleta = el mismo trío de la aurora estática (accent + info + magenta),
 // leído del tema activo; sin WebGL2 el mount devuelve null y queda la aurora.
@@ -382,5 +373,9 @@ window.addEventListener('resize', () => { _spotRect = _spotCard?.getBoundingClie
 })();
 
 // ─── Init ──────────────────────────────────────────────────────
+// El grid lleva [data-i18n-skip] (nombres y rutas de proyecto son datos), así
+// que el traductor no ve la card estática "+ Nuevo proyecto": la pinta _t() y
+// re-renderizamos al cambiar de idioma.
+window.addEventListener('jarvis:lang', () => renderizar());
 pintarSaludo();
 cargarProyectos();
