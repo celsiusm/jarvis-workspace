@@ -1519,7 +1519,10 @@
    --ic-fg: vivo, no gris, así el rack se lee por color además de por forma. */
 #jw-settings .ps-item-badge {
   flex: none; width: 30px; height: 30px; padding: 0;
-  display: grid; place-items: center;
+  /* flex (una sola línea), no grid: el chip tiene DOS hijos (el <svg> y el
+     texto oculto « SKILL»/« PLUGIN» de font-size:0). En grid eso son DOS filas
+     y el glifo quedaba pegado al borde de arriba; en una línea, centrado. */
+  display: flex; align-items: center; justify-content: center;
   border-radius: 9px; font-size: 0;
   background: linear-gradient(180deg,
     color-mix(in oklch, var(--ic-bg, var(--ob-bg-3)) 86%, white),
