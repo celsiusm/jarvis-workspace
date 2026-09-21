@@ -4642,6 +4642,12 @@ function activarTab(name) {
 const icoPlugin = (p) =>
   window.JarvisPluginIcons?.iconoDePlugin?.(p.full_id, p.nombre) || 'plug';
 
+// Tono del chip por familia (sections/settings/plugin-icons.js): el color
+// categoriza igual que el glifo. Fallback violeta si el módulo no cargó.
+const tonoPlugin = (p) =>
+  window.JarvisPluginIcons?.tonoDePlugin?.(p.full_id, p.nombre) || 'tone-violet';
+const TONO_SKILL = window.JarvisPluginIcons?.tonoDeGlifo?.('file') || 'tone-violet';
+
 // Bridge: settings.js inyecta el markup ps-* en #jw-settings y llama montar().
 window.JarvisSkills = {
   montar() {
@@ -4686,7 +4692,7 @@ async function cargarPluginsInstalados() {
       const el = document.createElement('div');
       el.className = 'ps-item';
       el.innerHTML = `
-        <span class="ps-item-badge ps-badge-plugin" title="Plugin — herramienta externa que extiende Claude Code">${icon(icoPlugin(p), 15)} PLUGIN</span>
+        <span class="ps-item-badge ps-badge-plugin ${tonoPlugin(p)}" title="Plugin — herramienta externa que extiende Claude Code">${icon(icoPlugin(p), 15)} PLUGIN</span>
         <div class="ps-item-body">
           <div class="ps-item-name">${esc(p.nombre)}${p.version && p.version !== 'unknown' ? ` <span class="ps-item-version">v${esc(p.version)}</span>` : ''}</div>
           <div class="ps-item-desc" lang="en">${esc(p.descripcion || p.full_id)}</div>
@@ -4765,7 +4771,7 @@ async function cargarSkillsMd() {
       const el = document.createElement('div');
       el.className = 'ps-item ps-item-clickable';
       el.innerHTML = `
-        <span class="ps-item-badge ps-badge-skill" title="Skill — conocimiento del proyecto que guía al agente">${icon('file', 15)} SKILL</span>
+        <span class="ps-item-badge ps-badge-skill ${TONO_SKILL}" title="Skill — conocimiento del proyecto que guía al agente">${icon('file', 15)} SKILL</span>
         <div class="ps-item-body">
           <div class="ps-item-name">${esc(s.nombre)} <span class="ps-item-version">${esc(s.tipo)}</span></div>
           <div class="ps-item-desc">${esc(s.preview || '(sin descripción)')}</div>
@@ -4894,7 +4900,7 @@ async function cargarMarketplace() {
       el.className = 'ps-card' + (p.instalado ? ' ps-card-instalado' : '');
       el.innerHTML = `
         <div class="ps-card-top">
-          <span class="ps-item-badge ps-badge-plugin" title="Plugin — herramienta externa que extiende Claude Code">${icon(icoPlugin(p), 15)}</span>
+          <span class="ps-item-badge ps-badge-plugin ${tonoPlugin(p)}" title="Plugin — herramienta externa que extiende Claude Code">${icon(icoPlugin(p), 15)}</span>
           <div class="ps-card-name">${esc(p.nombre)}</div>
           ${p.instalado ? '<span class="ps-card-installed-badge">Instalado</span>' : ''}
         </div>

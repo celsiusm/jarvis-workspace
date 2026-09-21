@@ -70,7 +70,41 @@
     return FALLBACK;
   }
 
-  const pure = { FALLBACK, REGLAS, iconoDePlugin };
+  // ── Tono del chip (paleta .tone-* de shared/base.css) ──────────────────
+  // El glifo dice QUÉ es el plugin; el tono dice DE QUÉ FAMILIA es. Misma
+  // señal, otra capa: así el rack deja de ser una fila de chips grises y se
+  // escanea por color + forma. El tono se DERIVA del glifo (una sola fuente de
+  // verdad: las reglas de arriba), no de un segundo set de regex que se
+  // desincronice. Todo sale de los tokens `--ic-bg/--ic-fg/--ic-edge`, así que
+  // sobrevive a los 24 temas y al filtro de tonalidad (nada de hex clavados).
+  const TONO_POR_GLIFO = {
+    'cpu':         'tone-blue',    // tooling de lenguaje / LSP
+    'globe':       'tone-cyan',    // docs / MCP
+    'phone':       'tone-teal',    // móvil
+    'git-branch':  'tone-green',   // git / forjas
+    'eye':         'tone-rose',    // seguridad / análisis
+    'list-checks': 'tone-green',   // tests
+    'search':      'tone-blue',    // review / auditoría
+    'sparkles':    'tone-violet',  // diseño / frontend
+    'edit':        'tone-amber',   // skills / generadores
+    'zap':         'tone-amber',   // orquestación
+    'brain':       'tone-violet',  // memoria
+    'mic':         'tone-rose',    // voz
+    'key':         'tone-amber',   // credenciales / auth
+    'keyboard':    'tone-blue',    // accesibilidad
+    'message':     'tone-cyan',    // chat / bots
+    'workflow':    'tone-teal',    // deploy / CI
+    'chart':       'tone-blue',    // perf / datos
+    'monitor':     'tone-cyan',    // browser / scraping
+    'file':        'tone-violet',  // skills .md del proyecto
+    'plug':        'tone-violet',  // genérico
+  };
+  const TONO_FALLBACK = 'tone-violet';
+
+  function tonoDeGlifo(glifo) { return TONO_POR_GLIFO[glifo] || TONO_FALLBACK; }
+  function tonoDePlugin(fullId, nombre) { return tonoDeGlifo(iconoDePlugin(fullId, nombre)); }
+
+  const pure = { FALLBACK, TONO_FALLBACK, REGLAS, TONO_POR_GLIFO, iconoDePlugin, tonoDeGlifo, tonoDePlugin };
   global.JarvisPluginIcons = pure;
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;
 })(typeof window !== 'undefined' ? window : globalThis);

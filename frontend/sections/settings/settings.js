@@ -1213,7 +1213,7 @@
         <div class="ps-panel activo" data-panel="instalados">
           <section class="ps-section">
             <header class="ps-section-head">
-              <span class="ps-section-icon ps-icon-plugin">${icon('plug', 14)}</span>
+              <span class="ps-section-icon ps-icon-plugin tone-cyan">${icon('plug', 14)}</span>
               <h3>${esc(_t('Plugins instalados'))}</h3>
               <span class="ps-section-sub" id="ps-plugins-count">0</span>
             </header>
@@ -1221,7 +1221,7 @@
           </section>
           <section class="ps-section">
             <header class="ps-section-head">
-              <span class="ps-section-icon ps-icon-skill">${icon('file', 14)}</span>
+              <span class="ps-section-icon ps-icon-skill tone-violet">${icon('file', 14)}</span>
               <h3>${esc(_t('Skills del proyecto'))}</h3>
               <span class="ps-section-sub" id="ps-skills-count">0</span>
               <span class="ps-spacer"></span>
@@ -1234,7 +1234,7 @@
         <div class="ps-panel" data-panel="marketplace">
           <section class="ps-section">
             <header class="ps-section-head">
-              <span class="ps-section-icon ps-icon-plugin">${icon('plug', 14)}</span>
+              <span class="ps-section-icon ps-icon-plugin tone-cyan">${icon('plug', 14)}</span>
               <h3>${esc(_t('Plugins disponibles'))}</h3>
               <span class="ps-section-sub" id="ps-marketplace-count">0</span>
             </header>

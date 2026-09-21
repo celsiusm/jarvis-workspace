@@ -71,4 +71,31 @@ for (const [, ic] of P.REGLAS) {
 }
 assert.ok(disponibles.has(P.FALLBACK), `fallback '${P.FALLBACK}' no existe en shared/ui.js`);
 
+// ── Tonos del chip ────────────────────────────────────────────────────────
+// El tono categoriza igual que el glifo (paleta .tone-*). Todo glifo de las
+// reglas tiene que tener tono — si alguien agrega una regla y se olvida, el
+// chip cae al violeta en silencio y la lista pierde la pista de color.
+const TONOS_VALIDOS = new Set(['tone-violet','tone-blue','tone-teal','tone-cyan','tone-amber','tone-rose','tone-green']);
+assert.ok(TONOS_VALIDOS.has(P.TONO_FALLBACK), 'el tono de fallback es una clase .tone-* real');
+assert.strictEqual(P.tonoDeGlifo('no-existe'), P.TONO_FALLBACK);
+for (const [, ic] of P.REGLAS) {
+  const t = P.TONO_POR_GLIFO[ic];
+  assert.ok(t, `glifo '${ic}' sin tono asignado`);
+  assert.ok(TONOS_VALIDOS.has(t), `tono '${t}' (glifo '${ic}') no es una clase .tone-* válida`);
+}
+// La clase .tone-* tiene que existir en el CSS: si la renombran, los chips
+// quedan sin color (el fallback de var() los deja grises).
+const baseCss = fs.readFileSync(path.join(__dirname, '..', '..', '..', 'shared', 'base.css'), 'utf8');
+for (const t of TONOS_VALIDOS) assert.ok(baseCss.includes(`.${t} `), `falta .${t} en shared/base.css`);
+
+// El tono DERIVA del glifo (una sola fuente de verdad), no de un segundo set
+// de reglas que podría desincronizarse.
+assert.strictEqual(P.tonoDePlugin('github', 'Github'), 'tone-green');
+assert.strictEqual(P.tonoDePlugin('expo', 'Expo'), 'tone-teal');
+assert.strictEqual(P.tonoDePlugin('static-analysis', ''), 'tone-rose');
+assert.strictEqual(P.tonoDePlugin('algo-rarisimo@nadie', ''), 'tone-violet');
+for (const [, [nombre, glifo]] of Object.entries(REALES)) {
+  assert.strictEqual(P.tonoDePlugin('x', nombre), P.tonoDeGlifo(glifo), `${nombre}: tono no deriva del glifo`);
+}
+
 console.log('plugin-icons.test.js OK');

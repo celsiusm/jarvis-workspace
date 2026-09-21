@@ -1514,27 +1514,39 @@
 #jw-settings .ps-section-icon,
 #jw-settings .ps-item-badge { cursor: inherit; }
 
+/* Chip de FAMILIA: bisel de vidrio tintado por .tone-* (--ic-bg/--ic-fg/--ic-edge,
+   los mismos que ya colorean las cards de proyecto y el riel). El glifo pasa a
+   --ic-fg: vivo, no gris, así el rack se lee por color además de por forma. */
 #jw-settings .ps-item-badge {
-  flex: none; width: 26px; height: 26px; padding: 0;
+  flex: none; width: 30px; height: 30px; padding: 0;
   display: grid; place-items: center;
-  border-radius: 8px; font-size: 0;
-  background: color-mix(in oklch, var(--ob-fg-0) 8%, transparent);
-  box-shadow: inset 0 0 0 1px var(--sx-hair);
-  color: var(--ob-fg-2);
-  transition: color var(--dur-1) var(--ease-out),
-              background var(--dur-1) var(--ease-out);
+  border-radius: 9px; font-size: 0;
+  background: linear-gradient(180deg,
+    color-mix(in oklch, var(--ic-bg, var(--ob-bg-3)) 86%, white),
+    var(--ic-bg, var(--ob-bg-3)));
+  color: var(--ic-fg, var(--ob-fg-2));
+  box-shadow: inset 0 1px 0 var(--ob-glass-hi),
+              inset 0 0 0 1px var(--ic-edge, var(--sx-hair)),
+              0 3px 8px -3px color-mix(in oklch, var(--ic-fg, transparent) 55%, transparent);
+  transition: transform var(--dur-1) var(--ease-out),
+              box-shadow var(--dur-1) var(--ease-out);
 }
 #jw-settings .ps-item-badge svg {
-  width: 15px; height: 15px;
-  stroke-width: 1.6;   /* compensa la reducción 24→15 del viewBox */
+  width: 16px; height: 16px;
+  stroke-width: 1.7;   /* compensa la reducción 24→16 del viewBox */
 }
-#jw-settings .ps-badge-skill { color: var(--ob-accent-fg); }
-/* Al recorrer la lista, el icono de la fila apuntada se enciende. */
-#jw-settings .ps-item:hover .ps-item-badge {
-  color: var(--ob-fg-0);
-  background: color-mix(in oklch, var(--ob-fg-0) 13%, transparent);
+/* Al recorrer la lista, el chip se enciende y da un paso al frente. */
+#jw-settings .ps-item:hover .ps-item-badge,
+#jw-settings .ps-card:hover .ps-item-badge {
+  transform: scale(1.07);
+  box-shadow: inset 0 1px 0 var(--ob-glass-hi),
+              inset 0 0 0 1px color-mix(in oklch, var(--ic-fg, var(--ob-fg-2)) 45%, transparent),
+              0 5px 14px -3px color-mix(in oklch, var(--ic-fg, var(--ob-fg-2)) 70%, transparent);
 }
-#jw-settings .ps-item:hover .ps-badge-skill { color: var(--ob-accent-fg); }
+@media (prefers-reduced-motion: reduce) {
+  #jw-settings .ps-item:hover .ps-item-badge,
+  #jw-settings .ps-card:hover .ps-item-badge { transform: none; }
+}
 #jw-settings .ps-item-body { flex: 1; min-width: 0; }
 #jw-settings .ps-item-name { font: 500 12.5px var(--font-ui); color: var(--ob-fg-1); }
 #jw-settings .ps-item.activo .ps-item-name, #jw-settings .ps-item-name:only-child { color: var(--ob-fg-0); }
@@ -1545,16 +1557,22 @@
 }
 #jw-settings .ps-section-head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
 #jw-settings .ps-section-head h3 { font: 600 12.5px var(--font-ui); color: var(--ob-fg-1); margin: 0; }
-/* Cabecera: glifo PLANO. Con las filas ya en chips de 26px, un segundo chip
-   de 22px acá (el borde + fondo que traía de base.css) sonaba a card anidada;
-   el h3 que va al lado es el que manda. */
+/* Cabecera: chip tintado (mismo lenguaje que las filas) en vez del glifo gris
+   plano. Un tono por sección: cian = plugins, violeta = skills. */
 #jw-settings .ps-section-icon {
   display: grid; place-items: center;
-  width: 18px; height: 18px;
-  border: 0; background: none;
-  color: var(--ob-fg-3);
+  width: 24px; height: 24px;
+  border: 0;
+  border-radius: 7px;
+  background: linear-gradient(180deg,
+    color-mix(in oklch, var(--ic-bg, var(--ob-bg-3)) 86%, white),
+    var(--ic-bg, var(--ob-bg-3)));
+  color: var(--ic-fg, var(--ob-info));
+  box-shadow: inset 0 1px 0 var(--ob-glass-hi),
+              inset 0 0 0 1px var(--ic-edge, var(--sx-hair)),
+              0 2px 6px -3px color-mix(in oklch, var(--ic-fg, transparent) 55%, transparent);
 }
-#jw-settings .ps-section-icon svg { width: 15px; height: 15px; stroke-width: 1.6; }
+#jw-settings .ps-section-icon svg { width: 14px; height: 14px; stroke-width: 1.7; }
 #jw-settings .ps-section-sub {
   padding: 1px 7px; border-radius: 99px;
   font: 500 10.5px var(--font-mono); color: var(--ob-fg-3);
@@ -1566,10 +1584,6 @@
 #jw-settings .ps-card {
   padding: 12px 14px; border-radius: 10px;
   background: var(--sx-well); box-shadow: inset 0 0 0 1px var(--sx-hair);
-}
-#jw-settings .ps-card:hover .ps-item-badge {
-  color: var(--ob-fg-0);
-  background: color-mix(in oklch, var(--ob-fg-0) 13%, transparent);
 }
 /* El ✓/↗ de la fila «official · marketplace» venía a 16px al lado de un mono
    de 9.5px: el glifo era casi el doble de alto que su propia etiqueta y
