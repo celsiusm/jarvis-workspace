@@ -133,6 +133,10 @@ function pintarStats() {
 }
 
 // ─── Filtros + search ──────────────────────────────────────────
+// Etiqueta es de cada filtro: el aviso de "sin coincidencias" nombra el filtro
+// (no la key cruda «pinned»), y _t() la traduce con el resto.
+const FILTRO_ES = { all: 'Todos', pinned: 'Anclados', active: 'Activos', archived: 'Archivados' };
+
 function _aplicaFiltros(p) {
   if (_filtro === 'pinned'   && p.seccion !== 'pinned')   return false;
   if (_filtro === 'archived' && p.seccion !== 'archived') return false;
@@ -158,12 +162,16 @@ function renderizar() {
   if (!hayProyectos) return;
 
   if (filtrados.length === 0) {
-    elGrid.innerHTML = `
+    // La card "+ Nuevo proyecto" va PRIMERO para no perder su línea (la fila de
+    // arriba, como cuando hay resultados); el aviso la acompaña al lado.
+    // _t(): el grid es [data-i18n-skip], el observer no lo traduce.
+    const ref = _query || _t(FILTRO_ES[_filtro] || _filtro);
+    elGrid.innerHTML = _cardNewHTML() + `
       <div class="hc-no-match">
         ${icon('search', 28)}
-        <div>Sin coincidencias para <b>"${esc(_query || _filtro)}"</b></div>
-        <button type="button" id="hc-clear-filters">Limpiar búsqueda y filtros</button>
-      </div>` + _cardNewHTML();
+        <div>${esc(_t('Sin coincidencias para'))} <b>"${esc(ref)}"</b></div>
+        <button type="button" id="hc-clear-filters">${esc(_t('Limpiar búsqueda y filtros'))}</button>
+      </div>`;
     document.getElementById('hc-clear-filters')?.addEventListener('click', () => {
       _query = ''; _filtro = 'all';
       if (elSearch) elSearch.value = '';

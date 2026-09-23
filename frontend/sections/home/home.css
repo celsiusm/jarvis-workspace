@@ -612,7 +612,10 @@ body.saliendo { opacity: 0; transition: opacity 160ms var(--ease-out); }
 
 /* Sin coincidencias (filtro/búsqueda sin resultados) */
 .hc-no-match {
-  grid-column: 1 / -1;
+  /* `auto / -1`: arranca donde lo deje el flujo y llena el resto de la fila, así
+     comparte la línea con la card "+ Nuevo proyecto" (que ahora va primera). Con
+     `1 / -1` forzaba fila propia y la card caía a un renglón de abajo. */
+  grid-column: auto / -1;
   display: flex;
   flex-direction: column;
   align-items: center;
