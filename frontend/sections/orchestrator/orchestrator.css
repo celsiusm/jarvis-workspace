@@ -333,9 +333,11 @@
   align-items: center;
   justify-content: center;
   text-align: center;
-  /* el bloque del hero va un poco por ENCIMA del centro óptico del panel:
-     el padding inferior empuja el contenido hacia arriba. */
-  padding: 24px 18px 150px;
+  /* el bloque del hero iba bastante por ENCIMA del centro (padding-bottom:150px);
+     el usuario lo quiso más abajo: 150→64px. Como el hero está centrado con
+     justify-content:center, el padding mueve el contenido sólo ~la mitad — de
+     ahí el valor generoso. */
+  padding: 24px 18px 64px;
   gap: 16px;
   position: relative;
   animation: orch-msg-in 500ms var(--ease-out, ease);
@@ -896,8 +898,10 @@
 .orch-composer {
   flex-shrink: 0;
   /* Se funde con el panel como base de instrumentos: SIN border-top duro,
-     SIN backdrop (el gradiente al void ya integra el composer con los mensajes). */
-  padding: 8px 14px 8px;
+     SIN backdrop (el gradiente al void ya integra el composer con los mensajes).
+     El padding inferior sube el campo unos px del borde (pedido del usuario): la
+     barra de chat no queda pegada al fondo. */
+  padding: 8px 14px 26px;
   background: linear-gradient(to top, var(--ob-bg-void) 58%, transparent);
   position: relative;
 }
