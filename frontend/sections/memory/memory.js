@@ -18,6 +18,8 @@
   let _mapaPos    = {};            // id de nodo → {x,y} del último layout (persistencia del grafo)
   let _grafT      = { k: 1, x: 0, y: 0 };  // zoom + paneo de la vista Grafo
   let _grafTimer  = null;          // tick de disparos neuronales del grafo
+  let _grafAC     = null;          // listeners de window del grafo (se abortan en cada re-render)
+  let _grafPaneo  = false;         // true justo después de soltar un paneo (anula el click del nodo)
   let _core       = null;          // centro de masa del grafo (núcleo central)
   let _salud      = null;          // lint del backend (/memory/salud)
 
@@ -412,6 +414,7 @@
 
     body.querySelectorAll('.mem-nodo').forEach(g =>
       g.addEventListener('click', () => {
+        if (_grafPaneo) return;   // fue el final de un arrastre, no un click
         _slugAbierta = g.dataset.slug;
         _tab = 'lista';
         document.querySelectorAll('.mem-tab').forEach(t =>
@@ -470,6 +473,11 @@
       aplicar();
     }, { passive: false });
 
+    // Cada render del Grafo sumaba otro par de listeners en window que nunca se
+    // quitaban: se abortan los del render anterior.
+    _grafAC?.abort();
+    _grafAC = new AbortController();
+    const _sig = { signal: _grafAC.signal };
     let down = null;
     view.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0) return;
@@ -489,8 +497,12 @@
         down = { x: ev.clientX, y: ev.clientY, moved: true };
         aplicar();
       }
-    });
-    window.addEventListener('pointerup', () => { down = null; view.classList.remove('paneando'); });
+    }, _sig);
+    window.addEventListener('pointerup', () => {
+      // Soltar sobre un nodo tras panear disparaba su click (abría la memoria).
+      if (down?.moved) { _grafPaneo = true; setTimeout(() => { _grafPaneo = false; }, 0); }
+      down = null; view.classList.remove('paneando');
+    }, _sig);
 
     // ── Highlight del subgrafo conectado (hover) + tooltip ─────
     // El tooltip se llena SOLO en pointerenter (no en el move) y queda

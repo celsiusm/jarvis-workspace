@@ -65,19 +65,27 @@
   }
 
   /* ── Datos ─────────────────────────────────────────────────── */
+  // Ambos loaders descartan la respuesta si se cambió de proyecto mientras
+  // viajaba: escribían _tasks/_workflows del proyecto VIEJO y el próximo
+  // _render (p.ej. un workflow_update) pintaba el board de A en B.
   async function _cargarTasks() {
+    const pid = _projectId;
     try {
-      const r = await fetch(`/api/projects/${_projectId}/tasks`);
+      const r = await fetch(`/api/projects/${pid}/tasks`);
       if (!r.ok) return;
-      _tasks = await r.json();
+      const lista = await r.json();
+      if (pid !== _projectId) return;
+      _tasks = lista;
     } catch { /* red */ }
   }
 
   async function _cargarWorkflows() {
+    const pid = _projectId;
     try {
-      const r = await fetch(`/api/orchestrator/workflows/${_projectId}`);
+      const r = await fetch(`/api/orchestrator/workflows/${pid}`);
       if (!r.ok) return;
       const lista = await r.json();
+      if (pid !== _projectId) return;
       _workflows = new Map();
       // Proyectar solo los últimos 12 workflows (vienen DESC por fecha):
       // el historial completo vive en el modal de Workflows, acá el board

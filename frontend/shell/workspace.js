@@ -605,6 +605,32 @@ function conectarEventosWs() {
       window.TerminalAura?.notificar?.('agente_espera', data.terminal_id);
       window.JarvisNotify?.avisar?.({ tipo: 'espera', nombre: _nombreTerm(data.terminal_id), sonidoOn: sonidoTareas });
       _pingTitulos();
+    } else if (data.type === 'limite_sin_cuenta') {
+      // agent_watch vio la firma de rate-limit y NO hay otra cuenta sana del
+      // CLI a la que rotar: el agente queda parado hasta que el usuario haga
+      // algo (esperar el reset o sumar una cuenta en ⚙→Cuentas). Antes nadie
+      // escuchaba este evento y el agente quedaba mudo.
+      sonarEventoTarea('TASK_BLOCKED');
+      window.TerminalAura?.notificar?.('agente_espera', data.terminal_id);
+      toast(_sbT('{n} llegó al límite de uso y no hay otra cuenta de {cli} para rotar. Sumá una en Ajustes → Cuentas o esperá el reset.')
+        .replace('{n}', _nombreTerm(data.terminal_id) || `Terminal ${data.terminal_id}`)
+        .replace('{cli}', data.tipo_ia || 'CLI'), 'warning', 9000);
+    } else if (data.type === 'cuenta_rotada') {
+      // Auto-rotación: el agente llegó al límite y se pasó solo a otra cuenta.
+      toast(_sbT('{n} llegó al límite de uso: rotado de {de} a {a}.')
+        .replace('{n}', _nombreTerm(data.terminal_id) || `Terminal ${data.terminal_id}`)
+        .replace('{de}', data.de_label || '?').replace('{a}', data.a_label || '?'), 'info', 6000);
+    } else if (data.type === 'paso_estancado') {
+      // swarm_watchdog: un paso de workflow lleva >3 min sin cerrar y no se
+      // encontró TASK_* perdido (el agente murió o quedó en un prompt).
+      window.TerminalAura?.notificar?.('agente_espera', data.terminal_id);
+      toast(_sbT('Paso estancado: {n} lleva {m} min sin cerrar su tarea. Revisá su terminal.')
+        .replace('{n}', data.terminal_nombre || _nombreTerm(data.terminal_id) || `Terminal ${data.terminal_id}`)
+        .replace('{m}', Math.max(1, Math.round((data.edad_seg || 0) / 60))), 'warning', 9000);
+    } else if (data.type === 'paso_rescatado') {
+      toast(_sbT('Paso rescatado: {n} había cerrado con {kw} y no se había registrado.')
+        .replace('{n}', data.terminal_nombre || _nombreTerm(data.terminal_id) || `Terminal ${data.terminal_id}`)
+        .replace('{kw}', data.keyword || ''), 'info', 6000);
     } else if (data.type === 'agente_trabajando') {
       // El agente retomó actividad: el aura vieja ya no informa nada.
       _faseTerminales[data.terminal_id] = 'trabajando';
@@ -2436,7 +2462,7 @@ async function _sbEjecutarAccion(accion, projId) {
             document.title = `JARVIS — ${nuevo}`;
           }
           await cargarSidebar();
-        } catch (err) { nameEl.textContent = original; toast(_sbT('No se pudo renombrar: {m}').replace('{m}', err.message), 'error'); }
+        } catch (err) { nameEl.textContent = original; toast(_sbT('No se pudo renombrar: {m}').replace('{m}', _sbT(err.message)), 'error'); }
       };
       nameEl.addEventListener('keydown', onKeydown);
       nameEl.addEventListener('blur', () => terminar(true), { once: true });
@@ -2549,15 +2575,25 @@ document.addEventListener('keydown', (e) => {
     if (k === 't' && !_editando) { e.preventDefault(); abrirLauncher(); return; }
   }
   if (e.key === 'k' || e.key === 'K') {
+    // En Monaco (acordes Ctrl+K …) y en campos de texto reales (chat, modales)
+    // Ctrl+K es de ellos: robarlo mandaba lo tipeado a la búsqueda de proyectos.
+    // La terminal (textarea helper de xterm) SÍ lo toma — es el atajo documentado.
+    const ae = document.activeElement;
+    const enTerminal = ae?.classList?.contains('xterm-helper-textarea');
+    if (ae?.closest?.('.monaco-editor') || (_editando && !enTerminal && ae !== _sbSearchInput)) return;
     e.preventDefault();
     _sbSearchInput?.focus();
     _sbSearchInput?.select();
     return;
   }
   if (e.key >= '1' && e.key <= '9') {
-    // No interferir si el foco está en un input/textarea (escribiendo)
-    const tag = document.activeElement?.tagName;
-    if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+    // No interferir si el foco está en un input/textarea (escribiendo). La
+    // textarea helper de xterm NO cuenta: con el foco-por-hover casi siempre hay
+    // una terminal enfocada y Ctrl+1…9 no andaba nunca (una terminal no usa
+    // Ctrl+dígito para nada).
+    const ae = document.activeElement;
+    const tag = ae?.tagName;
+    if ((tag === 'INPUT' || tag === 'TEXTAREA') && !ae.classList.contains('xterm-helper-textarea')) return;
     const n = parseInt(e.key, 10);
     const fila = elSidebarNav?.querySelector(`.sb-row[data-idx="${n}"]`);
     if (fila) {
@@ -2603,6 +2639,11 @@ async function cambiarProyecto(nuevoId) {
   // `?.()` devuelve undefined si el editor no está cargado → undefined !== false → se continúa.
   const _descartarOk = await window.JarvisEditor?.confirmarDescarteSiSucio?.();
   if (_descartarOk === false) { _cambioPendiente = null; _sbMarcarActivo(projectId); return; }
+  // El editor deslizante también guarda buffers: sin preguntar, el cambio de
+  // proyecto los tiraba en silencio.
+  if ((await window.JarvisSlideEditor?.confirmarDescarteSiSucio?.()) === false) {
+    _cambioPendiente = null; _sbMarcarActivo(projectId); return;
+  }
 
   // 0.5 Respuesta visual INMEDIATA (mock "El Roster"): la selección se pinta en
   // ESTE frame, antes del trabajo pesado (teardown de xterm + fetches). Sin esto
@@ -2663,7 +2704,7 @@ async function cambiarProyecto(nuevoId) {
     await cargarProyecto();
   } catch (err) {
     console.error('Error cargando proyecto:', err);
-    agregarMensajeChat('jarvis', _sbT('No pude cargar el proyecto ({m})').replace('{m}', err.message));
+    agregarMensajeChat('jarvis', _sbT('No pude cargar el proyecto ({m})').replace('{m}', _sbT(err.message)));
   }
 
   // 5. Resaltar el nuevo activo en el sidebar y refrescar el menú de localhost
@@ -2684,7 +2725,8 @@ window.addEventListener('popstate', async e => {
   const id = new URLSearchParams(location.search).get('id');
   if (id && id !== String(projectId)) {
     // `?.()` → undefined si el editor no está cargado; undefined !== false → se continúa.
-    const _popDescartarOk = await window.JarvisEditor?.confirmarDescarteSiSucio?.();
+    const _popDescartarOk = await window.JarvisEditor?.confirmarDescarteSiSucio?.() !== false
+      && await window.JarvisSlideEditor?.confirmarDescarteSiSucio?.() !== false;
     if (_popDescartarOk === false) {
       // El usuario canceló: re-empujar la URL del proyecto actual para no dejar
       // la barra de direcciones desincronizada del estado real.
@@ -2717,7 +2759,7 @@ window.addEventListener('popstate', async e => {
       await cargarProyecto();
     } catch (err) {
       console.error('Error cargando proyecto:', err);
-      agregarMensajeChat('jarvis', _sbT('No pude cargar el proyecto ({m})').replace('{m}', err.message));
+      agregarMensajeChat('jarvis', _sbT('No pude cargar el proyecto ({m})').replace('{m}', _sbT(err.message)));
     }
     actualizarSidebarActivo();
     actualizarSidebarBadge(terminales.size);
@@ -3784,11 +3826,15 @@ async function _actualizarTitulosVivos() {
   // tiene nada que actualizar (el camino rápido lo cubre _pingTitulos por WS).
   if (!projectId || document.hidden || terminales.size === 0) return;
   let data;
+  const pid = projectId;
   try {
-    const r = await fetch(`/api/projects/${projectId}/terminal-titles`);
+    const r = await fetch(`/api/projects/${pid}/terminal-titles`);
     if (!r.ok) return;
     data = await r.json();
   } catch (_) { return; }  // server reiniciando: el próximo tick reintenta
+  // Respuesta del proyecto anterior (cambio mientras viajaba): su 'trabajando'
+  // apagaba el brillo de las cards del proyecto nuevo hasta el próximo tick.
+  if (String(pid) !== String(projectId)) return;
   for (const [tid, titulo] of Object.entries(data.titles || {})) {
     const el = document.getElementById(`name-${tid}`);
     if (!el || document.activeElement === el) continue;  // no pisar edición en curso
@@ -4334,7 +4380,7 @@ function _quickCrearTerminal(counts, preset) {
   // no tocamos la distribución recordada del proyecto.
   _tlEjecutarBatch(lote, null)
     .then(() => { if (preset) window.TerminalLayout?.aplicarPreset?.(preset); })
-    .catch(err => toast(_sbT('No se pudo crear la terminal: {m}').replace('{m}', err.message), 'error'));
+    .catch(err => toast(_sbT('No se pudo crear la terminal: {m}').replace('{m}', _sbT(err.message)), 'error'));
 }
 
 
@@ -4832,7 +4878,7 @@ async function abrirEditorSkillMd(nombre) {
       taContent.value = data.content || '';
     } catch (err) {
       taContent.value = '';
-      toast(_sbT('Error cargando skill: {m}').replace('{m}', err.message), 'error');
+      toast(_sbT('Error cargando skill: {m}').replace('{m}', _sbT(err.message)), 'error');
     }
   } else {
     tituloEl.textContent = 'Nueva skill';
@@ -5106,7 +5152,7 @@ async function cargarThread(threadId) {
     }
     cerrarModalHistorial();
   } catch (err) {
-    toast(_sbT('Error cargando thread: {m}').replace('{m}', err.message), 'error');
+    toast(_sbT('Error cargando thread: {m}').replace('{m}', _sbT(err.message)), 'error');
   }
 }
 

@@ -211,11 +211,17 @@
 
   const _reduce = () => global.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
 
+  // null = el grupo no existe (4xx); undefined = falla de red/transitoria (NO
+  // es "el vínculo se deshizo": antes rechazaba y el intervalo de 4s llenaba
+  // la consola de promesas sin manejar).
   async function _traer(grupoId, pid) {
     if (pid == null) return null;
-    const r = await fetch(`/api/swarm/grupo/${pid}/${encodeURIComponent(grupoId)}`,
-                          { credentials: 'same-origin' });
-    return r.ok ? r.json() : null;
+    try {
+      const r = await fetch(`/api/swarm/grupo/${pid}/${encodeURIComponent(grupoId)}`,
+                            { credentials: 'same-origin' });
+      if (r.status >= 500) return undefined;
+      return r.ok ? await r.json() : null;
+    } catch (_) { return undefined; }
   }
 
   function _d(e) {
@@ -444,13 +450,17 @@
 
   async function abrir(grupoId, tid, pid) {
     _montar();
-    _abierto = { grupoId, tid, pid: pidDe(pid, global.location?.search),
-                 detalle: null };
+    const sesion = { grupoId, tid, pid: pidDe(pid, global.location?.search),
+                     detalle: null };
+    _abierto = sesion;
     _nodo.querySelector('.sw-panel').innerHTML = '';
     _nodo.classList.add('visible');
     document.addEventListener('keydown', _onEsc, true);
-    const d = await _traer(grupoId, _abierto.pid);
-    if (!_abierto) return;                       // se cerró mientras cargaba
+    const d = await _traer(grupoId, sesion.pid);
+    // Se cerró — o se cerró y se abrió OTRO grupo — mientras cargaba: la
+    // respuesta de este grupo no debe pintarse en el panel del otro.
+    if (_abierto !== sesion) return;
+    if (d === undefined) { cerrar(); return; }   // sin red: no mentir "el vínculo ya no existe"
     if (!d) { _sinGrupo(); return; }
     _abierto.detalle = d;
     _render(d);
@@ -460,9 +470,11 @@
   }
 
   async function refrescar() {
-    if (!_abierto) return;
-    const d = await _traer(_abierto.grupoId, _abierto.pid);
-    if (!_abierto) return;
+    const sesion = _abierto;
+    if (!sesion) return;
+    const d = await _traer(sesion.grupoId, sesion.pid);
+    if (_abierto !== sesion) return;
+    if (d === undefined) return;                 // falla transitoria: el próximo tick reintenta
     if (!d) { _sinGrupo(); return; }             // el grupo se deshizo mientras mirabas
     _abierto.detalle = d;
     _render(d);

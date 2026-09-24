@@ -128,6 +128,21 @@
     cerrar();
   }
   function isOpen() { return state.editorOpen; }
+  // ¿Hay algún archivo con cambios sin guardar? onProjectChanged vacía _cache
+  // (donde viven los buffers), así que el shell pregunta ANTES de cambiar de
+  // proyecto — mismo contrato que JarvisEditor.confirmarDescarteSiSucio.
+  function hayDirty() { return Object.values(_cache).some(b => b && b.dirty); }
+  async function confirmarDescarteSiSucio() {
+    if (!hayDirty()) return true;
+    return global.confirmar?.('Hay archivos sin guardar. ¿Descartar los cambios y continuar?', {
+      titulo: 'Cambios sin guardar', confirmText: 'Descartar y salir',
+      cancelText: 'Seguir editando', peligro: true,
+    }) ?? true;
+  }
+  // Aviso nativo al cerrar/recargar la pestaña (una sola vez, no por proyecto).
+  global.addEventListener('beforeunload', e => {
+    if (hayDirty()) { e.preventDefault(); e.returnValue = ''; }
+  });
 
   // ════════════════ apertura / layout ════════════════
   function _ensureOpen() {
@@ -551,5 +566,5 @@
     if (_cache[path]) delete _cache[path];
     if (state.open.find(t => t.path === path)) cerrarTab(path);
   }
-  global.JarvisSlideEditor = { abrirArchivo, cerrar, toggle, onProjectChanged, isOpen, isDirty, cerrarArchivo };
+  global.JarvisSlideEditor = { abrirArchivo, cerrar, toggle, onProjectChanged, isOpen, isDirty, hayDirty, confirmarDescarteSiSucio, cerrarArchivo };
 })(window);

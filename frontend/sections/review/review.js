@@ -53,13 +53,20 @@
       const e = await r1.json().catch(() => ({}));
       throw new Error(_errMsg(Object.assign({ message: `HTTP ${r1.status}` }, e)));
     }
+    const data = await r1.json();
+    const byAgent = (r2 && r2.ok) ? await r2.json() : null;
+    // Cambió de proyecto mientras viajaba (típico del poll de 12s): NO pisar el
+    // estado — si no, la lista de A se pintaba en B y el commit mandaba paths de
+    // A a /api/projects/B/review/commit. false = respuesta descartada.
+    if (String(pid) !== String(_pid())) return false;
     if (_projectId == null) _projectId = pid;   // adoptamos el de la URL
-    _data = await r1.json();
-    _byAgent = (r2 && r2.ok) ? await r2.json() : null;
+    _data = data;
+    _byAgent = byAgent;
     _cargadoEn = Date.now();
     // Depurar la selección de paths que ya no existen.
     const vivos = new Set((_data.archivos || []).map(a => a.path));
     for (const p of [..._selected]) if (!vivos.has(p)) _selected.delete(p);
+    return true;
   }
 
   // ── Datos derivados ─────────────────────────────────────────────────
@@ -344,8 +351,7 @@
       _selected.clear();
       _activo = null;
       if (inp) inp.value = '';
-      await _cargar();
-      _render();
+      if (await _cargar()) _render();
     } catch (e) {
       toast(_errMsg(e), 'error');
     } finally {
@@ -426,7 +432,7 @@
         </div>
       </div>`;
     pane.querySelector('.rv-refresh').addEventListener('click', async () => {
-      try { await _cargar(); _render(); } catch (e) { toast(_errMsg(e), 'error'); }
+      try { if (await _cargar()) _render(); } catch (e) { toast(_errMsg(e), 'error'); }
     });
     pane.querySelector('#rv-search').addEventListener('input', (e) => {
       _busqueda = e.target.value.trim().toLowerCase();
@@ -446,7 +452,7 @@
         const p = _pane();
         if (!p || p.hidden) return;
         if ($('#rv-msg')?.value) return;   // no recargar mientras se escribe el commit
-        try { await _cargar(); _renderTop(); _renderLista(); } catch (_) {}
+        try { if (await _cargar()) { _renderTop(); _renderLista(); } } catch (_) {}
       }, 12000);
     }
   }
@@ -460,8 +466,7 @@
     if (lista) lista.innerHTML = `<div class="rv-vacio">${_L('Cargando…', 'Loading…')}</div>`;
     const pid = _pid();
     try {
-      await _cargar();
-      if (String(pid) !== String(_pid())) return;   // cambió de proyecto mientras cargaba
+      if (!(await _cargar())) return;   // cambió de proyecto mientras cargaba
       _render();
     } catch (e) {
       if (lista) lista.innerHTML = `<div class="rv-vacio">${_L('No se pudo cargar el review', 'Could not load review')}:<br>${esc(_errMsg(e))}</div>`;

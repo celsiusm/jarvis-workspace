@@ -204,7 +204,11 @@
     try {
       const r = await fetch(`/api/swarm/grupos/${projectId}`, { credentials: 'same-origin' });
       if (!r.ok) return;
-      aplicar((await r.json()).grupos);
+      const d = await r.json();
+      // Respuesta de un proyecto que ya dejamos (cambio rápido A→B): aplicarla
+      // diffeaba contra las cards de B y les borraba los íconos de vínculo.
+      if (String(_pid) !== String(projectId)) return;
+      aplicar(d.grupos);
     } catch { /* sin red: se reintenta en el próximo evento */ }
   }
 

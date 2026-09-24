@@ -1442,10 +1442,21 @@
     if (!_inspectFetch) {
       _inspectFetch = true;
       $('mps-insp-list').innerHTML = `<div class="mps-empty-note">Escaneando el código…</div>`;
-      fetch(`/api/mobile-preview/${_projectId}/textos`).then((r) => r.json()).then((d) => {
+      // El escaneo es lento: si se cambió de proyecto mientras corría, sus
+      // textos (archivo/línea de A) NO deben quedar como los de B — el próximo
+      // /patch-text iría a B con coordenadas de A. Y si falla, se permite
+      // reintentar (antes _inspectFetch quedaba en true para siempre).
+      const pid = _projectId;
+      fetch(`/api/mobile-preview/${pid}/textos`).then((r) => r.json()).then((d) => {
+        if (pid !== _projectId) return;
         _textos = Array.isArray(d.textos) ? d.textos : [];
         _selIdx = -1; _renderSel(); _fillInspList('');
-      }).catch(() => { $('mps-insp-list').innerHTML = `<div class="mps-empty-note">No pude leer los textos del proyecto.</div>`; });
+      }).catch(() => {
+        if (pid !== _projectId) return;
+        _inspectFetch = false;
+        const l = $('mps-insp-list');
+        if (l) l.innerHTML = `<div class="mps-empty-note">No pude leer los textos del proyecto.</div>`;
+      });
     } else {
       _fillInspList('');
     }
