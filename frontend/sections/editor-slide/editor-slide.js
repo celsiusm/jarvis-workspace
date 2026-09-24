@@ -42,7 +42,7 @@
     html: 'html', xml: 'html', svg: 'html', vue: 'html',
   };
   const hlLang = (m) => LANGMAP[m] || 'js';
-  function esc(s) { return String(s).replace(/[&<>]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c])); }
+  function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function isW(c) { return c && /[A-Za-z0-9_@$]/.test(c); }
   function hl(raw, lang) {
     const py = lang === 'py', sl = (lang === 'js' || lang === 'css');

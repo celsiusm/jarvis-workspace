@@ -1157,7 +1157,7 @@
         toast(_t('Subidos: {n}. Algunos no se subieron — {m}').replace('{n}', subidosTotal).replace('{m}', motivos), 'warning');
       }
     } catch (err) {
-      toast(`Error subiendo archivos: ${err.message}`, 'error');
+      toast(_t('Error subiendo archivos: {m}').replace('{m}', err.message), 'error');
     }
   }
 
@@ -2119,7 +2119,7 @@
       g.tabs.set(path, { content: data.content, language: data.language, dirty: false, mtime: data.mtime });
       setActiveTab(path, g);
     } catch (err) {
-      if (!_restaurando) toast(`Error abriendo archivo: ${err.message}`, 'error');
+      if (!_restaurando) toast(_t('Error abriendo archivo: {m}').replace('{m}', err.message), 'error');
     }
   }
 

@@ -421,7 +421,13 @@ const _faseTerminales = {};
 let _wsAvisoTope = false;   // ya avisamos del tope global (1013) en esta ráfaga
 function conectarEventosWs() {
   if (eventsWs) {
-    try { eventsWs.close(); } catch (_) {}
+    // Soltar los handlers ANTES de cerrar: si no, el onclose del socket viejo
+    // corre async tras el cambio de proyecto → pinta "Reconectando…" con el
+    // nuevo ya abierto, infla el backoff, sondea /api/health y agenda un
+    // reconnect que puede voltear al socket nuevo.
+    const viejo = eventsWs;
+    viejo.onopen = viejo.onmessage = viejo.onerror = viejo.onclose = null;
+    try { viejo.close(); } catch (_) {}
     eventsWs = null;
   }
 
@@ -543,7 +549,7 @@ function conectarEventosWs() {
       // Si hay preview_url, avisar en el chat + abrir pestaña (los localhost
       // vivos quedan listados en el menú #jw-localhosts-btn de la barra).
       if (data.preview_url) {
-        agregarMensajeChat('jarvis', `${data.message}\n\n[abrir preview](${data.preview_url})`);
+        agregarMensajeChat('jarvis', `${data.message}\n\n[${_sbT('abrir preview')}](${data.preview_url})`);
         try { window.open(data.preview_url, '_blank', 'noopener'); } catch {}
       } else {
         agregarMensajeChat('jarvis', data.message);
@@ -756,7 +762,9 @@ async function consultarMobilePreview(autoAbrir = false) {
 // Chime generado con WebAudio (sin assets ni red). TASK_DONE = acorde ascendente
 // alegre; TASK_BLOCKED/ERROR = tono grave de atención. Toggle persistido + mute.
 
-let sonidoTareas = localStorage.getItem('jarvis.sonidoTareas') !== 'off';  // default ON
+// try/catch: con el storage bloqueado por el navegador, getItem TIRA y al ser
+// top-level abortaba workspace.js entero.
+let sonidoTareas = (() => { try { return localStorage.getItem('jarvis.sonidoTareas') !== 'off'; } catch (_) { return true; } })();  // default ON
 let _audioCtx = null;
 
 function _ctx() {
@@ -1776,7 +1784,7 @@ function _sbRowHTML(p, idx) {
   const trabajando = status !== 'idle' && !archivado;   // muestra la figura de grilla
   const count     = p.terminales_activas || 0;
   const countHtml = count > 0
-    ? `<span class="sb-row-count" title="${count} terminal${count !== 1 ? 'es' : ''} activa${count !== 1 ? 's' : ''}">${count}</span>`
+    ? `<span class="sb-row-count" title="${_sbT(count !== 1 ? '{n} terminales activas' : '{n} terminal activa').replace('{n}', count)}">${count}</span>`
     : '';
   const title = `${p.nombre}${p.branch ? ' · ' + p.branch : ''}${p.ruta ? '\n' + p.ruta : ''}`;
   // Marcador "El Roster": VETA de color (.sb-icon, tono en la fila) que al trabajar
@@ -2322,7 +2330,7 @@ function _sbPintarBadge(row, count) {
     }
     if (badge.textContent === String(count)) return;   // el poll de 3s no debe tocar el DOM de gusto
     badge.textContent = count;   // solo el número (formato roster, sin la "T")
-    badge.title = `${count} terminal${count !== 1 ? 'es' : ''} activa${count !== 1 ? 's' : ''}`;
+    badge.title = _sbT(count !== 1 ? '{n} terminales activas' : '{n} terminal activa').replace('{n}', count);
   } else {
     badge?.remove();
   }
@@ -2428,7 +2436,7 @@ async function _sbEjecutarAccion(accion, projId) {
             document.title = `JARVIS — ${nuevo}`;
           }
           await cargarSidebar();
-        } catch (err) { nameEl.textContent = original; toast(`No se pudo renombrar: ${err.message}`, 'error'); }
+        } catch (err) { nameEl.textContent = original; toast(_sbT('No se pudo renombrar: {m}').replace('{m}', err.message), 'error'); }
       };
       nameEl.addEventListener('keydown', onKeydown);
       nameEl.addEventListener('blur', () => terminar(true), { once: true });
@@ -2655,7 +2663,7 @@ async function cambiarProyecto(nuevoId) {
     await cargarProyecto();
   } catch (err) {
     console.error('Error cargando proyecto:', err);
-    agregarMensajeChat('jarvis', `No pude cargar el proyecto (${err.message})`);
+    agregarMensajeChat('jarvis', _sbT('No pude cargar el proyecto ({m})').replace('{m}', err.message));
   }
 
   // 5. Resaltar el nuevo activo en el sidebar y refrescar el menú de localhost
@@ -2697,10 +2705,20 @@ window.addEventListener('popstate', async e => {
     window.WebPreview?.onProjectChanged?.(projectId);
     window.MobilePreview?.init?.(projectId);   // re-apuntar antes del restore directo a Móvil (ver cambiarProyecto)
     window.JarvisDock?.onProjectChanged(projectId);
+    window.TerminalAura?.reset?.();                   // auras/semáforo eran del proyecto viejo
+    window.AgentSemaphore?.reset?.();
     window.SwarmOverlay?.cerrar?.();                  // el grupo era del proyecto viejo
     window.SwarmLink?.onProjectChanged?.(projectId);  // vínculos del proyecto nuevo
     _restaurarChat();
-    await cargarProyecto();
+    // El canal /ws/events es POR proyecto: sin re-suscribir, tras Atrás/Adelante
+    // seguían llegando los eventos del proyecto anterior (chat, sonidos, links).
+    conectarEventosWs();
+    try {
+      await cargarProyecto();
+    } catch (err) {
+      console.error('Error cargando proyecto:', err);
+      agregarMensajeChat('jarvis', _sbT('No pude cargar el proyecto ({m})').replace('{m}', err.message));
+    }
     actualizarSidebarActivo();
     actualizarSidebarBadge(terminales.size);
   }
@@ -4316,7 +4334,7 @@ function _quickCrearTerminal(counts, preset) {
   // no tocamos la distribución recordada del proyecto.
   _tlEjecutarBatch(lote, null)
     .then(() => { if (preset) window.TerminalLayout?.aplicarPreset?.(preset); })
-    .catch(err => toast(`No se pudo crear la terminal: ${err.message}`, 'error'));
+    .catch(err => toast(_sbT('No se pudo crear la terminal: {m}').replace('{m}', err.message), 'error'));
 }
 
 
@@ -4814,7 +4832,7 @@ async function abrirEditorSkillMd(nombre) {
       taContent.value = data.content || '';
     } catch (err) {
       taContent.value = '';
-      toast(`Error cargando skill: ${err.message}`, 'error');
+      toast(_sbT('Error cargando skill: {m}').replace('{m}', err.message), 'error');
     }
   } else {
     tituloEl.textContent = 'Nueva skill';
@@ -4865,7 +4883,7 @@ document.getElementById('ps-btn-save-skill')?.addEventListener('click', async ()
 
 document.getElementById('ps-btn-delete-skill')?.addEventListener('click', async () => {
   if (!psEditingSkillName) return;
-  if (!(await confirmar(`¿Eliminar la skill "${psEditingSkillName}"?`, { peligro: true, confirmText: 'Eliminar' }))) return;
+  if (!(await confirmar(_sbT('¿Eliminar la skill "{s}"?').replace('{s}', psEditingSkillName), { peligro: true, confirmText: _sbT('Eliminar') }))) return;
   try {
     const res = await fetch(`/api/projects/${projectId}/skills-md/${encodeURIComponent(psEditingSkillName)}`, { method: 'DELETE' });
     if (!res.ok && res.status !== 204) throw new Error(`HTTP ${res.status}`);
@@ -4948,10 +4966,10 @@ function mostrarComandoInstalacion(plugin) {
       await navigator.clipboard.writeText(cmd);
       const btn = document.getElementById('btn-copy-install-cmd');
       const orig = btn.textContent;
-      btn.textContent = 'Copiado';
+      btn.textContent = _sbT('Copiado');
       setTimeout(() => { btn.textContent = orig; }, 1500);
     } catch {
-      toast(`Copiá manualmente: ${cmd}`, 'info');
+      toast(_sbT('Copiá manualmente: {c}').replace('{c}', cmd), 'info');
     }
   };
 }
@@ -5088,7 +5106,7 @@ async function cargarThread(threadId) {
     }
     cerrarModalHistorial();
   } catch (err) {
-    toast(`Error cargando thread: ${err.message}`, 'error');
+    toast(_sbT('Error cargando thread: {m}').replace('{m}', err.message), 'error');
   }
 }
 
@@ -5131,7 +5149,7 @@ function exportarConversacion() {
     hour: '2-digit', minute: '2-digit',
   });
 
-  const lineas = [`# Conversación JARVIS — ${proyectoNombre} — ${fechaHumana}`, ''];
+  const lineas = [`${_sbT('# Conversación JARVIS —')} ${proyectoNombre} — ${fechaHumana}`, ''];
   for (const m of mensajes) {
     const autor = m.role === 'jarvis' ? 'JARVIS' : 'Usuario';
     lineas.push(`**${autor}:** ${m.content || ''}`, '');

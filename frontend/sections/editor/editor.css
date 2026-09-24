@@ -870,8 +870,8 @@
   backdrop-filter: blur(2px);
 }
 .ed-diff-modal {
-  width: min(1400px, 94vw);
-  height: min(85vh, 900px);
+  width: min(1400px, calc(var(--jw-vw, 100vw) * 0.94));
+  height: min(calc(var(--jw-vh, 100vh) * 0.85), 900px);
   display: flex;
   flex-direction: column;
   background: var(--ob-bg-1, #0d1117);

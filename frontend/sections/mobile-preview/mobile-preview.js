@@ -1150,7 +1150,7 @@
     try { if (on) localStorage.setItem(_lsSinTel(), '1'); else localStorage.removeItem(_lsSinTel()); } catch { /* privado */ }
   }
   function _addPhone(devKey) {
-    if (S.phones.length >= MAX_PHONES) { _toast(`Máximo ${MAX_PHONES} teléfonos`); return; }
+    if (S.phones.length >= MAX_PHONES) { _toast(_t('Máximo {n} teléfonos').replace('{n}', MAX_PHONES)); return; }
     _setSinTel(false);
     const dev = (typeof devKey === 'string' && DEVS[devKey]) ? devKey : (S.phones[0] ? S.phones[0].dev : 'ip15p');
     let x = 0, y = 0;
@@ -1341,7 +1341,7 @@
   }
   function _hideCtx() { const c = $('mps-ctx'); if (c) c.classList.remove('show'); }
   function _dupPhone(id) {
-    if (S.phones.length >= MAX_PHONES) { _toast(`Máximo ${MAX_PHONES} teléfonos`); return; }
+    if (S.phones.length >= MAX_PHONES) { _toast(_t('Máximo {n} teléfonos').replace('{n}', MAX_PHONES)); return; }
     const p = _phone(id); if (!p) return;
     const o = _outer(p);
     S.phones.push({ id: _seq++, dev: p.dev, x: p.x + o.w + 70, y: p.y, ps: p.ps, landscape: p.landscape, net: p.net });

@@ -1172,7 +1172,7 @@ class OrchestratorPanel {
 
     // Progress bar slim (2px) arriba del card: % de pasos done / total.
     const totalSteps = steps.length || 1;
-    const doneSteps  = plan.steps.filter(s => s.status === 'done').length;
+    const doneSteps  = steps.filter(s => s.status === 'done').length;
     const progressPct = Math.round((doneSteps / totalSteps) * 100);
 
     // Ícono contextual del header (SVG stroke vía ui.js, heurística por título)
@@ -1198,7 +1198,7 @@ class OrchestratorPanel {
         <div class="orch-action-head">
           <span class="orch-action-icon" aria-hidden="true">${iconCtx}</span>
           <span class="orch-action-title">${orchEsc(plan.title)}</span>
-          <span class="orch-action-pill">${doneSteps}/${plan.steps.length} STEPS</span>
+          <span class="orch-action-pill">${doneSteps}/${steps.length} STEPS</span>
         </div>
         <div class="orch-action-rows">${rows}</div>
         ${doneBar}

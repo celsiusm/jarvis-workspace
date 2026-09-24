@@ -229,12 +229,18 @@
       v.innerHTML = '<div class="mem-vacio">Elegí una memoria de la lista.</div>';
       return;
     }
+    // slug/proyecto CONGELADOS: si mientras viajaba la respuesta se eligió otra
+    // memoria, esta respuesta ya no vale — y Borrar/Guardar deben actuar sobre
+    // la memoria MOSTRADA, no sobre la global _slugAbierta (borraba la otra).
+    const slug = _slugAbierta, pid = _projectId;
     let mem;
     try {
-      const r = await fetch(`/api/projects/${_projectId}/memory/${_slugAbierta}`);
+      const r = await fetch(`/api/projects/${pid}/memory/${slug}`);
+      if (slug !== _slugAbierta || pid !== _projectId) return;
       if (!r.ok) { v.innerHTML = '<div class="mem-vacio">No se pudo cargar.</div>'; return; }
       mem = await r.json();
     } catch { return; }
+    if (slug !== _slugAbierta || pid !== _projectId) return;
 
     v.innerHTML = `
       <div class="mem-view-head">
@@ -260,7 +266,7 @@
 
     v.querySelector('#mem-borrar').addEventListener('click', async () => {
       if (!(await confirmar(_t('¿Borrar la memoria "{t}"?').replace('{t}', mem.titulo), { peligro: true, confirmText: 'Borrar' }))) return;
-      await fetch(`/api/projects/${_projectId}/memory/${_slugAbierta}`, { method: 'DELETE' });
+      await fetch(`/api/projects/${pid}/memory/${slug}`, { method: 'DELETE' });
       _slugAbierta = null;
       await _cargar(); _renderBody();
     });
@@ -279,7 +285,7 @@
       ta.focus();
       v.querySelector('#mem-cancelar').addEventListener('click', _renderViewer);
       v.querySelector('#mem-guardar').addEventListener('click', async () => {
-        await fetch(`/api/projects/${_projectId}/memory/${_slugAbierta}`, {
+        await fetch(`/api/projects/${pid}/memory/${slug}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ contenido: ta.value }),

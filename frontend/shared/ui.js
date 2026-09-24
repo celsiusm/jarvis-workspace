@@ -98,6 +98,9 @@
    * tipos: 'info' (default) | 'success' | 'error' | 'warning'
    */
   function toast(mensaje, tipo = 'info', duracion = 4000) {
+    // Alias que usan varias secciones ('ok' / 'warn'): sin normalizar caían al
+    // estilo neutro (sin borde de color y con el ícono de info).
+    tipo = ({ ok: 'success', warn: 'warning' })[tipo] || tipo;
     const cont = _contenedorToasts();
     const el = document.createElement('div');
     el.className = `ob-toast ${tipo}`;

@@ -241,7 +241,7 @@ body.jw-rail .jw-door .jw-door-fill { opacity: 0; }
 }
 @keyframes jw-seam {
   0%, 55%   { transform: translateX(0); }
-  85%, 100% { transform: translateX(calc(100vw + 220px)); }
+  85%, 100% { transform: translateX(calc(var(--jw-vw, 100vw) + 220px)); }
 }
 @media (prefers-reduced-motion: reduce) {
   .jw-seam { display: none; }

@@ -142,7 +142,7 @@
       'Cerrar pestaña': 'Close tab',
       'Disposición de paneles': 'Panel layout',
       'Atrás': 'Back', 'Adelante': 'Forward', 'Recargar': 'Reload',
-      'Pestañas abiertas': 'Open tabs', 'Reciente': 'Recent', 'Ir a': 'Go to',
+      'Pestañas abiertas': 'Open tabs', 'Pestañas': 'Tabs', 'Buscá o pegá una URL': 'Search or paste a URL', 'Reciente': 'Recent', 'Ir a': 'Go to',
     });
     _cont.innerHTML = `
       <div class="br-wrap">
@@ -277,8 +277,23 @@
       const tab = { id, url: null, titulo: null, favicon: null, ws: null, img: null, cell: null, start: null, listo: false, cargando: false };
       _tabs.push(tab); _crearCelda(tab);
     }
-    _tabs.forEach((t, i) => { if (t.cell) t.cell.hidden = i >= n; });
+    _aplicarVisibilidad();
     _renderTabs();
+  }
+
+  // Qué celdas se ven: con N paneles, las N primeras — pero la pestaña ACTIVA
+  // siempre entra (ocupa el último panel). Antes se ocultaba por posición: en
+  // el layout 1 (default) solo se veía la pestaña 0, y una pestaña nueva o un
+  // click en otra de la barra no cambiaban nada en pantalla.
+  function _aplicarVisibilidad() {
+    const n = parseInt(_layout, 10) || 1;
+    const visibles = new Set(_tabs.slice(0, n).map((t) => t.id));
+    const act = _activa();
+    if (act && !visibles.has(act.id)) {
+      visibles.delete(_tabs[n - 1]?.id);
+      visibles.add(act.id);
+    }
+    _tabs.forEach((t) => { if (t.cell) t.cell.hidden = !visibles.has(t.id); });
     _programarResize();
   }
 
@@ -318,6 +333,7 @@
   function _render() {
     const t = _activa();
     _input.value = (t && t.url) || '';
+    _aplicarVisibilidad();
     _renderTabs();
     _marcarFoco();
   }
@@ -419,10 +435,17 @@
   function abrirLink(url) { if (!_montado) { _pendienteUrl = url; return; } setUrl(url); }
   function openExternal() { const u = getUrl(); if (u) window.open(u, '_blank', 'noopener'); }
   function refrescarSiExiste(url) {
-    const norm = normalizarUrl(url);
-    const t = _tabs.find((x) => x.url === norm);
+    // Sin la barra final: el server reporta `page.url` de Chromium
+    // (`http://localhost:5173/`) y dev_detect manda `http://localhost:5173` —
+    // con === nunca matcheaban y el auto-refresh no andaba.
+    const sinBarra = (u) => String(u || '').replace(/\/+$/, '');
+    const norm = sinBarra(normalizarUrl(url));
+    const t = norm ? _tabs.find((x) => sinBarra(x.url) === norm) : null;
     if (!t) return false;
-    _activarTab(t.id); refresh(); return true;
+    // Activar SIN robar el foco: esto lo dispara un evento de fondo (un agente
+    // reinició su dev server) mientras el usuario puede estar tipeando.
+    _activaId = t.id; _focoId = t.id; _render();
+    refresh(); return true;
   }
   function onProjectChanged(pid) {
     _pid = pid;
