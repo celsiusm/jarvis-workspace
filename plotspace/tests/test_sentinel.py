@@ -219,3 +219,11 @@ def test_procesar_senal_libre_registra_evento_y_uso():
 def test_procesar_senal_libre_sin_archivo_es_none():
     with tempfile.TemporaryDirectory() as d:
         assert sen.procesar_senal_libre(d, 7, 99) is None
+
+
+def test_motivo_null_no_se_guarda_como_texto_None():
+    # `"motivo": null` en el JSON del agente se guardaba como el string "None"
+    # (str(None)) y llegaba así al destilador de lecciones.
+    from plotspace.core import sentinel as _s
+    r = _s.parsear('{"estado": "blocked", "motivo": null}')
+    assert r is not None and r['motivo'] == ''

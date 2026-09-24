@@ -2156,10 +2156,10 @@ async def instalar_cli(cli_id: str):
     if not _clis.comando_instalar(cli_id):
         raise HTTPException(status_code=400, detail='ese agente no se instala desde acá')
 
-    await broadcaster.broadcast({'type': 'cli_instalando', 'cli': cli_id})
+    await broadcaster.broadcast_global({'type': 'cli_instalando', 'cli': cli_id})
     r = await asyncio.to_thread(_clis.instalar, cli_id)
     _CLIS_CACHE['data'] = None   # el estado cambió: que la próxima consulta re-detecte
-    await broadcaster.broadcast({'type': 'cli_instalado', 'cli': cli_id,
+    await broadcaster.broadcast_global({'type': 'cli_instalado', 'cli': cli_id,
                                  'ok': r['ok'], 'salida': r['salida'][-400:]})
     return r
 

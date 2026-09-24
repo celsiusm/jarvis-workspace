@@ -574,8 +574,8 @@ async def poller_purga_logs():
                 _huerfanos_avisados.clear()
                 _huerfanos_avisados.update(pids)
                 from plotspace.core.events import broadcaster
-                await broadcaster.broadcast({'type': 'sistema_huerfanos',
-                                             'procesos': pesados})
+                await broadcaster.broadcast_global({'type': 'sistema_huerfanos',
+                                                    'procesos': pesados})
                 print(f'[mantenimiento] janitor: {len(pesados)} huérfanos pesados '
                       f'detectados (avisados por WS): {[p["pid"] for p in pesados]}')
             elif not pesados:

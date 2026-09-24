@@ -31,12 +31,18 @@ def _es_ruta_protegida(ruta_abs: str) -> bool:
     /home/user/jarvis se llevaron el repo entero. Falla cerrado."""
     if not ruta_abs:
         return False
-    if ruta_abs in RUTAS_PROHIBIDAS or ruta_abs == os.path.expanduser('~'):
-        return True
-    if (ruta_abs == _REPO_ROOT
-            or _REPO_ROOT.startswith(ruta_abs + os.sep)      # ruta_abs es ancestro del repo
-            or ruta_abs.startswith(_REPO_ROOT + os.sep)):    # ruta_abs está dentro del repo
-        return True
+    # Se evalúa la ruta tal cual Y resuelta (realpath): un proyecto registrado
+    # bajo un symlink (~/jw → ~/jarvis-workspace) esquivaba el blindaje por
+    # comparación de strings, y rmtree solo rechaza el symlink en el tope.
+    raiz_real = os.path.realpath(_REPO_ROOT)
+    for ruta in {ruta_abs, os.path.realpath(ruta_abs)}:
+        if ruta in RUTAS_PROHIBIDAS or ruta == os.path.expanduser('~'):
+            return True
+        for raiz in {_REPO_ROOT, raiz_real}:
+            if (ruta == raiz
+                    or raiz.startswith(ruta + os.sep)      # ruta es ancestro del repo
+                    or ruta.startswith(raiz + os.sep)):    # ruta está dentro del repo
+                return True
     return False
 
 async def _avisar_projects_update():

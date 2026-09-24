@@ -82,6 +82,17 @@ def test_nombre_de_sesion_es_el_historico():
     assert TmuxBackend().nombre_sesion(441) == 'jarvis_441'
 
 
+def test_targets_tmux_son_exactos_no_por_prefijo(monkeypatch):
+    # Sin '=', tmux resuelve por PREFIJO: con `jarvis_1` muerta y `jarvis_12`
+    # viva, has-session/send-keys/capture-pane de la 1 caían en la 12.
+    f = _fake(monkeypatch, {'has-session': (0, '')})
+    b = TmuxBackend()
+    b.existe(1)
+    assert f.argv_con('has-session') == ['tmux', 'has-session', '-t', '=jarvis_1']
+    b.enviar_tecla(1, 'Enter')
+    assert f.argv_con('send-keys')[3] == '=jarvis_1:'
+
+
 # ── creación ─────────────────────────────────────────────────────────────
 
 def test_crear_arma_el_argv_completo(monkeypatch, tmp_path):
@@ -182,14 +193,14 @@ def test_enviar_texto_es_literal(monkeypatch):
     f = _fake(monkeypatch)
     TmuxBackend().enviar_texto(3, '--peligroso Enter')
     argv = f.argv_con('send-keys')
-    assert argv == ['tmux', 'send-keys', '-t', 'jarvis_3', '-l', '--', '--peligroso Enter']
+    assert argv == ['tmux', 'send-keys', '-t', '=jarvis_3:', '-l', '--', '--peligroso Enter']
 
 
 def test_enviar_tecla_no_es_literal(monkeypatch):
     # Enter SÍ tiene que interpretarse como tecla: va por otro camino a propósito.
     f = _fake(monkeypatch)
     TmuxBackend().enviar_tecla(3, 'Enter')
-    assert f.argv_con('send-keys') == ['tmux', 'send-keys', '-t', 'jarvis_3', 'Enter']
+    assert f.argv_con('send-keys') == ['tmux', 'send-keys', '-t', '=jarvis_3:', 'Enter']
 
 
 # ── lectura ──────────────────────────────────────────────────────────────
@@ -199,7 +210,7 @@ def test_capturar_pantalla_y_scrollback(monkeypatch):
     b = TmuxBackend()
 
     assert b.capturar(4) == 'contenido'
-    assert f.argv_con('capture-pane') == ['tmux', 'capture-pane', '-t', 'jarvis_4', '-p']
+    assert f.argv_con('capture-pane') == ['tmux', 'capture-pane', '-t', '=jarvis_4:', '-p']
 
     f.llamadas.clear()
     b.capturar(4, lineas=100)

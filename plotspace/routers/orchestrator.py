@@ -1753,11 +1753,14 @@ def comandos_pegar_tarea(session: str, texto: str) -> list:
     de tmux el texto viaja entero y de una; `-p` deja que TMUX decida si lo
     envuelve en bracketed paste, según lo que haya pedido la app — meter los
     escapes a mano se vería como basura en una app que no los entiende.
-    `-d` borra el buffer al usarlo (si no, queda uno colgado por tarea)."""
-    buf = f'jarvis_tarea_{session}'
+    `-d` borra el buffer al usarlo (si no, queda uno colgado por tarea).
+    El buffer lleva un sufijo único: dos entregas concurrentes a la misma
+    terminal (mailbox + asignar tarea) se pisaban el texto. Target `=sesión:`
+    exacto (sin '=' tmux resuelve por prefijo: la 1 muerta pegaba en la 12)."""
+    buf = f'jarvis_tarea_{session}_{uuid.uuid4().hex[:8]}'
     return [
         ['tmux', 'set-buffer', '-b', buf, '--', texto],
-        ['tmux', 'paste-buffer', '-b', buf, '-t', session, '-p', '-d'],
+        ['tmux', 'paste-buffer', '-b', buf, '-t', f'={session}:', '-p', '-d'],
     ]
 
 
@@ -2336,23 +2339,32 @@ async def send_to_agent(terminal_id: int, mensaje: str):
     # TMUX decida si envolverlo en bracketed paste según lo que pidió la app.
     # Bonus: el texto nunca pasa por el lookup de nombres de tecla, así que una
     # línea del MAILBOX con 'Enter' o 'C-c' adentro no se interpreta como tecla.
-    err = b''
+    # subprocess.run en un thread (regla del repo: nada de
+    # create_subprocess_exec para tmux — `communicate()` puede no volver nunca)
+    # y con timeout, para que un tmux trabado no cuelgue el dispatch.
+    pegado = True
     for argv in comandos_pegar_tarea(session, mensaje):
-        proc = await asyncio.create_subprocess_exec(
-            *argv, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.PIPE)
-        _, e = await proc.communicate()
-        if proc.returncode != 0:
-            err = e
-            print(f'[send_to_agent] ERROR rc={proc.returncode}: '
+        try:
+            r = await asyncio.to_thread(
+                subprocess.run, argv, stdout=subprocess.DEVNULL,
+                stderr=subprocess.PIPE, timeout=5)
+            rc, e = r.returncode, r.stderr or b''
+        except subprocess.TimeoutExpired:
+            rc, e = -1, b'timeout'
+        if rc != 0:
+            pegado = False
+            print(f'[send_to_agent] ERROR rc={rc}: '
                   f'{e.decode(errors="replace").strip()}')
             break
     else:
         print(f'[send_to_agent] OK → {session} ({len(mensaje)} chars pegados)')
-    backend().enviar_tecla(terminal_id, 'Enter')
-
-    # Esperar 1s y enviar Enter adicional para que Claude procese la tarea
-    await asyncio.sleep(1)
-    backend().enviar_tecla(terminal_id, 'Enter')
+    if pegado:
+        # Enter solo si el texto llegó: sin pegado, un Enter a ciegas manda
+        # lo que el usuario tuviera a medio escribir en el prompt.
+        await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
+        # Esperar 1s y enviar Enter adicional para que Claude procese la tarea
+        await asyncio.sleep(1)
+        await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
 
     # Registrar en task_events con el project_id REAL de la terminal (antes se
     # insertaba 0 fijo → filas corruptas que no matcheaban ningún proyecto).

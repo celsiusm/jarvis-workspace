@@ -32,7 +32,7 @@ def test_snapshot_pane_captura_visible_sin_join():
     assert lineas == ['linea uno', 'linea dos   ', '']
     argv = m.call_args.args[0]
     assert argv[:2] == ['tmux', 'capture-pane']
-    assert '-t' in argv and 'jarvis_5' in argv
+    assert '-t' in argv and '=jarvis_5:' in argv
     assert '-p' in argv          # plano (texto)
     assert '-J' not in argv      # NO join: el grid se compara fila a fila
     assert '-S' not in argv      # solo la pantalla visible, no el scrollback

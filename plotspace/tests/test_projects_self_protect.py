@@ -47,6 +47,15 @@ def test_prefijo_textual_no_confunde():
     assert _es_ruta_protegida(hermano) is False
 
 
+def test_symlink_al_repo_no_esquiva_el_blindaje(tmp_path):
+    # Un proyecto registrado bajo un symlink al repo (~/jw → ~/jarvis-workspace)
+    # comparaba strings distintos y quedaba borrable: rmtree se llevaba el árbol.
+    link = tmp_path / 'jw'
+    os.symlink(_REPO_ROOT, link)
+    assert _es_ruta_protegida(str(link)) is True
+    assert _es_ruta_protegida(str(link / 'plotspace')) is True
+
+
 def main():
     test_es_ruta_protegida()
     test_repo_root_apunta_a_la_raiz()
