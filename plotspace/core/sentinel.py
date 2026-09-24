@@ -51,7 +51,7 @@ def parsear(texto):
         usadas = []
     usadas = [u for u in usadas if isinstance(u, str) and u.strip()]
     return {'estado': estado, 'keyword': ESTADOS[estado],
-            'motivo': str(d.get('motivo', '')), 'memorias_usadas': usadas}
+            'motivo': str(d.get('motivo') or ''), 'memorias_usadas': usadas}
 
 
 def ruta_sentinel(project_ruta, terminal_id):

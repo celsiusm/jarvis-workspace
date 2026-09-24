@@ -56,6 +56,8 @@ keyword_monitors: dict = {}
 # El monitor sigue siendo el ÚNICO que decide/escribe (capture+diff+keyword); el
 # trigger solo ahorra latencia. El Event vive/muere con la Task del monitor.
 _monitor_wakeups: dict = {}
+# Pausa tras un error transitorio en una vuelta del monitor (antes de reintentar).
+_MONITOR_PAUSA_ERROR = 1.0
 
 KEYWORDS_CONTROL = {"TASK_DONE", "TASK_BLOCKED", "TASK_ERROR"}
 
@@ -2156,10 +2158,10 @@ async def instalar_cli(cli_id: str):
     if not _clis.comando_instalar(cli_id):
         raise HTTPException(status_code=400, detail='ese agente no se instala desde acá')
 
-    await broadcaster.broadcast({'type': 'cli_instalando', 'cli': cli_id})
+    await broadcaster.broadcast_global({'type': 'cli_instalando', 'cli': cli_id})
     r = await asyncio.to_thread(_clis.instalar, cli_id)
     _CLIS_CACHE['data'] = None   # el estado cambió: que la próxima consulta re-detecte
-    await broadcaster.broadcast({'type': 'cli_instalado', 'cli': cli_id,
+    await broadcaster.broadcast_global({'type': 'cli_instalado', 'cli': cli_id,
                                  'ok': r['ok'], 'salida': r['salida'][-400:]})
     return r
 
@@ -2929,35 +2931,42 @@ async def _monitor_keywords(terminal_id: int, project_id: int):
                 pass
             ev.clear()
 
-            # Verificar que la terminal sigue activa (DB sync fuera del loop: to_thread).
-            def _sigue_activa():
-                conn = get_db()
-                try:
-                    cur = conn.cursor()
-                    cur.execute('SELECT activa FROM terminals WHERE id = ?', (terminal_id,))
-                    r = cur.fetchone()
-                    return bool(r and r['activa'])
-                finally:
-                    conn.close()
-            if not await asyncio.to_thread(_sigue_activa):
-                break
+            # try/except POR VUELTA: un error transitorio (sqlite locked, un
+            # capture raro) se loguea y se reintenta — antes mataba el monitor
+            # para siempre. CancelledError no es Exception: sigue cortando.
+            try:
+                # Verificar que la terminal sigue activa (DB sync fuera del loop: to_thread).
+                def _sigue_activa():
+                    conn = get_db()
+                    try:
+                        cur = conn.cursor()
+                        cur.execute('SELECT activa FROM terminals WHERE id = ?', (terminal_id,))
+                        r = cur.fetchone()
+                        return bool(r and r['activa'])
+                    finally:
+                        conn.close()
+                if not await asyncio.to_thread(_sigue_activa):
+                    break
 
-            capture = await _capture_tmux_output(terminal_id)
-            if not capture or capture == last_capture:
+                capture = await _capture_tmux_output(terminal_id)
+                if not capture or capture == last_capture:
+                    last_capture = capture
+                    continue
+
+                # Solo evaluar líneas nuevas que no estaban en la captura anterior
+                old_lines = set(last_capture.splitlines())
+                new_lines = [l for l in capture.splitlines() if l.strip() and l not in old_lines]
+
+                for kw in KEYWORDS_CONTROL:
+                    # _linea_es_keyword filtra instrucciones tipo "escribí TASK_DONE"
+                    if any(_linea_es_keyword(l, kw) for l in new_lines):
+                        await _procesar_keyword_evento(terminal_id, project_id, kw)
+                        break  # un evento por ciclo de 5s
+
                 last_capture = capture
-                continue
-
-            # Solo evaluar líneas nuevas que no estaban en la captura anterior
-            old_lines = set(last_capture.splitlines())
-            new_lines = [l for l in capture.splitlines() if l.strip() and l not in old_lines]
-
-            for kw in KEYWORDS_CONTROL:
-                # _linea_es_keyword filtra instrucciones tipo "escribí TASK_DONE"
-                if any(_linea_es_keyword(l, kw) for l in new_lines):
-                    await _procesar_keyword_evento(terminal_id, project_id, kw)
-                    break  # un evento por ciclo de 5s
-
-            last_capture = capture
+            except Exception as e:
+                print(f'[monitor] Error terminal {terminal_id} (reintento): {e}')
+                await asyncio.sleep(_MONITOR_PAUSA_ERROR)
 
     except asyncio.CancelledError:
         pass

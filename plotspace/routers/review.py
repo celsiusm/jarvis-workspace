@@ -12,6 +12,8 @@ from fastapi import APIRouter, Body, HTTPException, Query
 from plotspace.core.database import get_db
 
 router = APIRouter(prefix="/api", tags=["review"])
+# Todos los endpoints son `def` PLANOS (no async): llaman a git síncrono y
+# FastAPI los corre en el threadpool — así un diff lento no congela el event loop.
 
 MAX_DIFF_BYTES = 400_000       # cap defensivo: el diff GLOBAL se trunca para la UI
 MAX_DIFF_FILE_BYTES = 80_000   # cap por archivo en la vista por-agente
@@ -31,16 +33,33 @@ def _ruta_proyecto(project_id: int) -> str:
     return row['ruta']
 
 
-def _git(cwd: str, *args: str) -> tuple[int, str]:
+GIT_TIMEOUT = 15          # un `git diff` enorme o un repo trabado no debe colgar el handler
+GIT_COMMIT_TIMEOUT = 120  # el commit corre hooks (guard de propiedad, scanner de secretos)
+
+
+def _git_full(cwd: str, *args: str, timeout: int = GIT_TIMEOUT) -> tuple[int, str, str]:
     """git síncrono (regla del proyecto: subprocess.run para git de control).
-    timeout=15s: un `git diff` enorme o un repo trabado no debe colgar el handler/loop."""
+    Devuelve (rc, stdout, stderr) SEPARADOS: los warnings de git van a stderr y
+    no deben mezclarse con la salida que se parsea (porcelain/numstat/...)."""
     try:
-        r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True, timeout=15)
-        return r.returncode, (r.stdout or '') + (r.stderr or '')
+        r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True,
+                           timeout=timeout)
+        return r.returncode, (r.stdout or ''), (r.stderr or '')
     except subprocess.TimeoutExpired:
-        return -1, 'git timeout'
+        return -1, '', 'git timeout'
     except Exception as e:
-        return -1, str(e)
+        return -1, '', str(e)
+
+
+def _git(cwd: str, *args: str) -> tuple[int, str]:
+    """(rc, stdout) — SOLO stdout, que es lo que se parsea. Para mensajes de
+    error con stderr usar _git_full."""
+    rc, out, _ = _git_full(cwd, *args)
+    return rc, out
+
+
+def _error_git(out: str, err: str, defecto: str) -> str:
+    return (err.strip() + '\n' + out.strip()).strip() or defecto
 
 
 # ─── Atribución archivo→agente (lógica PURA, testeable sin git/DB) ────────────
@@ -144,7 +163,7 @@ def _path_relativo_seguro(base: str, rel: str):
 
 
 @router.get("/projects/{project_id}/review/by-agent")
-async def review_por_agente(project_id: int):
+def review_por_agente(project_id: int):
     """Mismo diff que GET /review pero SEGMENTADO por agente: atribuye cada
     archivo cambiado a su dueño (snapshot de agent_live) y agrupa. Los archivos
     sin dueño vigente caen en 'sin_atribuir'."""
@@ -186,7 +205,7 @@ async def review_por_agente(project_id: int):
 
 
 @router.post("/projects/{project_id}/review/commit")
-async def commit_por_agente(project_id: int, body: dict = Body(default=None)):
+def commit_por_agente(project_id: int, body: dict = Body(default=None)):
     """Commitea SOLO los archivos indicados (git add explícito + commit acotado
     a esos paths). Respeta la regla del árbol compartido: NUNCA `git add -A`, así
     no se barre el trabajo a medio hacer de otros agentes. Los hooks corren (sin
@@ -215,14 +234,16 @@ async def commit_por_agente(project_id: int, body: dict = Body(default=None)):
         rels.append(rel)
 
     # git add explícito de ESOS archivos.
-    rc, out = _git(cwd, 'add', '--', *rels)
+    rc, out, err = _git_full(cwd, 'add', '--', *rels)
     if rc != 0:
-        return {"ok": False, "error": out.strip() or "git add falló"}
+        return {"ok": False, "error": _error_git(out, err, "git add falló")}
 
     # Commit acotado a esos paths (no arrastra otra cosa staged por otro agente).
-    rc, out = _git(cwd, 'commit', '-m', mensaje, '--', *rels)
+    # Timeout largo: los hooks pre-commit pueden tardar bastante más de 15s.
+    rc, out, err = _git_full(cwd, 'commit', '-m', mensaje, '--', *rels,
+                             timeout=GIT_COMMIT_TIMEOUT)
     if rc != 0:
-        return {"ok": False, "error": out.strip() or "git commit falló"}
+        return {"ok": False, "error": _error_git(out, err, "git commit falló")}
 
     _, hash_ = _git(cwd, 'rev-parse', '--short', 'HEAD')
     return {"ok": True, "commit": hash_.strip()}
@@ -232,7 +253,7 @@ async def commit_por_agente(project_id: int, body: dict = Body(default=None)):
 
 
 @router.get("/projects/{project_id}/review")
-async def estado_review(project_id: int):
+def estado_review(project_id: int):
     """Archivos cambiados + diff unificado del working tree contra HEAD
     (incluye untracked vía intent-to-add virtual con --no-index fallback)."""
     cwd = _ruta_proyecto(project_id)
@@ -351,7 +372,7 @@ def _parse_blame(out: str) -> dict:
 
 
 @router.get("/projects/{project_id}/files/git-diff")
-async def git_diff_archivo(project_id: int, path: str = Query(...)):
+def git_diff_archivo(project_id: int, path: str = Query(...)):
     """Rangos de líneas cambiadas de UN archivo vs HEAD (gutter del editor)."""
     cwd = _ruta_proyecto(project_id)
     rel = _path_relativo_seguro(cwd, path)
@@ -379,7 +400,7 @@ async def git_diff_archivo(project_id: int, path: str = Query(...)):
 
 
 @router.get("/projects/{project_id}/files/git-blame")
-async def git_blame_linea(project_id: int, path: str = Query(...), line: int = Query(1)):
+def git_blame_linea(project_id: int, path: str = Query(...), line: int = Query(1)):
     """Blame de UNA línea (blame inline del editor)."""
     cwd = _ruta_proyecto(project_id)
     rel = _path_relativo_seguro(cwd, path)
@@ -396,7 +417,7 @@ async def git_blame_linea(project_id: int, path: str = Query(...), line: int = Q
 
 
 @router.get("/projects/{project_id}/review/file")
-async def review_file(project_id: int, path: str = Query(...)):
+def review_file(project_id: int, path: str = Query(...)):
     """Par original (HEAD) vs modificado (working tree) de UN archivo, para el
     diff de Monaco del Review. `binary` → la UI cae al diff de texto."""
     cwd = _ruta_proyecto(project_id)
@@ -408,7 +429,7 @@ async def review_file(project_id: int, path: str = Query(...)):
         raise HTTPException(status_code=400, detail="El proyecto no es un repo git")
 
     rc, original = _git(cwd, 'show', f'HEAD:{rel}')
-    if rc != 0 or 'fatal:' in original[:20]:
+    if rc != 0:
         original = ''
     original = original.replace('\r\n', '\n')
 

@@ -1150,7 +1150,7 @@
     try { if (on) localStorage.setItem(_lsSinTel(), '1'); else localStorage.removeItem(_lsSinTel()); } catch { /* privado */ }
   }
   function _addPhone(devKey) {
-    if (S.phones.length >= MAX_PHONES) { _toast(`Máximo ${MAX_PHONES} teléfonos`); return; }
+    if (S.phones.length >= MAX_PHONES) { _toast(_t('Máximo {n} teléfonos').replace('{n}', MAX_PHONES)); return; }
     _setSinTel(false);
     const dev = (typeof devKey === 'string' && DEVS[devKey]) ? devKey : (S.phones[0] ? S.phones[0].dev : 'ip15p');
     let x = 0, y = 0;
@@ -1341,7 +1341,7 @@
   }
   function _hideCtx() { const c = $('mps-ctx'); if (c) c.classList.remove('show'); }
   function _dupPhone(id) {
-    if (S.phones.length >= MAX_PHONES) { _toast(`Máximo ${MAX_PHONES} teléfonos`); return; }
+    if (S.phones.length >= MAX_PHONES) { _toast(_t('Máximo {n} teléfonos').replace('{n}', MAX_PHONES)); return; }
     const p = _phone(id); if (!p) return;
     const o = _outer(p);
     S.phones.push({ id: _seq++, dev: p.dev, x: p.x + o.w + 70, y: p.y, ps: p.ps, landscape: p.landscape, net: p.net });
@@ -1442,10 +1442,21 @@
     if (!_inspectFetch) {
       _inspectFetch = true;
       $('mps-insp-list').innerHTML = `<div class="mps-empty-note">Escaneando el código…</div>`;
-      fetch(`/api/mobile-preview/${_projectId}/textos`).then((r) => r.json()).then((d) => {
+      // El escaneo es lento: si se cambió de proyecto mientras corría, sus
+      // textos (archivo/línea de A) NO deben quedar como los de B — el próximo
+      // /patch-text iría a B con coordenadas de A. Y si falla, se permite
+      // reintentar (antes _inspectFetch quedaba en true para siempre).
+      const pid = _projectId;
+      fetch(`/api/mobile-preview/${pid}/textos`).then((r) => r.json()).then((d) => {
+        if (pid !== _projectId) return;
         _textos = Array.isArray(d.textos) ? d.textos : [];
         _selIdx = -1; _renderSel(); _fillInspList('');
-      }).catch(() => { $('mps-insp-list').innerHTML = `<div class="mps-empty-note">No pude leer los textos del proyecto.</div>`; });
+      }).catch(() => {
+        if (pid !== _projectId) return;
+        _inspectFetch = false;
+        const l = $('mps-insp-list');
+        if (l) l.innerHTML = `<div class="mps-empty-note">No pude leer los textos del proyecto.</div>`;
+      });
     } else {
       _fillInspList('');
     }

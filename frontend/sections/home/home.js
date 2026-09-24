@@ -123,7 +123,9 @@ function pintarStats() {
   const counts = {
     all:      total,
     pinned:   _proyectos.filter(p => p.seccion === 'pinned').length,
-    active:   _proyectos.filter(p => !p.seccion || p.seccion === 'active').length,
+    // Mismo criterio que el filtro (_aplicaFiltros): Activos = todo lo no
+    // archivado, anclados incluidos. Antes el número no coincidía con la lista.
+    active:   _proyectos.filter(p => p.seccion !== 'archived').length,
     archived: _proyectos.filter(p => p.seccion === 'archived').length,
   };
   elFilters?.querySelectorAll('.hc-filter-count').forEach(el => {

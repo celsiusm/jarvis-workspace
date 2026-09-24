@@ -114,8 +114,8 @@ def test_claude_visible_shell_pelado_y_tipeo_corto():
     assert not any('exec bash -l' in a for a in ns), ns
     # ...y el CLI se tipea corto, literal (-l --) + Enter aparte
     sk = [c for c in calls if c[:2] == ['tmux', 'send-keys']]
-    assert ['tmux', 'send-keys', '-t', 'jarvis_999', '-l', '--', 'claude'] in sk, sk
-    assert ['tmux', 'send-keys', '-t', 'jarvis_999', 'Enter'] in sk, sk
+    assert ['tmux', 'send-keys', '-t', '=jarvis_999:', '-l', '--', 'claude'] in sk, sk
+    assert ['tmux', 'send-keys', '-t', '=jarvis_999:', 'Enter'] in sk, sk
 
 
 def test_qwen_sigue_como_programa_del_pane():
@@ -158,8 +158,8 @@ def test_tipeo_espera_el_prompt_antes_de_mandar():
         term._tipear_cli_visible(999, 'claude', max_espera=5)
     argvs = [list(c.args[0]) for c in m.call_args_list]
     assert argvs[0][:3] == ['tmux', 'capture-pane', '-t']
-    assert ['tmux', 'send-keys', '-t', 'jarvis_999', '-l', '--', 'claude'] in argvs
-    assert ['tmux', 'send-keys', '-t', 'jarvis_999', 'Enter'] in argvs
+    assert ['tmux', 'send-keys', '-t', '=jarvis_999:', '-l', '--', 'claude'] in argvs
+    assert ['tmux', 'send-keys', '-t', '=jarvis_999:', 'Enter'] in argvs
     # y el tipeo fue DESPUÉS del prompt (3 capturas primero)
     assert argvs[3][:2] == ['tmux', 'send-keys'], argvs
 

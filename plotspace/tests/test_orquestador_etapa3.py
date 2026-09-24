@@ -57,7 +57,7 @@ def test_pegar_usa_doble_guion_antes_del_texto():
 
 def test_pegar_apunta_a_la_sesion_correcta():
     cmds = comandos_pegar_tarea('jarvis_42', 'x')
-    assert '-t' in cmds[1] and 'jarvis_42' in cmds[1]
+    assert '-t' in cmds[1] and '=jarvis_42:' in cmds[1]
 
 
 def test_cada_terminal_usa_su_propio_buffer():

@@ -820,12 +820,22 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
     return true;
   });
 
+  // Todos los listeners de ESTA instancia cuelgan de un AbortController: al
+  // reconectar (auto-retry o botón Reconectar) se crea otra instancia sobre el
+  // MISMO container, y sin abortar los viejos se acumulaban — la rueda en
+  // app-mode mandaba 3→5→7 reportes por notch y un paste/drop de imagen se
+  // subía una vez por cada handler rancio. desconectarTerminal() hace abort().
+  const _ac = new AbortController();
+  const _on = (tgt, ev, fn, opts) => tgt.addEventListener(ev, fn,
+    opts === true ? { capture: true, signal: _ac.signal }
+      : { ...(opts || {}), signal: _ac.signal });
+
   // Click = foco + marca la terminal como "activa" (aura violeta). El aura es
   // EXCLUSIVA del click: el hover también muda el foco del teclado tras un dwell
   // corto (workspace.js → _enfocarPorHover / shell/foco-hover.js) pero NO
   // enciende la card — pasar el mouse no es seleccionar. Ver
   // [[foco-teclado-por-hover]].
-  container.addEventListener('click', () => {
+  _on(container, 'click', () => {
     term.focus();
     document.querySelectorAll('.terminal-card.activa').forEach(c => c.classList.remove('activa'));
     container.closest('.terminal-card')?.classList.add('activa');
@@ -857,18 +867,17 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
   let _selUltimoMove = null;
   let _botonAbajo = false;
   const _selArrastrando = () => _botonAbajo;   // botón primario apretado = arrastrando
-  container.addEventListener('mousemove', e => { _selUltimoMove = e; });
-  container.addEventListener('mousedown', e => {
+  _on(container, 'mousemove', e => { _selUltimoMove = e; });
+  _on(container, 'mousedown', e => {
     if (e.button === 0) { _botonAbajo = true; }
   }, true);
-  // El mouseup puede caer FUERA de la card → escucha global, auto-limpiante.
+  // El mouseup puede caer FUERA de la card → escucha global (la limpia el abort de la instancia).
   const _soltarBoton = () => {
-    if (!terminales.has(terminalId)) { window.removeEventListener('mouseup', _soltarBoton); return; }
     _botonAbajo = false;
   };
-  window.addEventListener('mouseup', _soltarBoton);
+  _on(window, 'mouseup', _soltarBoton);
   let _ruedaAcum = 0, _ruedaRAF = 0, _ruedaHealTs = -Infinity;
-  container.addEventListener('wheel', e => {
+  _on(container, 'wheel', e => {
     if (e._jarvisRuedaSint) return;               // copia sintética nuestra: dejarla llegar a xterm
     // Destino: si la APP pidió mouse-tracking, la rueda es de ella — también
     // en buffer NORMAL (Grok Build y otros TUI no usan alt-screen). Antes se
@@ -971,12 +980,12 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
     if (container.dataset.drop) delete container.dataset.drop;
   }
 
-  container.addEventListener('dragenter', e => {
+  _on(container, 'dragenter', e => {
     e.preventDefault();
     const TD = window.TerminalDrop;
     _mostrarDrop(TD ? TD.clasificarArrastre(e.dataTransfer) : null);
   });
-  container.addEventListener('dragover', e => {
+  _on(container, 'dragover', e => {
     e.preventDefault();
     if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
     // Reclasificar en cada dragover mantiene el cartel sincronizado y lo re-muestra
@@ -985,12 +994,12 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
     const TD = window.TerminalDrop;
     _mostrarDrop(TD ? TD.clasificarArrastre(e.dataTransfer) : null);
   });
-  container.addEventListener('dragleave', e => {
+  _on(container, 'dragleave', e => {
     // Sólo apagar cuando el puntero abandona la card ENTERA (no al pasar de un
     // hijo a otro: xterm dispara dragleave/dragenter espurios entre sus capas).
     if (!container.contains(e.relatedTarget)) _ocultarDrop();
   });
-  container.addEventListener('drop', async e => {
+  _on(container, 'drop', async e => {
     e.preventDefault();
     _ocultarDrop();
 
@@ -1044,7 +1053,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
   // arranque de .NET) → el "Pasting..." eterno de Claude Code. El \x16 queda
   // solo como fallback si la subida falla (en agentes; bash no tiene quién
   // lea el clipboard del OS). Decisiones en terminal-paste.js (puro, testeado).
-  container.addEventListener('paste', async e => {
+  _on(container, 'paste', async e => {
     e.preventDefault();
     e.stopPropagation();
 
@@ -1092,7 +1101,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
 
   // ─── Menú contextual (click derecho) ─────────────────────────────────────
   // Ctrl+click derecho conserva el menú nativo del browser como escape hatch.
-  container.addEventListener('contextmenu', e => {
+  _on(container, 'contextmenu', e => {
     if (e.ctrlKey) return;
     e.preventDefault();
     _mostrarMenuContextual(e.clientX, e.clientY, term, ws);
@@ -1561,7 +1570,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
   });
   observer.observe(container);
 
-  const instancia = { term, ws, fitAddon, observer, container, ioRepintar: _ioRepintar, moWipe: _moWipe };
+  const instancia = { term, ws, fitAddon, observer, container, ioRepintar: _ioRepintar, moWipe: _moWipe, ac: _ac };
   terminales.set(terminalId, instancia);
   return instancia;
 }
@@ -1582,6 +1591,7 @@ function desconectarTerminal(terminalId) {
   clearTimeout(inst._healTimer);     // matar el debounce del auto-heal de render (sin refresh post-dispose)
   clearTimeout(inst._holdTimer);     // matar la válvula del frame 2026 retenido (sin flush post-dispose)
   clearTimeout(inst._sparseSanearTimer); // sanear Grok post-resize (sin reset+seed post-dispose)
+  try { inst.ac?.abort(); } catch (_) {}   // listeners del container/window de ESTA instancia
   inst.observer.disconnect();
   try { inst.ioRepintar?.disconnect(); } catch (_) {}  // observer del repintado-al-mostrar
   try { inst.moWipe?.disconnect(); }    catch (_) {}  // observer del wipe de canvas (4ta capa)

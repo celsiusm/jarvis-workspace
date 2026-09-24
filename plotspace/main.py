@@ -1,5 +1,6 @@
 import asyncio
 import os
+import subprocess
 import sys
 from contextlib import asynccontextmanager
 
@@ -85,19 +86,21 @@ init_db()
 # ─── Git helper (para STATE.md y limpieza de worktrees) ───────────────────────
 
 async def _run_git(cwd: str, *args: str) -> tuple:
-    """Ejecuta 'git <args>' en cwd. Devuelve (returncode, salida)."""
+    """Ejecuta 'git <args>' en cwd. Devuelve (returncode, salida).
+    Regla del proyecto: git por subprocess.run SÍNCRONO (create_subprocess_exec
+    puede colgarse heredando FDs), en un thread para no frenar el loop y con
+    timeout: un repo trabado no cuelga el loop de STATE.md."""
     try:
-        proc = await asyncio.create_subprocess_exec(
-            'git', *args,
-            cwd=cwd,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        out, err = await proc.communicate()
-        return proc.returncode, (out + err).decode(errors='replace')
+        r = await asyncio.to_thread(
+            subprocess.run, ['git', *args], cwd=cwd,
+            capture_output=True, text=True, errors='replace', timeout=10)
+        # stdout solo en éxito: los warnings de stderr no son archivos.
+        salida = r.stdout if r.returncode == 0 else (r.stdout or '') + (r.stderr or '')
+        return r.returncode, salida
+    except subprocess.TimeoutExpired:
+        return -1, 'git timeout'
     except Exception as e:
         return -1, str(e)
-
 
 
 # ─── Background task: STATE.md cada 10 segundos ───────────────────────────────

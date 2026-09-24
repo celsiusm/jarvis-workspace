@@ -245,15 +245,21 @@
     // Primera carga (árbol aún vacío) → skeleton mientras llega el fetch.
     if (!cont.querySelector('.ft-node')) cont.innerHTML = _ftSkeletonHTML();
 
+    // Proyecto CONGELADO: si se cambió de proyecto mientras viajaba el fetch,
+    // esta respuesta es del anterior — pintarla dejaba el árbol de A bajo B (y
+    // un click abría rutas de A en el proyecto B).
+    const pid = _projectId;
     try {
       const [treeRes, gitData] = await Promise.all([
-        fetch(`/api/projects/${_projectId}/files/tree`),
-        fetch(`/api/projects/${_projectId}/files/git-status`)
+        fetch(`/api/projects/${pid}/files/tree`),
+        fetch(`/api/projects/${pid}/files/git-status`)
           .then(r => (r.ok ? r.json() : { git: false, files: {} }))
           .catch(() => ({ git: false, files: {} })),
       ]);
+      if (pid !== _projectId) return;
       if (!treeRes.ok) throw new Error(`HTTP ${treeRes.status}`);
       const treeJson = await treeRes.json();
+      if (pid !== _projectId) return;
       const nuevoGit = (gitData && gitData.git) ? (gitData.files || {}) : {};
 
       // Refresh imperceptible (patrón _firmaDatos de home.js): si ni el árbol ni
@@ -1157,7 +1163,7 @@
         toast(_t('Subidos: {n}. Algunos no se subieron — {m}').replace('{n}', subidosTotal).replace('{m}', motivos), 'warning');
       }
     } catch (err) {
-      toast(`Error subiendo archivos: ${err.message}`, 'error');
+      toast(_t('Error subiendo archivos: {m}').replace('{m}', _t(err.message)), 'error');
     }
   }
 
@@ -2119,7 +2125,7 @@
       g.tabs.set(path, { content: data.content, language: data.language, dirty: false, mtime: data.mtime });
       setActiveTab(path, g);
     } catch (err) {
-      if (!_restaurando) toast(`Error abriendo archivo: ${err.message}`, 'error');
+      if (!_restaurando) toast(_t('Error abriendo archivo: {m}').replace('{m}', _t(err.message)), 'error');
     }
   }
 

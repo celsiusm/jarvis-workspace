@@ -207,11 +207,18 @@ class TmuxBackend(TerminalBackend):
         `jarvis_12` viva."""
         return f'={self.nombre_sesion(terminal_id)}'
 
+    def _pane_exacto(self, terminal_id: int) -> str:
+        """Target de PANE exacto para send-keys/capture-pane: `=nombre` solo
+        vale como target de sesión; para un pane tmux exige `=nombre:`. Sin el
+        '=', con `jarvis_1` muerta y `jarvis_12` viva, el texto/captura de la 1
+        iba a parar a la 12."""
+        return f'{self._target_exacto(terminal_id)}:'
+
     # ── ciclo de vida ────────────────────────────────────────────────────
     def existe(self, terminal_id: int) -> bool:
         try:
             r = subprocess.run(
-                ['tmux', 'has-session', '-t', self.nombre_sesion(terminal_id)],
+                ['tmux', 'has-session', '-t', self._target_exacto(terminal_id)],
                 capture_output=True, timeout=TIMEOUT_CONTROL,
             )
         except subprocess.TimeoutExpired:
@@ -270,21 +277,27 @@ class TmuxBackend(TerminalBackend):
     def enviar_texto(self, terminal_id: int, texto: str) -> None:
         # `-l --` literal: el texto NUNCA se interpreta como nombre de tecla ni
         # como flag. Mismo patrón anti-inyección que el batch y send_to_agent.
-        subprocess.run(
-            ['tmux', 'send-keys', '-t', self.nombre_sesion(terminal_id), '-l', '--', texto],
-            capture_output=True,
-        )
+        try:
+            subprocess.run(
+                ['tmux', 'send-keys', '-t', self._pane_exacto(terminal_id), '-l', '--', texto],
+                capture_output=True, timeout=TIMEOUT_CONTROL,
+            )
+        except subprocess.TimeoutExpired:
+            print(f'[tmux] send-keys {self.nombre_sesion(terminal_id)}: timeout (¿tmux trabado?)')
 
     def enviar_tecla(self, terminal_id: int, tecla: str) -> None:
-        subprocess.run(
-            ['tmux', 'send-keys', '-t', self.nombre_sesion(terminal_id), tecla],
-            capture_output=True,
-        )
+        try:
+            subprocess.run(
+                ['tmux', 'send-keys', '-t', self._pane_exacto(terminal_id), tecla],
+                capture_output=True, timeout=TIMEOUT_CONTROL,
+            )
+        except subprocess.TimeoutExpired:
+            print(f'[tmux] send-keys {self.nombre_sesion(terminal_id)}: timeout (¿tmux trabado?)')
 
     # ── lectura ──────────────────────────────────────────────────────────
     def capturar(self, terminal_id: int, lineas: Optional[int] = None,
                  con_escapes: bool = False) -> Optional[str]:
-        argv = ['tmux', 'capture-pane', '-t', self.nombre_sesion(terminal_id), '-p']
+        argv = ['tmux', 'capture-pane', '-t', self._pane_exacto(terminal_id), '-p']
         if con_escapes:
             argv.append('-e')          # conserva los colores del pane
         if lineas == TODO_EL_SCROLLBACK:
@@ -305,7 +318,7 @@ class TmuxBackend(TerminalBackend):
         salida y termina, así que no cuelga como los comandos de control — y
         acá el beneficio es real, son ~3N capturas por segundo que no deben
         pasar por un thread cada una."""
-        argv = ['tmux', 'capture-pane', '-t', self.nombre_sesion(terminal_id), '-p']
+        argv = ['tmux', 'capture-pane', '-t', self._pane_exacto(terminal_id), '-p']
         if lineas == TODO_EL_SCROLLBACK:
             argv += ['-S', '-']
         elif lineas:

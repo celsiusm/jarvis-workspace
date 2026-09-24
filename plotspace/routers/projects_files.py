@@ -508,6 +508,7 @@ MAX_UPLOAD_SIZE = 50 * 1024 * 1024
 
 # Anti zip-bomb: límite de bytes DESCOMPRIMIDOS escritos (no los del header)
 MAX_UNZIP_TOTAL = 200 * 1024 * 1024    # 200 MB descomprimidos por zip
+_ZIP_CHUNK = 1024 * 1024                # lectura por miembro en trozos de 1 MB
 
 
 @router.post("/{project_id}/files/upload")
@@ -698,8 +699,35 @@ def _extraer_zip_bytes(project_id: int, base: str, full_target: str,
                     rechazados.append({'archivo': rel, 'motivo': 'destino protegido'})
                     continue
 
+                # Anti zip-bomb ANTES de descomprimir: el tamaño declarado en el
+                # header ya alcanza para rechazar (z.read() inflaría todo en RAM).
                 try:
-                    data = z.read(nombre)
+                    info = z.getinfo(nombre)
+                except KeyError as e:
+                    rechazados.append({'archivo': rel, 'motivo': f'no se pudo leer del zip: {e}'})
+                    continue
+                if info.file_size > MAX_UPLOAD_SIZE:
+                    rechazados.append({'archivo': rel,
+                                       'motivo': f'demasiado grande (>{MAX_UPLOAD_SIZE // 1024} KB)'})
+                    continue
+                if total_escrito + info.file_size > MAX_UNZIP_TOTAL:
+                    rechazados.append({'archivo': rel,
+                                       'motivo': f'el zip descomprimido supera {MAX_UNZIP_TOTAL // (1024 * 1024)} MB'})
+                    break
+
+                # Lectura en streaming con tope: aunque el header mienta, nunca
+                # se descomprime más de MAX_UPLOAD_SIZE + 1 bytes por miembro.
+                try:
+                    partes = []
+                    leidos = 0
+                    with z.open(info) as src:
+                        while leidos <= MAX_UPLOAD_SIZE:
+                            chunk = src.read(min(_ZIP_CHUNK, MAX_UPLOAD_SIZE + 1 - leidos))
+                            if not chunk:
+                                break
+                            partes.append(chunk)
+                            leidos += len(chunk)
+                    data = b''.join(partes)
                 except Exception as e:
                     rechazados.append({'archivo': rel, 'motivo': f'no se pudo leer del zip: {e}'})
                     continue
@@ -748,7 +776,12 @@ async def subir_zip(
     full_target = _safe_join(base, target_dir) if target_dir else base
     os.makedirs(full_target, exist_ok=True)
 
-    raw = await file.read()
+    # Tope de lectura: nunca más de MAX_UPLOAD_TOTAL (+1 para detectar exceso)
+    # en RAM — un upload sin límite agota la memoria del server.
+    raw = await file.read(MAX_UPLOAD_TOTAL + 1)
+    if len(raw) > MAX_UPLOAD_TOTAL:
+        raise HTTPException(status_code=413,
+                            detail=f"El zip supera el total permitido (>{MAX_UPLOAD_TOTAL // (1024 * 1024)} MB)")
     resultado = await asyncio.to_thread(
         _extraer_zip_bytes, project_id, base, full_target, raw, file.filename or '')
     return {'ok': True, **resultado}
