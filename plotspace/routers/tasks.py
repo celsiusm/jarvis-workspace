@@ -138,18 +138,14 @@ async def asignar_task(task_id: int, datos: TaskAsignar):
     try:
         cursor = conn.cursor()
         tarea = _fila(cursor, task_id)
+        # La terminal tiene que ser del MISMO proyecto que la tarea.
         cursor.execute(
-            'SELECT id FROM terminals WHERE id = ? AND activa = 1',
-            (datos.terminal_id,),
+            'SELECT id FROM terminals WHERE id = ? AND project_id = ? AND activa = 1',
+            (datos.terminal_id, tarea['project_id']),
         )
         if not cursor.fetchone():
-            raise HTTPException(status_code=404, detail="Terminal no encontrada o inactiva")
-        cursor.execute(
-            "UPDATE tasks SET estado = 'running', terminal_id = ?, updated_at = ? WHERE id = ?",
-            (datos.terminal_id, datetime.now().isoformat(), task_id),
-        )
-        conn.commit()
-        tarea = _fila(cursor, task_id)
+            raise HTTPException(status_code=404,
+                                detail="Terminal no encontrada, inactiva o de otro proyecto")
     finally:
         conn.close()
 
@@ -161,7 +157,23 @@ async def asignar_task(task_id: int, datos: TaskAsignar):
               "Cuando termines escribí TASK_DONE. "
               "Si te bloqueás escribí TASK_BLOCKED.")
 
-    await send_to_agent(datos.terminal_id, texto)
+    # 'running' SOLO si el pegado llegó: si no, la card quedaría en running
+    # sin que ningún agente la haya recibido.
+    if not await send_to_agent(datos.terminal_id, texto):
+        raise HTTPException(status_code=409,
+                            detail="No se pudo enviar la tarea a la terminal (¿sesión caída?)")
+
+    conn = get_db()
+    try:
+        cursor = conn.cursor()
+        cursor.execute(
+            "UPDATE tasks SET estado = 'running', terminal_id = ?, updated_at = ? WHERE id = ?",
+            (datos.terminal_id, datetime.now().isoformat(), task_id),
+        )
+        conn.commit()
+        tarea = _fila(cursor, task_id)
+    finally:
+        conn.close()
     iniciar_monitor(datos.terminal_id, tarea['project_id'])
 
     await _broadcast_tasks(tarea['project_id'])

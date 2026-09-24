@@ -69,6 +69,12 @@ def _slugify(titulo: str) -> str:
     return s[:64] or 'memoria'
 
 
+def _una_linea(texto: str) -> str:
+    """Colapsa saltos de línea/espacios a un espacio: un valor del frontmatter
+    con "\n" podría inyectar claves (p.ej. `estado: lapida`)."""
+    return ' '.join((texto or '').split())
+
+
 def _slug_seguro(slug: str) -> str:
     """Anti path-escape: el slug solo puede ser [a-z0-9-]."""
     if not re.fullmatch(r'[a-z0-9][a-z0-9-]*', slug or ''):
@@ -380,7 +386,8 @@ async def leer_memoria(project_id: int, slug: str):
 
 @router.post("/projects/{project_id}/memory", status_code=201)
 async def crear_memoria(project_id: int, datos: MemoriaCreate):
-    titulo = datos.titulo.strip()
+    # Una línea: un "\n" en el título/tag inyectaría claves al frontmatter.
+    titulo = _una_linea(datos.titulo)
     if not titulo:
         raise HTTPException(status_code=400, detail="La memoria necesita un título")
     path = _ruta_proyecto(project_id)
@@ -389,11 +396,26 @@ async def crear_memoria(project_id: int, datos: MemoriaCreate):
     archivo = os.path.join(_mem_dir(path), slug + '.md')
     if os.path.exists(archivo):
         raise HTTPException(status_code=409, detail=f"Ya existe una memoria '{slug}' — editala")
-    tags = ', '.join(t.strip() for t in datos.tags if t.strip())
+    lista_tags = [t for t in (_una_linea(x).replace(',', ' ').replace('[', '')
+                              .replace(']', '').strip() for x in datos.tags) if t]
+    tags = ', '.join(lista_tags)
+    # Contrato de admisión (scripts/guard_memoria.py): categoria + resumen +
+    # actualizado + estado — sin eso el pre-commit bloquea la memoria.
+    categoria = mcat.clasificar(lista_tags, slug)
+    # Sin tags el guard también la rechaza (`tags:` vacío): la categoría
+    # inferida sirve de tag mínimo.
+    if not lista_tags and categoria:
+        lista_tags = [categoria]
+        tags = categoria
+    cuerpo = datos.contenido.strip()
+    resumen = next((_una_linea(l).lstrip('#').strip() for l in cuerpo.splitlines()
+                    if l.strip()), '') or titulo
+    hoy = datetime.now().strftime('%Y-%m-%d')
     src = (f"---\ntitulo: {titulo}\ntags: [{tags}]\n"
-           f"creado: {datetime.now().strftime('%Y-%m-%d')}\nautor: usuario\n"
+           f"categoria: {categoria}\nresumen: {resumen}\n"
+           f"creado: {hoy}\nactualizado: {hoy}\nautor: usuario\n"
            f"estado: vigente\n---\n\n"
-           f"{datos.contenido.strip()}\n")
+           f"{cuerpo}\n")
     # Reconciliación al escribir: si ya hay una memoria vigente que cubre este
     # tema, avisar (la UI puede sugerir "actualizá esa"). No bloquea.
     try:

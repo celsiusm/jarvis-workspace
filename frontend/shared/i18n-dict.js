@@ -1756,5 +1756,7 @@
     "{n} llegó al límite de uso: rotado de {de} a {a}.": "{n} hit its usage limit: rotated from {de} to {a}.",
     "Paso estancado: {n} lleva {m} min sin cerrar su tarea. Revisá su terminal.": "Stalled step: {n} has gone {m} min without closing its task. Check its terminal.",
     "Paso rescatado: {n} había cerrado con {kw} y no se había registrado.": "Rescued step: {n} had closed with {kw} and it wasn't recorded.",
+    "Terminal no encontrada, inactiva o de otro proyecto": "Terminal not found, inactive or from another project",
+    "No se pudo enviar la tarea a la terminal (¿sesión caída?)": "Couldn't send the task to the terminal (session down?)",
   });
 })();

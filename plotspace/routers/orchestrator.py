@@ -1579,6 +1579,36 @@ async def localhost_de_terminal(project_id: int, terminal_id: int):
     return s or {'url': None}
 
 
+def _puerto_de_url(url: str) -> Optional[int]:
+    """Puerto de la url; malformado (p.ej. :99999) → 400 en vez de un 500."""
+    from urllib.parse import urlparse
+    try:
+        return urlparse(url).port
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"URL con puerto inválido: {url}")
+
+
+def _puertos_del_proyecto(project_id: int) -> set:
+    """Puertos que el ✕ puede matar para ESTE proyecto: su http.server propio
+    (si vive) + los dev servers detectados (no los demos, que no tienen proceso)."""
+    from urllib.parse import urlparse
+    from plotspace.core.dev_detect import servers_detectados
+    urls = []
+    entry = _preview_servers.get(project_id)
+    if entry and entry[0].poll() is None:
+        urls.append(entry[1])
+    urls += [s['url'] for s in servers_detectados(project_id) if s.get('tipo') != 'demo']
+    puertos = set()
+    for u in urls:
+        try:
+            p = urlparse(u).port
+        except ValueError:
+            continue
+        if p:
+            puertos.add(p)
+    return puertos
+
+
 class StopPreviewBody(BaseModel):
     url: Optional[str] = None
 
@@ -1592,7 +1622,6 @@ async def detener_preview(project_id: int, body: Optional[StopPreviewBody] = Non
     mata por el puerto. NUNCA toca el 3000 (Jarvis) — guard en matar_puerto.
     Un DEMO del propio Jarvis (:3000/static/<dir>/…) no tiene proceso: acá solo
     se OCULTA del menú (descartar) sin tocar absolutamente nada del workspace."""
-    from urllib.parse import urlparse
     from plotspace.core.dev_detect import descartar, es_demo_jarvis
     from plotspace.core.puertos import matar_puerto
 
@@ -1606,16 +1635,21 @@ async def detener_preview(project_id: int, body: Optional[StopPreviewBody] = Non
         return {'ok': True, 'mensaje': f'Demo oculto ({objetivo})'}
 
     if pedida:
+        port = _puerto_de_url(pedida)
         # Cerrar SOLO ese server. ¿Es el http.server propio? → por proceso.
         entry = _preview_servers.get(project_id)
         if entry and entry[1] == pedida:
             propio = _detener_preview_si_existe(project_id)
-        if not propio:
-            port = urlparse(pedida).port
-            if port:
-                r = matar_puerto(port)
-                if r.get('ok'):
-                    matado = r
+        if not propio and port:
+            # Anti "mata-lo-que-sea": el body es input del cliente — solo se
+            # mata un puerto que ES de este proyecto (dev server detectado o
+            # su preview propio). Cualquier otro puerto no se toca.
+            if port not in _puertos_del_proyecto(project_id):
+                return {'ok': False,
+                        'mensaje': f'El puerto {port} no es un server de este proyecto — no se cerró'}
+            r = matar_puerto(port)
+            if r.get('ok'):
+                matado = r
         descartar(project_id, pedida)
         url = pedida
     else:
@@ -1623,7 +1657,7 @@ async def detener_preview(project_id: int, body: Optional[StopPreviewBody] = Non
         url = _preview_url_activo(project_id)
         propio = _detener_preview_si_existe(project_id)
         if url:
-            port = urlparse(url).port
+            port = _puerto_de_url(url)
             if port:
                 r = matar_puerto(port)
                 if r.get('ok'):
@@ -2321,8 +2355,9 @@ async def procesar_task_event_interno(terminal_id: int, event: str, project_id: 
                                           'TASK_ERROR', motivo, term_nombre)
 
 
-async def send_to_agent(terminal_id: int, mensaje: str):
-    """Envía un texto al agente via tmux send-keys."""
+async def send_to_agent(terminal_id: int, mensaje: str) -> bool:
+    """Envía un texto al agente via tmux (paste). Devuelve True SOLO si el
+    pegado llegó al pane (los callers que no lo necesitan lo ignoran)."""
     mensaje = f'Lee tu CLAUDE.md primero. Luego: {mensaje}'
     session = f'jarvis_{terminal_id}'
     print(f'[send_to_agent] → {session}: {mensaje[:100]}')
@@ -2330,7 +2365,7 @@ async def send_to_agent(terminal_id: int, mensaje: str):
     # Verificar que la sesión existe antes de enviar
     if not backend().existe(terminal_id):
         print(f'[send_to_agent] ERROR: sesión {session} no existe — abortando')
-        return
+        return False
 
     # La tarea viaja como PASTE (buffer de tmux), no tipeada. `send-keys -l`
     # manda los saltos de línea como LF crudos al pty —verificado—, así que un
@@ -2366,6 +2401,9 @@ async def send_to_agent(terminal_id: int, mensaje: str):
         await asyncio.sleep(1)
         await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
 
+    if not pegado:
+        return False   # nada llegó al agente: no registrar un SENT que no ocurrió
+
     # Registrar en task_events con el project_id REAL de la terminal (antes se
     # insertaba 0 fijo → filas corruptas que no matcheaban ningún proyecto).
     ahora = datetime.now().isoformat()
@@ -2386,6 +2424,7 @@ async def send_to_agent(terminal_id: int, mensaje: str):
             conn.close()
     except Exception:
         pass
+    return True
 
 
 async def _sesion_tmux_viva(terminal_id: int) -> bool:
