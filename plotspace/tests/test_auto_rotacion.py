@@ -22,11 +22,15 @@ from plotspace.core.agent_watch import (
     _limite_cuenta,
     cooldown_rotacion_vencido,
     cuentas_limitadas,
-    detectar_limite,
+    linea_limite,
     proxima_cuenta_sana,
     registrar_limite_cuenta,
     registrar_rotacion,
 )
+
+
+def detectar_limite(texto, tipo_ia=None):
+    return linea_limite(texto)[0] is not None
 
 
 # ─── detectar_limite: firmas que SÍ deben matchear ────────────────────────────

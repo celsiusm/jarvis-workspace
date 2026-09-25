@@ -1,10 +1,12 @@
 # plotspace/tests/test_agent_live.py
 """Tests de la lógica pura de Agents Live (plotspace/core/agent_live.py).
 Nada de tmux, red ni DB — espejo de test_dev_detect.py / test_agent_watch.py."""
-from plotspace.core.agent_live import (
-    extraer_operaciones,
-    operaciones_nuevas,
-)
+from plotspace.core.agent_live import operaciones_nuevas
+
+
+def extraer_operaciones(texto):
+    """Captura aislada (sin historia previa) = todas las ops del texto."""
+    return operaciones_nuevas(texto, {})
 
 
 # ─── extraer_operaciones ───────────────────────────────────────────────────────

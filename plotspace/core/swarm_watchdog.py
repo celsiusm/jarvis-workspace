@@ -12,8 +12,8 @@ output (agent_watch != 'trabajando') y SIN TASK_*:
      lo resuelve EN SILENCIO por la misma vía que el monitor
      (_procesar_keyword_evento) — el caso "output > 100 líneas" se auto-cura.
   2. Si no hay keyword perdido (el agente murió de verdad / quedó en un prompt),
-     emite WS 'paso_estancado' con la info para que el Command Deck ofrezca
-     acciones (saltar/matar/aceptar/reintentar). Una sola vez por episodio.
+     emite WS 'paso_estancado' con la info (toast en la UI). Una sola vez por
+     episodio.
 
 El sello `iniciado_ts` (wall-clock) lo pone el orquestador al arrancar el paso
 (orchestrator._arrancar_pasos), así que el watchdog sobrevive al restart del
@@ -196,7 +196,7 @@ async def _ciclo():
                 continue
 
             # Sin keyword perdido: el agente murió o quedó en un prompt. Avisar
-            # UNA vez por episodio (el Command Deck ofrece las acciones).
+            # UNA vez por episodio.
             clave = (wf['id'], idx)
             if clave in _avisados:
                 continue

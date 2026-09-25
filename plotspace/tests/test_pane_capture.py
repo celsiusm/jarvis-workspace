@@ -32,9 +32,6 @@ def test_cache_ttl_y_lock():
         d = await pc.capturar(7, ttl=0.0)
         assert llamadas['n'] == 2 and d != a
 
-        # purgar limpia el estado
-        pc.purgar(7)
-        assert 7 not in pc._cache and 7 not in pc._locks
     asyncio.run(main())
 
 

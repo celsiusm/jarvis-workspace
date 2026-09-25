@@ -3,8 +3,6 @@
 
 /* ── SVG icons (stroke 2px, currentColor) ─────────────────────── */
 const ORCH_SVG = {
-  history: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`,
-  newThread: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>`,
   more: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="5" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="12" r="1.5" fill="currentColor" stroke="none"/></svg>`,
   // Iconos del composer — SET SIMÉTRICO (grid óptico único: viewBox 24, trazo 1.9,
   // round, sin rellenos que desbalanceen → los 3 leen como un juego coherente).
@@ -41,7 +39,6 @@ function orchEsc(str) {
     .replace(/"/g, '&quot;');
 }
 
-const _orchT = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
 
 /* ── Inline markdown parser (code, em) ───────────────────────── */
 function orchParseContent(text) {

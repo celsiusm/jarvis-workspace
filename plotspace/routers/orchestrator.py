@@ -1040,8 +1040,8 @@ _anthropic_key = None
 
 def _guard_api_key() -> str:
     """Devuelve la ANTHROPIC_API_KEY o lanza un 409 ESTRUCTURADO (no un 500 crudo)
-    para que el frontend lo muestre como empty-state limpio. El chat de Jarvis (y el
-    Web Builder) son los únicos que usan esta key; los agentes en terminales (BYOK)
+    para que el frontend lo muestre como empty-state limpio. El chat de Jarvis (motor
+    `api`) es el único que usa esta key; los agentes en terminales (BYOK)
     NO la necesitan. Forma del error: status 409, body
     {"detail": {"error": "no_api_key", "message": "..."}}."""
     api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -1384,29 +1384,6 @@ async def chat_orquestador_stream(req: ChatRequest):
     )
 
 
-# Puerto real de Jarvis (modo app: el shell lo elige dinámico vía JARVIS_PORT)
-_JARVIS_PORT = os.environ.get('JARVIS_PORT', '3000')
-
-
-def _fuente_permite_jarvis(fuente: str) -> bool:
-    """¿Una fuente de CSP `frame-ancestors` permite embeber a Jarvis
-    (http://localhost:3000)? Cubre `*`, `http(s)://localhost:*` (lo que refleja
-    Twitch con el parent) y `localhost:3000`. Un puerto AUSENTE = default (80),
-    que NO es el 3000 de Jarvis → no cuenta."""
-    f = fuente.strip().strip("'\"").lower()
-    if f == '*':
-        return True
-    for pre in ('http://', 'https://', '//'):
-        if f.startswith(pre):
-            f = f[len(pre):]
-            break
-    f = f.split('/')[0]                      # host[:port] (sin path)
-    host, sep, port = f.partition(':')
-    if host != 'localhost':
-        return False
-    return bool(sep) and port in ('*', _JARVIS_PORT)
-
-
 # ELIMINADO (2026-09-12): _es_embebible + GET /preview/probe. El Browser ahora
 # es server-side (core/remote_browser.py) y ya no decide nada por XFO/CSP.
 
@@ -1488,53 +1465,6 @@ async def preview_buscar(q: str = '', modo: str = 'yt', token: str = ''):
         if isinstance(e, (musica_local.MusicaError, spotify_api.SpotifyError)):
             return {'resultados': [], 'error': str(e)}
         raise
-
-
-# Pricing de claude-haiku-4-5: $1.00 input / $5.00 output por millón de tokens
-# (confirmado contra la referencia de la API). Puro y testeable.
-# Pricing (USD por millón de tokens, input/output) por modelo. Si cambiás
-# ORQUESTADOR_MODEL, el costo del panel sigue bien solo. Desconocido → haiku.
-_PRECIOS_MTOK = {
-    'claude-haiku-4-5':  (1.00, 5.00),
-    'claude-sonnet-4-6': (3.00, 15.00),
-    'claude-sonnet-5':   (3.00, 15.00),
-    'claude-opus-4-6':   (5.00, 25.00),
-    'claude-opus-4-7':   (5.00, 25.00),
-    'claude-opus-4-8':   (5.00, 25.00),
-}
-
-
-def _precios_de(modelo: str) -> tuple:
-    """(precio_in, precio_out) por MTok del modelo; fallback = haiku."""
-    return _PRECIOS_MTOK.get(modelo, _PRECIOS_MTOK['claude-haiku-4-5'])
-
-
-def _costo_usd(input_tokens: int, output_tokens: int, modelo: str = None) -> float:
-    """Costo en USD de un uso acumulado, con el pricing del modelo activo."""
-    p_in, p_out = _precios_de(modelo or ORQUESTADOR_MODEL)
-    return ((input_tokens  or 0) / 1_000_000) * p_in + \
-           ((output_tokens or 0) / 1_000_000) * p_out
-
-
-@router.get("/uso/{project_id}")
-async def consultar_uso(project_id: int):
-    """Uso acumulado del orquestador para el proyecto: tokens y costo en USD.
-    En modo suscripción el costo por token es $0 (lo cubre la suscripción de
-    la cuenta activa); los tokens se siguen registrando como telemetría."""
-    from plotspace.core.database import obtener_uso_orquestador
-    uso = obtener_uso_orquestador(project_id)
-    uso['motor'] = ORQUESTADOR_MOTOR
-    uso['costo_usd'] = (0.0 if ORQUESTADOR_MOTOR != 'api'
-                        else round(_costo_usd(uso['input_tokens'], uso['output_tokens']), 4))
-    return uso
-
-
-@router.get("/preview/{project_id}")
-async def consultar_preview(project_id: int):
-    """Preview activo del proyecto. `url` = el más reciente (para el pill,
-    que es single); `urls` = TODOS los dev servers vivos (un agente puede
-    levantar varios) para que el Web Preview los abra como pestañas."""
-    return {'url': _preview_url_activo(project_id), 'urls': _preview_urls_activas(project_id)}
 
 
 @router.get("/preview/{project_id}/servers")
@@ -2562,26 +2492,6 @@ def _preview_url_activo(project_id: int) -> Optional[str]:
         _preview_servers.pop(project_id, None)
     from plotspace.core.dev_detect import url_detectada
     return url_detectada(project_id)
-
-
-def _preview_urls_activas(project_id: int) -> list:
-    """TODAS las URLs de preview vivas del proyecto, en orden para abrir como
-    pestañas: primero el http.server propio (si Jarvis lanzó uno), después los
-    dev servers de agentes detectados (más viejo → más nuevo, así la pestaña
-    recién abierta queda activa)."""
-    from plotspace.core.dev_detect import urls_detectadas
-    urls = []
-    entry = _preview_servers.get(project_id)
-    if entry:
-        proc, url = entry
-        if proc.poll() is None:
-            urls.append(url)
-        else:
-            _preview_servers.pop(project_id, None)
-    for u in urls_detectadas(project_id):
-        if u not in urls:
-            urls.append(u)
-    return urls
 
 
 def _detener_preview_si_existe(project_id: int) -> Optional[str]:

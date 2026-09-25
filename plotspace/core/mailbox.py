@@ -76,9 +76,6 @@ def _guardar_offsets(path=None):
         pass
 
 
-ARCHIVO_NOMBRE = os.path.join('.jarvis', 'MAILBOX-archivo.md')
-
-
 def archivar_mailbox(archivo: str, max_lineas: int = 120, conservar: int = 40,
                      max_bytes: int = 16384) -> int:
     """Janitor: si el MAILBOX vivo superó `max_lineas` de mensajes O `max_bytes`
