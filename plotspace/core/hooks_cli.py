@@ -26,6 +26,8 @@ Reglas del instalador (aprendidas de romper cosas ajenas):
 """
 import json
 import os
+import shlex
+import tempfile
 from typing import Optional
 
 NOMBRE_SCRIPT = 'jarvis_ops_hook.py'
@@ -131,7 +133,8 @@ def asegurar_hooks_provenance(settings_path: str, hook_cmd: str, eventos=None) -
         return False
 
 
-def comando_hook(raiz_repo: str, sistema: Optional[str] = None) -> str:
+def comando_hook(raiz_repo: str, sistema: Optional[str] = None,
+                 tolerante: bool = True) -> str:
     """Comando que se registra en el settings (ruta absoluta al script).
 
     `-S` (no cargar site-packages) ahorra ~27 ms por llamada, y el hook corre
@@ -144,11 +147,42 @@ def comando_hook(raiz_repo: str, sistema: Optional[str] = None) -> str:
     queda SIN provenance justo en la plataforma nueva — nadie sabría quién
     tocó qué. La ruta va entre comillas: en Windows tiene espacios casi
     siempre (`C:\\Program Files\\...`, `C:\\Users\\Juan Pérez\\...`).
+
+    `tolerante=False` = comando crudo, para CLIs que no documentan correr el
+    hook con un shell (Antigravity); el resto usa el guard de `_tolerante`.
     """
     ruta = os.path.abspath(os.path.join(raiz_repo, 'scripts', NOMBRE_SCRIPT))
     if (sistema or os.name) == 'nt':
         return f'python -S "{ruta}"'
-    return 'python3 -S ' + ruta
+    if not tolerante:
+        return 'python3 -S ' + ruta
+    return _tolerante('python3 -S', ruta)
+
+
+def _tolerante(interprete: str, ruta: str) -> str:
+    """`test ! -f R || <interprete> R`: si el script no está, sale con 0.
+
+    Sin esto, un script borrado hace que Python salga con código 2 ("can't
+    open file"), y en UserPromptSubmit el código 2 BLOQUEA el prompt: el
+    usuario no puede mandar ni un mensaje (2026-09-25, server arrancado una
+    vez desde una copia en /tmp que después se borró). Si el script existe,
+    su código de salida pasa intacto. Solo Unix: ahí el CLI corre el hook
+    con `sh -c`."""
+    q = shlex.quote(ruta)
+    return f'test ! -f {q} || {interprete} {q}'
+
+
+def raiz_es_efimera(raiz_repo: str) -> bool:
+    """True si la raíz vive bajo un directorio temporal (/tmp, /var/tmp o
+    tempfile.gettempdir()). Desde ahí NO se instalan hooks en el settings del
+    usuario: la copia se borra y el hook queda apuntando a la nada."""
+    raiz = os.path.realpath(os.path.abspath(raiz_repo))
+    bases = {'/tmp', '/var/tmp', tempfile.gettempdir()}
+    for base in bases:
+        base = os.path.realpath(base)
+        if raiz == base or raiz.startswith(base.rstrip(os.sep) + os.sep):
+            return True
+    return False
 
 
 # El SessionStart hook (captura el session-id vivo para --resume). Vive acá y
@@ -168,4 +202,4 @@ def comando_session_hook(raiz_repo: str, sistema: Optional[str] = None) -> str:
     ruta = os.path.abspath(os.path.join(raiz_repo, 'scripts', SCRIPT_SESSION))
     if (sistema or os.name) == 'nt':
         return f'python "{ruta}"'
-    return 'python3 ' + ruta
+    return _tolerante('python3', ruta)
