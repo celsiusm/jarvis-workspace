@@ -133,3 +133,41 @@ def test_parser_sin_structured_cae_al_result_crudo():
 def test_parser_lineas_basura_no_rompen():
     evs = list(orq_cli.eventos_desde_lineas(['', 'basura', '{"type":"rate_limit_event"}']))
     assert evs == []
+
+
+# ─── Prompt por stdin + eventos de herramientas ──────────────────────────────
+
+def test_argv_sin_prompt_no_lo_pone_como_argumento():
+    argv = orq_cli._argv(None, 's', 'm')
+    assert argv[:2] == ['claude', '-p'] and argv[2] == '--model'
+
+
+def test_parser_emite_las_tools_que_usa():
+    linea = json.dumps({'type': 'assistant', 'message': {'content': [
+        {'type': 'text', 'text': 'miro'},
+        {'type': 'tool_use', 'name': 'Read', 'input': {'file_path': '/p/main.py'}},
+        {'type': 'tool_use', 'name': 'Grep', 'input': {'pattern': 'def login'}}]}})
+    evs = list(orq_cli.eventos_desde_lineas([linea]))
+    assert evs == [{'tipo': 'herramienta', 'nombre': 'Read', 'detalle': '/p/main.py'},
+                   {'tipo': 'herramienta', 'nombre': 'Grep', 'detalle': 'def login'}]
+
+
+def test_stream_manda_el_prompt_por_stdin_aunque_sea_enorme(tmp_path, monkeypatch):
+    """Un prompt de 300 KB como argumento revienta con E2BIG (tope de 128 KB
+    por argumento en Linux). Por stdin llega entero."""
+    import asyncio
+    falso = tmp_path / 'claude'
+    falso.write_text(
+        '#!/usr/bin/env python3\n'
+        'import sys, json\n'
+        'dato = sys.stdin.read()\n'
+        'print(json.dumps({"type": "result", "result": str(len(dato)), "usage": {}}))\n')
+    falso.chmod(0o755)
+    monkeypatch.setattr(orq_cli, 'BIN', str(falso))
+    prompt = 'x' * 300_000
+
+    async def correr():
+        return [ev async for ev in orq_cli.stream(prompt, 's', 'm', timeout_s=30)]
+    evs = asyncio.run(correr())
+    assert evs[-1]['tipo'] == 'resultado'
+    assert evs[-1]['texto'] == '300000'

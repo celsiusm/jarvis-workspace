@@ -71,10 +71,13 @@ PROCESO MENTAL OBLIGATORIO — recorré estos pasos ANTES de escribir JSON
       - 3+ agentes: módulos verticalmente independientes (auth, pagos…).
       Nunca paralelices por gusto. Si un humano razonable lo haría solo,
       es un agente.
-   d. REUSAR antes de crear: si [Estado actual] muestra terminales LIBRES
-      (⚪, sin rol), asignales el trabajo — terminal_id en el paso, o la
-      action enviar_prompt si es una tarea suelta sin workflow. Nunca a
-      una 🟢 trabajando ni a una con rol en curso.
+   d. REUSAR antes de crear: si [Estado actual] marca terminales LIBRES
+      (la cabecera las lista), asignales el trabajo — terminal_id en el
+      paso, o la action enviar_prompt si es una tarea suelta sin workflow.
+      Nunca a una "ocupada": 🟢 trabajando, ❓ esperando respuesta, 💀
+      caída o con un paso de workflow en curso (el motor igual la rechaza).
+      Mirá su "tarea", lo que "editó" y su "pantalla": si una terminal ya
+      trabajó en esos archivos, es la candidata natural para seguir.
    e. ORDENAR dependencias: si paso_1 lee lo que paso_0 escribió,
       `depende_de: "paso_0"`. Si no, `depende_de: null` y van en paralelo.
 
@@ -160,23 +163,44 @@ CONTEXTO QUE RECIBÍS EN CADA TURNO
 Recibís la conversación REAL del thread (los turnos previos van incluidos:
 "ahora agregale X" refiere a lo que se habló antes). El mensaje actual puede
 venir precedido por bloques del sistema:
-  [Estado actual] — terminales activas con estado VIVO: fase (🟢 trabajando
-                    AHORA / ⚪ quieta / ⏳ arrancando), su rol en workflow o
-                    "terminal libre", y de qué archivos es dueña.
+  [Estado actual] — cada terminal con su estado VIVO: 🟢 trabajando / ⚪
+                    quieta / ⏳ arrancando (y hace cuánto), ❓ ESPERANDO
+                    RESPUESTA (hay una pregunta en su pantalla), 💀 CAÍDA
+                    (su CLI no corre), LIBRE u ocupada; su rol de workflow,
+                    la tarea que se le mandó, los archivos que editó (🔒 =
+                    es dueña), su último cierre (TASK_* + motivo), sus dev
+                    servers y las últimas líneas de su PANTALLA.
+  [Proyecto] — ruta, archivos de la raíz, rama git, lo que está sin
+                    commitear y los últimos commits (qué ya se hizo).
+  [Guía del proyecto] — intro + secciones del CLAUDE.md del proyecto: sus
+                    reglas mandan sobre tus preferencias. Leé el archivo
+                    con Read si necesitás una sección en detalle.
   [Mapa del proyecto] — stack detectado + árbol real de carpetas con conteo
                     de archivos y propósito de cada una. Es TU fuente para
                     el campo `archivos` y las rutas de cada tarea: usá
                     SIEMPRE carpetas/archivos que existan acá.
+  [Workflows activos] — workflows en curso paso por paso (estado, terminal,
+                    dependencias, archivos y motivo de cada bloqueo).
+  [Eventos] — los últimos TASK_DONE/BLOCKED/ERROR del proyecto, con motivo.
+  [Tablero de tareas] — tareas abiertas del kanban (y a quién están asignadas).
+  [Coordinación] — permisos pendientes, reservas y conflictos de archivos
+                    entre agentes.
+  [Dev servers] — todos los servers vivos y qué terminal levantó cada uno.
   [Skills activas] — plugins/skills cargados en el proyecto (si aplica).
   [Workflows recientes] — workflows previos con su progreso.
-  [Eventos] — TASK_DONE/BLOCKED/ERROR de agentes en curso (si aplica).
+  [Memoria relevante al pedido] — memorias del proyecto que tocan el pedido.
 
 Usalos para:
   • REUSAR terminales libres en vez de crear nuevas: enviar_prompt para
     una tarea suelta, o terminal_id en un paso de workflow. JAMÁS le
-    mandes trabajo a una 🟢 trabajando ni a una ocupada con un rol.
-  • Respetar el stack y las convenciones de las skills.
-  • No repetir trabajo de workflows anteriores.
+    mandes trabajo a una terminal ocupada.
+  • Si una terminal ESPERA RESPUESTA, su pantalla dice qué pregunta: si el
+    usuario te la contesta, mandásela con enviar_prompt; si no, avisale.
+  • Diagnosticar un bloqueo leyendo su motivo y la pantalla del agente
+    ANTES de re-instruirlo: no repitas la instrucción que ya falló.
+  • No asignar archivos que otro agente está editando (🔒 / [Coordinación])
+    ni rehacer lo que ya está en los últimos commits.
+  • Respetar el stack, las convenciones de las skills y la guía del proyecto.
 
 ══════════════════════════════════════════════════════════════════════
 PROACTIVIDAD POST-WORKFLOW
@@ -236,6 +260,10 @@ actions[].type válidos (NADA MÁS):
                      ser autosuficiente (objetivo + archivos concretos del
                      [Mapa del proyecto] + criterio de éxito). Podés emitir
                      varias en una respuesta (una por terminal).
+                     Con `es_respuesta: true` el prompt es la RESPUESTA a la
+                     pregunta que esa terminal tiene en pantalla (❓ ESPERANDO
+                     RESPUESTA): se tipea tal cual ("y", "2", "usá JWT"), sin
+                     envoltorio. Solo vale para una terminal que espera.
 
 DIFERENCIA CRÍTICA — no confundir:
   • "cerrá la terminal" / "matá el agente X" / "borrá ese Claude"
@@ -332,7 +360,7 @@ Contexto: [Evento: TASK_BLOCKED en paso_0 motivo: necesito saber si la tabla use
 {"message":"Le doy la info al agente.","actions":[{"type":"none"}],"workflow":{"nombre":"Resume auth con tabla users","objetivo":"Continuar paso_0 con la info que falta","pasos":[{"agente":"Implementación","ia_type":"claude","tarea":"CONTINUACIÓN del trabajo anterior: la tabla users no existe, creala vos en plotspace/database.py con columnas id, email UNIQUE, password_hash, created_at. Después seguí con auth como estabas. PERMITIDO: plotspace/auth/*, plotspace/database.py (solo agregar tabla users), plotspace/main.py. PROHIBIDO: plotspace/tests/*.","depende_de":null}]}}
 
 [10] PROMPT DIRECTO A UNA TERMINAL VIVA — sin workflow
-Contexto: [Estado actual]\n  - ID 151: Claude Code #2 (claude) — ⚪ quieta — terminal libre
+Contexto: [Estado actual]\n  - ID 151: Claude Code #2 (claude) — ⚪ quieta hace 12 min — LIBRE
 Usuario: "decile a la claude libre que pula el diseño de la landing"
 {"message":"Le mando la tarea a Claude Code #2.","actions":[{"type":"enviar_prompt","terminal_id":151,"prompt":"OBJETIVO: pulir el diseño de la landing. Trabajá sobre los archivos de la landing que muestra el mapa del proyecto (HTML + CSS). CRITERIO DE ÉXITO: jerarquía tipográfica consistente, espaciado uniforme y paleta cohesiva, sin romper el layout existente."}]}
 
@@ -576,6 +604,7 @@ RESPONDER_TOOL = {
                         "count": {"type": "integer", "description": "Solo spawn_terminal: cuántas terminales."},
                         "terminal_id": {"type": "integer", "description": "close_terminal: id a cerrar. enviar_prompt: id de la terminal destino."},
                         "prompt": {"type": "string", "description": "Solo enviar_prompt: la tarea/mensaje que se tipea en esa terminal. Autosuficiente, con archivos/carpetas concretos del [Mapa del proyecto]."},
+                        "es_respuesta": {"type": "boolean", "description": "Solo enviar_prompt: true si el prompt RESPONDE la pregunta que la terminal tiene en pantalla (❓ ESPERANDO RESPUESTA) — se tipea tal cual."},
                     },
                     "required": ["type"],
                 },
@@ -746,7 +775,7 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
                 project_id   = req.project_id,
                 name         = action.get("name", "Terminal"),
                 ia_type      = action.get("ia_type", "manual"),
-                count        = int(action.get("count", 1)),
+                count        = max(1, _entero(action.get("count"), 1)),
                 count_actual = count_actual,
             )
             created_terminals.extend(nuevas)
@@ -765,9 +794,9 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
                 closed_all = True
 
         elif atype == "close_terminal":
-            tid = action.get("terminal_id")
+            tid = _entero(action.get("terminal_id"), None)
             if tid:
-                motivo = await _cerrar_terminal(int(tid), req.project_id)
+                motivo = await _cerrar_terminal(tid, req.project_id)
                 if motivo:
                     jarvis_message = (jarvis_message + f" ⚠️ Ojo: {motivo}.").strip()
 
@@ -784,13 +813,36 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
             finally:
                 conn.close()
             tid, motivo = _validar_enviar_prompt(action, activas_ids, ocupadas)
+            es_respuesta = action.get('es_respuesta') is True
+            if not motivo:
+                # La regla "nunca a una ocupada" era solo texto del prompt: el
+                # código miraba únicamente los pasos running. Ahora decide el
+                # estado VIVO (trabajando, pregunta en pantalla, CLI caído).
+                try:
+                    from plotspace.core import orq_contexto
+                    fila = next(t for t in terminals_activas if t['id'] == tid)
+                    info = await asyncio.to_thread(orq_contexto.info_terminal,
+                                                   req.project_id, fila)
+                    motivo = _motivo_rechazo_envio(info, es_respuesta)
+                except Exception as e:
+                    print(f'[enviar_prompt] sin estado vivo de #{tid}: {e}')
             if motivo:
                 jarvis_message = (jarvis_message +
                                   f" ⚠️ No envié el prompt: {motivo}.").strip()
             else:
-                await send_to_agent(tid, action['prompt'].strip())
-                _logs.evento('prompt_directo', terminal_id=tid,
-                             project_id=req.project_id)
+                texto = action['prompt'].strip()
+                if es_respuesta:
+                    ok = await send_to_agent(tid, texto, crudo=True)
+                else:
+                    ok = await send_to_agent(tid, texto + _cierre_prompt_directo(tid))
+                if ok is False:
+                    jarvis_message = (jarvis_message + f" ⚠️ No pude entregar el "
+                                      f"prompt a la terminal #{tid} (su sesión "
+                                      "no responde).").strip()
+                else:
+                    _logs.evento('prompt_directo', terminal_id=tid,
+                                 project_id=req.project_id,
+                                 respuesta=es_respuesta)
 
     # ── Ejecutar workflow si lo hay ────────────────────────────────────────────
     if workflow_data:
@@ -820,6 +872,18 @@ ORQ_AUTO_INTERVENCION = (os.environ.get('ORQ_AUTO_INTERVENCION', 'on')
 _AUTO_INTERV_TOPE_HORA = 6
 _auto_intervenciones: list = []   # timestamps de intervenciones (ventana móvil)
 
+# Referencias FUERTES a las tareas en background: el event loop solo guarda
+# referencias débiles, así que un `asyncio.create_task` suelto puede ser
+# recolectado a mitad de camino (la auto-intervención moría en silencio).
+_tareas_fondo: set = set()
+
+
+def _en_fondo(coro) -> asyncio.Task:
+    tarea = asyncio.create_task(coro)
+    _tareas_fondo.add(tarea)
+    tarea.add_done_callback(_tareas_fondo.discard)
+    return tarea
+
 
 def _puede_auto_intervenir(paso: dict, habilitado: bool, recientes: list,
                            ahora: float, tope: int = _AUTO_INTERV_TOPE_HORA) -> bool:
@@ -840,6 +904,8 @@ def _mensaje_auto_intervencion(evento: str, paso_idx: int, wf_nombre: str,
     return (
         f"[Evento: {evento} en paso_{paso_idx} del workflow '{wf_nombre}' — "
         f"agente {term_nombre}. Motivo: {motivo or 'sin motivo reportado'}]\n"
+        f"Antes de decidir, leé en [Estado actual] la PANTALLA y los archivos "
+        f"de {term_nombre}: el motivo resume, la pantalla muestra qué pasó.\n"
         "AUTO-INTERVENCIÓN (el usuario NO está mirando este chat ahora): si el "
         "bloqueo se resuelve con información que tenés o una decisión técnica "
         "razonable, resolvelo YA re-instruyendo al agente — un workflow chico "
@@ -892,9 +958,19 @@ def _lanzar_auto_intervencion(wf: dict, pasos: list, paso_idx: int,
     pasos[paso_idx]['auto_intervencion_ts'] = ahora
     _auto_intervenciones.append(ahora)
     _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
-    asyncio.create_task(_auto_intervenir(
+    _en_fondo(_auto_intervenir(
         project_id, wf.get('nombre') or 'Workflow', paso_idx, evento,
         motivo or '', term_nombre))
+
+
+def _entero(valor, default):
+    """int() tolerante para campos que escribe el modelo ("2", 2.0, "dos"):
+    un ValueError a mitad de las acciones cortaba el resto, y el frontend
+    reintentaba por /chat repitiendo las que ya se habían ejecutado."""
+    try:
+        return int(valor)
+    except (TypeError, ValueError):
+        return default
 
 
 def _validar_enviar_prompt(action: dict, activas_ids: set, ocupadas: set):
@@ -916,6 +992,31 @@ def _validar_enviar_prompt(action: dict, activas_ids: set, ocupadas: set):
         return None, (f'la terminal #{tid} está ocupada con un paso de '
                       'workflow en curso')
     return tid, None
+
+
+def _motivo_rechazo_envio(info: dict, es_respuesta: bool) -> str:
+    """'' si se puede mandar; si no, el porqué legible. PURA.
+    Una respuesta solo va a quien ESPERA una; una tarea, solo a una libre."""
+    from plotspace.core.orq_contexto import motivo_no_libre
+    if info.get('estado') in ('caido', 'sin_sesion'):
+        return motivo_no_libre(info)
+    if es_respuesta:
+        return '' if info.get('esperando') else 'no tiene ninguna pregunta en pantalla'
+    if info.get('esperando'):
+        return ('tiene una pregunta en pantalla esperando respuesta — contestala '
+                'con es_respuesta o avisale al usuario')
+    return motivo_no_libre(info)
+
+
+def _cierre_prompt_directo(terminal_id: int) -> str:
+    """Cierre estructurado para una tarea suelta: el sentinel lo registra y el
+    orquestador lo ve en [Eventos] / 'último cierre' en el próximo turno."""
+    return (
+        "\n\nAl terminar, señalá tu cierre: "
+        f"mkdir -p .jarvis/signals && printf '%s' '{{\"estado\":\"done\",\"motivo\":\"\","
+        f"\"memorias_usadas\":[]}}' > .jarvis/signals/terminal_{terminal_id}.json "
+        "(estado blocked o error si no pudiste, con un motivo concreto)."
+    )
 
 
 def _terminal_reusable(tid, activas_ids: set, ocupadas: set, reclamadas: set) -> bool:
@@ -1075,8 +1176,12 @@ def _bloque_memoria_para_orden(project_ruta: str, mensaje: str) -> str:
         return ''
     try:
         from plotspace.core.memoria_recall import relevantes, usos_registrados
-        rel = relevantes(project_ruta, [], mensaje or '', k=4, usos=usos_registrados())
-    except Exception:
+        # Las rutas que nombra el pedido son la señal MÁS fuerte del recall (y
+        # la única que despierta una lápida): antes se pasaba [] siempre.
+        rel = relevantes(project_ruta, _rutas_en_texto(mensaje), mensaje or '',
+                         k=5, usos=usos_registrados())
+    except Exception as e:
+        print(f'[orquestador] recall de memorias falló: {e}')
         return ''
     if not rel:
         return ''
@@ -1085,6 +1190,42 @@ def _bloque_memoria_para_orden(project_ruta: str, mensaje: str) -> str:
     for m in rel:
         marca = ' ⚰️LÁPIDA(no reintroducir)' if m['estado'] == 'lapida' else ''
         lineas.append(f"  • {m['titulo']}{marca} — .jarvis/memory/{m['slug']}.md")
+        if m.get('resumen') and m['resumen'].lower() != m['titulo'].lower():
+            lineas.append(f"      ↳ {m['resumen']}")
+    return '\n'.join(lineas)
+
+
+_RUTA_EN_TEXTO_RE = re.compile(
+    r'(?<![\w@])((?:[\w.-]+/)+[\w.-]+|[\w-]+\.(?:py|js|ts|tsx|jsx|css|html|md|json|'
+    r'toml|yaml|yml|sh|go|rs|java|rb|php|vue|svelte|sql))(?![\w/])')
+
+
+def _rutas_en_texto(texto: str) -> list:
+    """Paths que el usuario nombró ('frontend/shell/workspace.js', 'main.py')."""
+    vistos = []
+    sin_urls = re.sub(r'\w+://\S+', ' ', texto or '')
+    for m in _RUTA_EN_TEXTO_RE.findall(sin_urls):
+        if m.startswith('./'):
+            m = m[2:]
+        if '://' in m or m in vistos:
+            continue
+        vistos.append(m)
+    return vistos[:12]
+
+
+def _formatear_dev_servers(project_id: int) -> str:
+    """TODOS los dev servers vivos del proyecto con la terminal que los
+    levantó (antes se veía una sola URL, sin dueño)."""
+    try:
+        from plotspace.core.dev_detect import servers_detectados
+        servers = servers_detectados(project_id)
+    except Exception:
+        return ''
+    lineas = []
+    for sv in servers[:10]:
+        quien = (f" — levantado por #{sv['terminal_id']} {sv.get('terminal_nombre') or ''}"
+                 if sv.get('terminal_id') else '')
+        lineas.append(f"  - {sv['url']}{quien}".rstrip())
     return '\n'.join(lineas)
 
 
@@ -1109,8 +1250,17 @@ async def _preparar_contexto_chat(req):
     finally:
         conn.close()
 
-    # Armado del contexto: solo agregar bloques que tengan contenido real.
-    bloques = [f"[Estado actual]\n{_formatear_estado(terminals_activas, req.project_id)}"]
+    # Armado del contexto: la foto COMPLETA del enjambre y del proyecto
+    # (core/orq_contexto): estado vivo de cada terminal con su pantalla, git,
+    # guía del proyecto, workflows, eventos, tablero y coordinación.
+    try:
+        from plotspace.core import orq_contexto
+        bloques = await orq_contexto.construir_bloques(project, terminals_activas)
+    except Exception as e:
+        print(f'[orquestador] contexto enriquecido falló (sigo con lo mínimo): {e}')
+        bloques = [f"[Estado actual]\nTerminales activas: {len(terminals_activas)} — "
+                   + ', '.join(f"ID {t['id']}: {t['nombre']} ({t['tipo_ia']})"
+                               for t in terminals_activas)]
 
     # Mapa del repo: el orquestador deja de adivinar rutas — planifica con las
     # carpetas REALES del proyecto (determinista, cacheado, degrada a nada).
@@ -1130,6 +1280,9 @@ async def _preparar_contexto_chat(req):
             f"  Para apagarlo usá la action 'stop_preview' (NO close_terminal — "
             f"el preview NO es una terminal)."
         )
+    dev_str = _formatear_dev_servers(req.project_id)
+    if dev_str:
+        bloques.append(f"[Dev servers]\n{dev_str}")
 
     skills_str = _formatear_skills_activas(req.project_id)
     if skills_str:
@@ -1181,6 +1334,25 @@ async def _preparar_contexto_chat(req):
     # al mensaje actual — "ahora agregale X" por fin tiene ancla.
     mensajes = _mensajes_con_historial(req.historial, user_content)
     return project, terminals_activas, mensajes, client
+
+
+_TITULO_BLOQUE_RE = re.compile(r'^\[([^\]\n]{2,80})\]', re.M)
+
+
+def _titulos_contexto(mensajes: list) -> list:
+    """Nombres de los bloques de contexto del mensaje actual ('Estado actual',
+    'Proyecto', …) — para mostrarle al usuario qué está mirando el orquestador."""
+    if not mensajes:
+        return []
+    contenido = mensajes[-1].get('content')
+    if isinstance(contenido, list):
+        contenido = '\n'.join(b.get('text', '') for b in contenido if isinstance(b, dict))
+    titulos = []
+    for t in _TITULO_BLOQUE_RE.findall(contenido or ''):
+        t = t.split(' — ')[0].rstrip(':').strip()
+        if t and t != 'Orden' and t not in titulos:
+            titulos.append(t)
+    return titulos
 
 
 def _guard_cli():
@@ -1285,6 +1457,10 @@ async def chat_orquestador_stream(req: ChatRequest):
         def sse(obj):
             return "data: " + json.dumps(obj, ensure_ascii=False) + "\n\n"
 
+        # Qué vio el orquestador (los bloques de contexto de este turno): el
+        # usuario lo ve mientras espera, en vez de tres puntitos mudos.
+        yield sse({"type": "contexto", "bloques": _titulos_contexto(mensajes)})
+
         if ORQUESTADOR_MOTOR != 'api':
             # Motor SUSCRIPCIÓN: streamear el 'message' desde los deltas del
             # claude -p. En 'reinicio' (mensaje nuevo del asistente, p.ej. tras
@@ -1300,7 +1476,14 @@ async def chat_orquestador_stream(req: ChatRequest):
                         cwd=(project.get('ruta') or None),
                         schema=RESPONDER_TOOL['input_schema']):
                     if ev['tipo'] == 'reinicio':
+                        # El cliente también resetea: antes seguía acumulando
+                        # y el texto se veía duplicado hasta el 'done'.
+                        if emitido_cli:
+                            yield sse({"type": "reinicio"})
                         raw_cli, emitido_cli = "", 0
+                    elif ev['tipo'] == 'herramienta':
+                        yield sse({"type": "progreso", "herramienta": ev['nombre'],
+                                   "detalle": ev['detalle']})
                     elif ev['tipo'] == 'delta':
                         raw_cli += ev['texto']
                         msg = _extraer_message_parcial(raw_cli)
@@ -1319,9 +1502,12 @@ async def chat_orquestador_stream(req: ChatRequest):
             usage_cli = SimpleNamespace(input_tokens=resultado['input_tokens'],
                                         output_tokens=resultado['output_tokens'])
             try:
-                res = await _procesar_respuesta_orquestador(
+                # Blindado: si el usuario cancela o se corta la conexión a mitad
+                # de las acciones, un workflow a medio spawnear queda peor que
+                # uno terminado — las acciones se completan igual.
+                res = await asyncio.shield(_en_fondo(_procesar_respuesta_orquestador(
                     resultado['texto'], usage_cli, project, req,
-                    terminals_activas, stop_reason='end_turn')
+                    terminals_activas, stop_reason='end_turn')))
             except Exception as e:
                 yield sse({"type": "error", "detail": f"Error procesando la respuesta: {e}"})
                 return
@@ -1368,8 +1554,8 @@ async def chat_orquestador_stream(req: ChatRequest):
 
         # Ejecutar actions/workflow + uso + STATE.md (idéntico a /chat).
         try:
-            resultado = await _procesar_respuesta_orquestador(
-                raw, usage, project, req, terminals_activas, stop_reason=stop)
+            resultado = await asyncio.shield(_en_fondo(_procesar_respuesta_orquestador(
+                raw, usage, project, req, terminals_activas, stop_reason=stop)))
         except Exception as e:
             yield sse({"type": "error", "detail": f"Error procesando la respuesta: {e}"})
             return
@@ -1620,6 +1806,45 @@ def _dep_indice(dep) -> Optional[int]:
         return None
 
 
+def _deps_indices(dep) -> list:
+    """Todas las dependencias de un paso como índices: 'paso_2' → [2],
+    'paso_0, paso_1' → [0, 1], ['paso_0', 'paso_3'] → [0, 3]. Antes solo se
+    leía una y lo no parseable se ignoraba: el paso corría en paralelo cuando
+    debía esperar."""
+    if dep is None or dep == '' or dep is False:
+        return []
+    if isinstance(dep, bool):
+        return []
+    if isinstance(dep, int):
+        return [dep]
+    partes = dep if isinstance(dep, (list, tuple)) else [dep]
+    out = []
+    for parte in partes:
+        for n in re.findall(r'\d+', str(parte)):
+            if int(n) not in out:
+                out.append(int(n))
+    return out
+
+
+def _sanear_dependencias(pasos: list) -> list:
+    """Deja en cada paso solo las dependencias hacia un paso ANTERIOR. Eso
+    elimina de raíz los ciclos, la auto-dependencia y el paso que espera algo
+    que no existe — tres formas de dejar un paso pending para siempre.
+    Muta `pasos`; devuelve los avisos (uno por paso corregido)."""
+    avisos = []
+    for i, paso in enumerate(pasos):
+        crudo = paso.get('depende_de')
+        if crudo in (None, ''):
+            continue
+        deps = _deps_indices(crudo)
+        validas = [d for d in deps if 0 <= d < i]
+        if validas == deps and deps:
+            continue
+        paso['depende_de'] = ', '.join(f'paso_{d}' for d in validas) or None
+        avisos.append(f'paso_{i}: depende_de {crudo!r} → {paso["depende_de"]!r}')
+    return avisos
+
+
 def _paso_reviewer(nombre: str, objetivo: str) -> dict:
     """Paso Reviewer que el engine agrega al final de cada workflow:
     la compuerta de calidad antes de declarar el workflow completado."""
@@ -1660,37 +1885,71 @@ def _paso_reviewer(nombre: str, objetivo: str) -> dict:
 _ESTADOS_TERMINALES = ('done', 'blocked', 'error')
 
 
+def _pasos_varados(pasos: list) -> set:
+    """Pasos pending que ya NUNCA van a arrancar: alguna dependencia terminó
+    blocked/error (o quedó varada a su vez), o apunta a un paso inexistente.
+    Sin esto esperaban para siempre, y con ellos el Reviewer y el cierre."""
+    varados: set = set()
+    cambio = True
+    while cambio:
+        cambio = False
+        for i, p in enumerate(pasos):
+            if i in varados or p.get('estado') != 'pending' or p.get('rol') == 'reviewer':
+                continue
+            for d in _deps_indices(p.get('depende_de')):
+                if (not (0 <= d < len(pasos)) or d == i or d in varados
+                        or pasos[d].get('estado') in ('blocked', 'error')):
+                    varados.add(i)
+                    cambio = True
+                    break
+    return varados
+
+
 def _pasos_listos_para_arrancar(pasos: list) -> list:
     """Devuelve los índices de pasos en estado='pending' cuyas dependencias
-    están resueltas (depende_de es null, o el paso del que dependen está 'done').
+    están resueltas (sin depende_de, o TODOS los pasos de los que dependen
+    están 'done').
 
     Special-case REVIEWER: arranca cuando ningún otro paso sigue en marcha —
-    TERMINADOS, no necesariamente exitosos. Antes exigía `done` de todos, así
-    que un solo paso bloqueado dejaba el workflow colgado para siempre: sin
-    review, sin cierre y sin que nadie avisara. Un workflow que termina mal
-    igual necesita que alguien mire el diff."""
+    TERMINADOS (o varados detrás de uno que falló), no necesariamente
+    exitosos. Un workflow que termina mal igual necesita que alguien mire el
+    diff."""
+    varados = _pasos_varados(pasos)
     listos = []
     for i, p in enumerate(pasos):
-        if p.get('estado') != 'pending':
+        if p.get('estado') != 'pending' or i in varados:
             continue
         if p.get('rol') == 'reviewer':
-            otros = [q for j, q in enumerate(pasos) if j != i]
-            if otros and all(q.get('estado') in _ESTADOS_TERMINALES for q in otros):
+            otros = [j for j in range(len(pasos)) if j != i]
+            if otros and all(pasos[j].get('estado') in _ESTADOS_TERMINALES
+                             or j in varados for j in otros):
                 listos.append(i)
             continue
-        dep_idx = _dep_indice(p.get('depende_de'))
-        if dep_idx is None:
-            listos.append(i)
-            continue
-        if 0 <= dep_idx < len(pasos) and pasos[dep_idx].get('estado') == 'done':
+        deps = _deps_indices(p.get('depende_de'))
+        if all(0 <= d < len(pasos) and pasos[d].get('estado') == 'done' for d in deps):
             listos.append(i)
     return listos
 
 
 def _workflow_terminado(pasos: list) -> bool:
-    """True si ningún paso está pending/running. Los blocked/error cuentan
-    como terminales (no van a avanzar solos)."""
-    return all(p.get('estado') in ('done', 'blocked', 'error') for p in pasos)
+    """True si ningún paso está running ni puede arrancar. Los blocked/error
+    cuentan como terminales (no van a avanzar solos), y también los pending
+    varados detrás de uno de ellos."""
+    varados = _pasos_varados(pasos)
+    return all(p.get('estado') in _ESTADOS_TERMINALES or i in varados
+               for i, p in enumerate(pasos))
+
+
+def _paso_de_terminal(pasos: list, terminal_id: int) -> Optional[int]:
+    """Qué paso cierra un evento de esta terminal: el running; si no hay, uno
+    blocked/error (el agente se destrabó y reporta). NUNCA un paso ajeno: el
+    viejo fallback a paso_actual hacía que el TASK_DONE de una terminal manual
+    marcara como terminado el paso de otro agente."""
+    for estados in (('running',), ('blocked', 'error')):
+        for i, p in enumerate(pasos):
+            if p.get('terminal_id') == terminal_id and p.get('estado') in estados:
+                return i
+    return None
 
 
 def _progreso_workflow(pasos: list) -> int:
@@ -1857,10 +2116,38 @@ def _ruta_proyecto_o_none(project_id: int):
         return None
 
 
+def _terminal_libre_del_workflow(pasos: list, project_id: int) -> Optional[int]:
+    """Una terminal del workflow cuyo paso terminó 'done', que no tenga otro
+    paso running o pending, y siga activa. Para el Reviewer sin terminal."""
+    ocupadas = {p.get('terminal_id') for p in pasos
+                if p.get('estado') in ('running', 'pending') and p.get('terminal_id')}
+    candidatas = []
+    for p in pasos:
+        t = p.get('terminal_id')
+        if t and p.get('estado') == 'done' and t not in ocupadas and t not in candidatas:
+            candidatas.append(t)
+    if not candidatas:
+        return None
+    conn = get_db()
+    try:
+        for t in reversed(candidatas):            # la que terminó último, primero
+            f = conn.execute('SELECT activa FROM terminals WHERE id = ? AND project_id = ?',
+                             (t, project_id)).fetchone()
+            if f and f['activa']:
+                return t
+    finally:
+        conn.close()
+    return None
+
+
 async def _arrancar_pasos(pasos: list, indices: list, project_id: int, workflow_id: str):
     """Pone los pasos indicados en estado='running', les manda la tarea, e
-    inicia el monitor de keywords de cada uno. Idempotente: ignora pasos sin
-    terminal_id (ej. si no se pudo spawnear)."""
+    inicia el monitor de keywords de cada uno.
+
+    Un paso que NO puede arrancar queda en 'error' con su motivo — antes se
+    salteaba en silencio y quedaba pending para siempre (y con él el cierre
+    del workflow). El Reviewer sin terminal (tope de terminales) reusa la de
+    un builder que ya terminó bien."""
     if not indices:
         return
     from plotspace.routers.terminals import iniciar_monitor
@@ -1868,12 +2155,22 @@ async def _arrancar_pasos(pasos: list, indices: list, project_id: int, workflow_
     for i in indices:
         paso = pasos[i]
         tid  = paso.get('terminal_id')
+        if not tid and paso.get('rol') == 'reviewer':
+            tid = await asyncio.to_thread(_terminal_libre_del_workflow, pasos, project_id)
+            if tid:
+                paso['terminal_id'] = tid
+                print(f'[workflow] paso_{i} (reviewer) reusa la terminal #{tid}')
         if not tid:
-            print(f'[workflow] paso_{i} sin terminal_id — skip')
+            print(f'[workflow] paso_{i} sin terminal_id — error')
+            paso['estado'] = 'error'
+            paso['motivo'] = ('no arrancó: no hubo terminal disponible (tope de '
+                              f'{MAX_TERMINALES} terminales o spawn fallido)')
             continue
         tarea = paso.get('tarea')   # acceso seguro: un paso truncado podría no tenerla
         if not tarea:
-            print(f'[workflow] paso_{i} sin tarea — skip')
+            print(f'[workflow] paso_{i} sin tarea — error')
+            paso['estado'] = 'error'
+            paso['motivo'] = 'no arrancó: el plan no traía tarea para este paso'
             continue
         paso['estado'] = 'running'
         paso['iniciado_ts'] = time.time()   # sello para el watchdog (sobrevive al restart)
@@ -1899,7 +2196,13 @@ async def _arrancar_pasos(pasos: list, indices: list, project_id: int, workflow_
 
         tarea = _tarea_engine_para_terminal(paso, tid, project_ruta=ruta,
                                             pasos_workflow=pasos)
-        await send_to_agent(tid, tarea)
+        if (await send_to_agent(tid, tarea)) is False:
+            # Sin esto el paso figuraba 'running' hasta que el watchdog avisara
+            # (y solo avisa): nadie iba a cerrarlo nunca.
+            paso['estado'] = 'error'
+            paso['motivo'] = (f'no se pudo entregar la tarea a la terminal #{tid} '
+                              '(sesión tmux inexistente o pegado fallido)')
+            continue
         iniciar_monitor(tid, project_id)
     _actualizar_workflow_db(
         workflow_id, estado='running', pasos=pasos,
@@ -1934,6 +2237,8 @@ async def ejecutar_workflow(workflow_data: dict, project_id: int, count_base: in
     #    el workflow solo se declara completado si el Reviewer da TASK_DONE.
     if pasos:
         pasos = list(pasos) + [_paso_reviewer(nombre, objetivo)]
+    for aviso in _sanear_dependencias(pasos):
+        print(f'[workflow] dependencia inválida corregida — {aviso}')
 
     print(f'[workflow] Iniciando {workflow_id}: {nombre} ({len(pasos)} pasos, reviewer incluido)')
 
@@ -1984,12 +2289,31 @@ async def ejecutar_workflow(workflow_data: dict, project_id: int, count_base: in
     conn = get_db()
     try:
         cur = conn.cursor()
-        activas_ids = {r['id'] for r in cur.execute(
-            'SELECT id FROM terminals WHERE project_id = ? AND activa = 1',
-            (project_id,)).fetchall()}
+        activas = [dict(r) for r in cur.execute(
+            'SELECT id, nombre, tipo_ia FROM terminals WHERE project_id = ? AND activa = 1',
+            (project_id,)).fetchall()]
+        activas_ids = {t['id'] for t in activas}
         ocupadas = _terminales_ocupadas(cur, project_id)
     finally:
         conn.close()
+    # Reusar solo una terminal libre DE VERDAD (quieta, sin pregunta en
+    # pantalla y con el CLI vivo), no solo "sin paso running".
+    pedidas = {p.get('terminal_id') for p in pasos if isinstance(p.get('terminal_id'), int)}
+    if pedidas & activas_ids:
+        try:
+            from plotspace.core import orq_contexto
+            # Sin ESTE workflow: ya está en la DB con sus pasos pending, y la
+            # terminal pedida figuraría "con paso activo" por su propio paso.
+            otros_wfs = [w for w in await asyncio.to_thread(
+                orq_contexto.workflows_del_proyecto, project_id)
+                if w['id'] != workflow_id]
+            infos = await asyncio.to_thread(
+                orq_contexto.infos_terminales, project_id,
+                [t for t in activas if t['id'] in pedidas], otros_wfs)
+            ocupadas = ocupadas | {tid for tid, i in infos.items()
+                                   if not orq_contexto.es_libre(i)}
+        except Exception as e:
+            print(f'[workflow] sin estado vivo para validar reusos: {e}')
 
     # Spawnear un terminal por cada paso: DB row + sesión tmux + lanzar IA.
     # Todos los agentes trabajan directo en project_path (sin worktrees);
@@ -2081,9 +2405,10 @@ async def ejecutar_workflow(workflow_data: dict, project_id: int, count_base: in
 
     # Disparar TODOS los pasos sin dependencias en paralelo.
     # Los que tienen depende_de='paso_N' arrancan cuando ese paso termine.
-    listos = _pasos_listos_para_arrancar(pasos)
-    print(f'[workflow] Pasos listos al inicio (paralelo): {listos}')
-    await _arrancar_pasos(pasos, listos, project_id, workflow_id)
+    print(f'[workflow] Pasos listos al inicio (paralelo): {_pasos_listos_para_arrancar(pasos)}')
+    wf_ctx = {'id': workflow_id, 'nombre': nombre, 'estado': 'running'}
+    async with _lock_workflow(workflow_id):
+        await _avanzar_workflow(wf_ctx, pasos, project_id)
 
     workflow_card = {
         "id":          workflow_id,
@@ -2112,22 +2437,7 @@ async def procesar_task_event_interno(terminal_id: int, event: str, project_id: 
     except Exception as e:
         print(f'[tasks] error resolviendo tareas por evento: {e}')
 
-    # Nombre de la terminal y workflow activo
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT nombre FROM terminals WHERE id = ?', (terminal_id,))
-        row         = cursor.fetchone()
-        term_nombre = row['nombre'] if row else f'Terminal #{terminal_id}'
-
-        cursor.execute(
-            "SELECT * FROM workflows WHERE project_id = ? AND estado IN ('running', 'paused') "
-            "ORDER BY created_at DESC LIMIT 1",
-            (project_id,)
-        )
-        wf_row = cursor.fetchone()
-    finally:
-        conn.close()
+    term_nombre = await asyncio.to_thread(_nombre_terminal, terminal_id)
 
     # Broadcast del raw event — el frontend lo usa solo para la card, NO para el chat
     await broadcaster.broadcast(project_id, {
@@ -2138,141 +2448,84 @@ async def procesar_task_event_interno(terminal_id: int, event: str, project_id: 
         "motivo":          (motivo or '')[:300],
     })
 
-    if not wf_row:
+    # El evento va al workflow que tiene un paso de ESTA terminal — no al más
+    # nuevo del proyecto (con dos workflows vivos, los eventos del viejo caían
+    # en el nuevo) y nunca a paso_actual (una terminal manual marcaba como
+    # terminado el paso de otro agente).
+    wf_id = await asyncio.to_thread(_workflow_id_de_terminal, project_id, terminal_id)
+    if not wf_id:
         return
 
-    wf    = dict(wf_row)
-    pasos = json.loads(wf['pasos'])
+    # Los pasos viven en UNA columna JSON que se lee, modifica y reescribe con
+    # awaits en el medio: sin este lock dos eventos simultáneos se pisaban.
+    async with _lock_workflow(wf_id):
+        wf, pasos = await asyncio.to_thread(_leer_workflow, wf_id)
+        if wf is None or wf['estado'] not in ('running', 'paused'):
+            return
+        paso_idx = _paso_de_terminal(pasos, terminal_id)
+        if paso_idx is None:
+            return
 
-    # Identificar QUÉ paso corresponde a este terminal_id (con paralelos no
-    # alcanza con paso_actual). Si no se encuentra, usar paso_actual como fallback.
-    paso_idx = next(
-        (i for i, p in enumerate(pasos) if p.get('terminal_id') == terminal_id),
-        wf['paso_actual'],
-    )
-
-    if event == "TASK_DONE":
-        if 0 <= paso_idx < len(pasos):
+        if event == "TASK_DONE":
             pasos[paso_idx]["estado"] = "done"
-
-        # FIX (deadlock de paralelos): persistir el done INMEDIATAMENTE.
-        # Antes solo se guardaba si recien_listos≠[] o al terminar todo: con
-        # builders en paralelo, el primer TASK_DONE no libera nada (el
-        # reviewer espera a TODOS) → no persistía → el segundo TASK_DONE
-        # releía al primero como 'running' → nada se liberaba nunca.
-        _actualizar_workflow_db(
-            wf['id'], estado=wf['estado'], pasos=pasos,
-            paso_actual=_progreso_workflow(pasos),
-        )
-
-        # Disparar los pasos que recién quedaron desbloqueados por este TASK_DONE
-        recien_listos = _pasos_listos_para_arrancar(pasos)
-        if recien_listos:
-            print(f'[workflow] paso_{paso_idx} done → disparando dependientes: {recien_listos}')
-            await _arrancar_pasos(pasos, recien_listos, project_id, wf['id'])
-
-        await broadcaster.broadcast(project_id, {
-            "type":        "workflow_update",
-            "workflow_id": wf['id'],
-            "paso_actual": _progreso_workflow(pasos),
-            "total_pasos": len(pasos),
-            "estado":      "running" if not _workflow_terminado(pasos) else "done",
-            "pasos":       pasos,
-        })
-
-        if _workflow_terminado(pasos):
-            # ── Todos los pasos terminaron (done/blocked/error) ────────────────
             _actualizar_workflow_db(
-                wf['id'], estado='done', pasos=pasos,
+                wf['id'], estado=wf['estado'], pasos=pasos,
                 paso_actual=_progreso_workflow(pasos),
             )
 
-            # Los agentes trabajan directo en main: no hay merge que hacer.
-            # Solo lanzamos preview si el proyecto tiene frontend.
-            conn = get_db()
-            try:
-                cursor = conn.cursor()
-                cursor.execute('SELECT ruta FROM projects WHERE id = ?', (project_id,))
-                proj_row     = cursor.fetchone()
-                project_path = proj_row['ruta'] if proj_row else ''
-            finally:
-                conn.close()
-
-            preview_url = None
-            if project_path:
-                # A un thread: _detectar_y_lanzar_preview es SYNC y espera hasta ~1s
-                # (time.sleep + bind-check del http.server) → si corriera en el event
-                # loop congelaría terminales/WS/pollers ese segundo. (audit latencia)
-                preview_url = await asyncio.to_thread(
-                    _detectar_y_lanzar_preview, project_id, project_path)
-
-            # Honestidad del cierre: "completado" solo si TODOS los pasos
-            # están done (incluido el Reviewer = review aprobada). Antes se
-            # declaraba victoria aunque hubiera pasos blocked/error.
-            todos_ok     = all(p.get('estado') == 'done' for p in pasos)
-            hubo_review  = any(p.get('rol') == 'reviewer' for p in pasos)
-            if todos_ok:
-                msg_final = f"Señor, {wf['nombre']} completado en main."
-                if hubo_review:
-                    msg_final += " Review de calidad: APROBADA."
-            else:
-                fallidos = sum(1 for p in pasos if p.get('estado') in ('blocked', 'error'))
-                msg_final = (f"Señor, {wf['nombre']} terminó con {fallidos} paso(s) "
-                             "bloqueado(s)/con error — revisá el board de tareas antes de dar por bueno el resultado.")
-            if preview_url:
-                msg_final += f" Preview en {preview_url}"
-
-            await broadcaster.broadcast(project_id, {
-                "type":        "workflow_done",
-                "message":     msg_final,
-                "preview_url": preview_url,
-            })
-
-    elif event == "TASK_BLOCKED":
-        if paso_idx < len(pasos):
+        elif event == "TASK_BLOCKED":
             pasos[paso_idx]["estado"] = "blocked"
             if motivo:
                 pasos[paso_idx]["motivo"] = motivo
-        _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
-        detalle = f": {motivo[:300]}" if motivo else ""
-        await broadcaster.broadcast(project_id, {
-            "type":    "orquestador_mensaje",
-            "message": f"⚠️ {term_nombre} está bloqueado en el paso {paso_idx + 1}{detalle}. ¿Cómo continuamos?",
-        })
-        # Etapa 5: en vez de quedar esperando al humano, el orquestador se
-        # llama solo con el motivo y re-instruye (guardas anti-loop adentro).
-        _lanzar_auto_intervencion(wf, pasos, paso_idx, project_id,
-                                  'TASK_BLOCKED', motivo, term_nombre)
+            wf['estado'] = 'paused'
+            _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
+            detalle = f": {motivo[:300]}" if motivo else ""
+            await broadcaster.broadcast(project_id, {
+                "type":    "orquestador_mensaje",
+                "message": f"⚠️ {term_nombre} está bloqueado en el paso {paso_idx + 1}{detalle}. ¿Cómo continuamos?",
+            })
+            # Etapa 5: en vez de quedar esperando al humano, el orquestador se
+            # llama solo con el motivo y re-instruye (guardas anti-loop adentro).
+            _lanzar_auto_intervencion(wf, pasos, paso_idx, project_id,
+                                      'TASK_BLOCKED', motivo, term_nombre)
 
-    elif event == "TASK_ERROR":
-        if paso_idx < len(pasos):
+        elif event == "TASK_ERROR":
             ia_type = pasos[paso_idx].get("ia_type", "claude")
             pasos[paso_idx]["estado"] = "error"
             if motivo:
                 pasos[paso_idx]["motivo"] = motivo
-            # Solo terminales del PROPIO workflow: jamás reasignar a una terminal
-            # ajena (la claude personal del usuario recibiría la tarea tipeada).
+            # Solo terminales del PROPIO workflow cuyo paso ya TERMINÓ bien: una
+            # ajena podía ser la claude personal del usuario, y una con su paso
+            # todavía pending recibía dos tareas.
             otro = await _buscar_agente_disponible(
                 project_id, terminal_id, ia_type,
-                permitidas={p.get("terminal_id") for p in pasos if p.get("terminal_id")},
+                permitidas={p.get("terminal_id") for p in pasos
+                            if p.get("terminal_id") and p.get("estado") == "done"},
             )
-
+            entregado = False
             if otro:
                 pasos[paso_idx]["terminal_id"] = otro
                 pasos[paso_idx]["estado"]       = "running"
                 pasos[paso_idx]["iniciado_ts"]  = time.time()   # re-sello para el watchdog
-                _actualizar_workflow_db(wf['id'], estado='running', pasos=pasos, paso_actual=paso_idx)
                 ruta_reasig = await asyncio.to_thread(_ruta_proyecto_o_none, project_id)
-                await send_to_agent(otro, _tarea_engine_para_terminal(
-                    pasos[paso_idx], otro, project_ruta=ruta_reasig, pasos_workflow=pasos))
-                from plotspace.routers.terminals import iniciar_monitor
-                iniciar_monitor(otro, project_id)
-                detalle = f" Motivo: {motivo[:300]}." if motivo else ""
-                await broadcaster.broadcast(project_id, {
-                    "type":    "orquestador_mensaje",
-                    "message": f"⚡ Error en {term_nombre}.{detalle} Tarea reasignada al agente #{otro}.",
-                })
-            else:
+                entregado = (await send_to_agent(otro, _tarea_engine_para_terminal(
+                    pasos[paso_idx], otro, project_ruta=ruta_reasig,
+                    pasos_workflow=pasos))) is not False
+                if entregado:
+                    wf['estado'] = 'running'
+                    _actualizar_workflow_db(wf['id'], estado='running', pasos=pasos,
+                                            paso_actual=paso_idx)
+                    from plotspace.routers.terminals import iniciar_monitor
+                    iniciar_monitor(otro, project_id)
+                    detalle = f" Motivo: {motivo[:300]}." if motivo else ""
+                    await broadcaster.broadcast(project_id, {
+                        "type":    "orquestador_mensaje",
+                        "message": f"⚡ Error en {term_nombre}.{detalle} Tarea reasignada al agente #{otro}.",
+                    })
+                else:
+                    pasos[paso_idx]["estado"] = "error"
+            if not entregado:
+                wf['estado'] = 'paused'
                 _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
                 detalle = f" Motivo: {motivo[:300]}." if motivo else ""
                 await broadcaster.broadcast(project_id, {
@@ -2283,12 +2536,197 @@ async def procesar_task_event_interno(terminal_id: int, event: str, project_id: 
                 # (re-instruir con workflow chico, o preguntar UNA cosa).
                 _lanzar_auto_intervencion(wf, pasos, paso_idx, project_id,
                                           'TASK_ERROR', motivo, term_nombre)
+        else:
+            return
+
+        # Después de CUALQUIER cierre (no solo del done): arrancar lo que quedó
+        # listo — el Reviewer también arranca tras un bloqueo — y cerrar el
+        # workflow si ya no queda nada que pueda avanzar. Antes solo la rama
+        # del TASK_DONE lo evaluaba: un último builder bloqueado colgaba todo.
+        # Solo un DONE cierra: un BLOCKED/ERROR deja el workflow en pausa
+        # esperando una decisión (humana o de la auto-intervención) — y el
+        # Reviewer frena el cierre justamente con un TASK_BLOCKED.
+        await _avanzar_workflow(wf, pasos, project_id,
+                                puede_cerrar=(event == "TASK_DONE"))
 
 
-async def send_to_agent(terminal_id: int, mensaje: str) -> bool:
+# ─── Concurrencia y avance del workflow ──────────────────────────────────────
+
+# Un lock por (event loop, workflow): asyncio.Lock queda atado al loop donde
+# espera por primera vez, y los tests corren un loop nuevo por asyncio.run.
+_locks_workflow: dict = {}
+
+
+def _lock_workflow(workflow_id: str) -> asyncio.Lock:
+    clave = (id(asyncio.get_running_loop()), workflow_id)
+    lock = _locks_workflow.get(clave)
+    if lock is None:
+        lock = _locks_workflow[clave] = asyncio.Lock()
+    return lock
+
+
+def _soltar_locks_workflow(workflow_id: str) -> None:
+    for clave in [c for c in _locks_workflow if c[1] == workflow_id]:
+        lock = _locks_workflow[clave]
+        if not lock.locked():
+            _locks_workflow.pop(clave, None)
+
+
+def _nombre_terminal(terminal_id: int) -> str:
+    conn = get_db()
+    try:
+        row = conn.execute('SELECT nombre FROM terminals WHERE id = ?',
+                           (terminal_id,)).fetchone()
+        return row['nombre'] if row else f'Terminal #{terminal_id}'
+    finally:
+        conn.close()
+
+
+def _workflow_id_de_terminal(project_id: int, terminal_id: int) -> Optional[str]:
+    """El workflow activo del proyecto con un paso de esta terminal (el más
+    nuevo primero), o None si la terminal no está en ninguno."""
+    conn = get_db()
+    try:
+        filas = conn.execute(
+            "SELECT id, pasos FROM workflows WHERE project_id = ? AND estado IN "
+            "('running', 'paused') ORDER BY created_at DESC", (project_id,)).fetchall()
+    finally:
+        conn.close()
+    for f in filas:
+        try:
+            pasos = json.loads(f['pasos'] or '[]')
+        except (ValueError, TypeError):
+            continue
+        if _paso_de_terminal(pasos, terminal_id) is not None:
+            return f['id']
+    return None
+
+
+def _leer_workflow(workflow_id: str):
+    """(wf_dict, pasos) frescos de la DB — siempre DENTRO del lock."""
+    conn = get_db()
+    try:
+        f = conn.execute('SELECT * FROM workflows WHERE id = ?', (workflow_id,)).fetchone()
+    finally:
+        conn.close()
+    if not f:
+        return None, []
+    wf = dict(f)
+    try:
+        pasos = json.loads(wf.get('pasos') or '[]')
+    except (ValueError, TypeError):
+        pasos = []
+    return wf, pasos
+
+
+async def sellar_pasos_sin_inicio(workflow_id: str, ahora: float) -> None:
+    """Sella `iniciado_ts` a los pasos running legacy que no lo tienen. Lo usa
+    el watchdog: re-lee DENTRO del lock en vez de reescribir su copia vieja de
+    los pasos (que pisaba un done recién guardado)."""
+    async with _lock_workflow(workflow_id):
+        wf, pasos = await asyncio.to_thread(_leer_workflow, workflow_id)
+        if wf is None:
+            return
+        cambio = False
+        for p in pasos:
+            if p.get('estado') == 'running' and p.get('iniciado_ts') is None:
+                p['iniciado_ts'] = ahora
+                cambio = True
+        if cambio:
+            _actualizar_workflow_db(workflow_id, estado=wf['estado'], pasos=pasos,
+                                    paso_actual=wf.get('paso_actual') or 0)
+
+
+async def _avanzar_workflow(wf: dict, pasos: list, project_id: int,
+                            puede_cerrar: bool = True) -> None:
+    """Arranca todo lo que quedó listo y, si `puede_cerrar`, cierra el
+    workflow cuando ya no queda nada que pueda avanzar. Llamar con el lock
+    del workflow tomado."""
+    from plotspace.core.events import broadcaster
+    intentados: set = set()
+    for _ in range(len(pasos) + 1):
+        listos = [i for i in _pasos_listos_para_arrancar(pasos) if i not in intentados]
+        if not listos:
+            break
+        intentados.update(listos)
+        print(f'[workflow] {wf["id"]}: disparando pasos listos {listos}')
+        await _arrancar_pasos(pasos, listos, project_id, wf['id'])
+        wf['estado'] = 'running'
+
+    terminado = puede_cerrar and _workflow_terminado(pasos)
+    await broadcaster.broadcast(project_id, {
+        "type":        "workflow_update",
+        "workflow_id": wf['id'],
+        "paso_actual": _progreso_workflow(pasos),
+        "total_pasos": len(pasos),
+        "estado":      "done" if terminado else wf.get('estado', 'running'),
+        "pasos":       pasos,
+    })
+    if terminado:
+        await _cerrar_workflow(wf, pasos, project_id)
+
+
+async def _cerrar_workflow(wf: dict, pasos: list, project_id: int) -> None:
+    """Todos los pasos terminaron (done/blocked/error, o varados detrás de uno
+    que falló): se persiste el cierre, se lanza el preview y se avisa."""
+    from plotspace.core.events import broadcaster
+    for i in _pasos_varados(pasos):
+        pasos[i]['estado'] = 'blocked'
+        pasos[i].setdefault('motivo', 'no arrancó: depende de un paso que quedó '
+                                      'bloqueado o con error')
+    _actualizar_workflow_db(
+        wf['id'], estado='done', pasos=pasos,
+        paso_actual=_progreso_workflow(pasos),
+    )
+    _soltar_locks_workflow(wf['id'])
+
+    # Los agentes trabajan directo en main: no hay merge que hacer.
+    # Solo lanzamos preview si el proyecto tiene frontend.
+    project_path = await asyncio.to_thread(_ruta_proyecto_o_none, project_id)
+    preview_url = None
+    if project_path:
+        # A un thread: _detectar_y_lanzar_preview es SYNC y espera hasta ~1s
+        # (time.sleep + bind-check del http.server) → si corriera en el event
+        # loop congelaría terminales/WS/pollers ese segundo. (audit latencia)
+        preview_url = await asyncio.to_thread(
+            _detectar_y_lanzar_preview, project_id, project_path)
+
+    # Honestidad del cierre: "completado" solo si TODOS los pasos
+    # están done (incluido el Reviewer = review aprobada).
+    todos_ok    = all(p.get('estado') == 'done' for p in pasos)
+    hubo_review = any(p.get('rol') == 'reviewer' for p in pasos)
+    if todos_ok:
+        msg_final = f"Señor, {wf['nombre']} completado en main."
+        if hubo_review:
+            msg_final += " Review de calidad: APROBADA."
+    else:
+        fallidos = sum(1 for p in pasos if p.get('estado') in ('blocked', 'error'))
+        msg_final = (f"Señor, {wf['nombre']} terminó con {fallidos} paso(s) "
+                     "bloqueado(s)/con error — revisá el board de tareas antes de dar por bueno el resultado.")
+    if preview_url:
+        msg_final += f" Preview en {preview_url}"
+
+    await broadcaster.broadcast(project_id, {
+        "type":        "workflow_done",
+        "message":     msg_final,
+        "preview_url": preview_url,
+    })
+
+
+async def send_to_agent(terminal_id: int, mensaje: str, crudo: bool = False) -> bool:
     """Envía un texto al agente via tmux (paste). Devuelve True SOLO si el
-    pegado llegó al pane (los callers que no lo necesitan lo ignoran)."""
-    mensaje = f'Lee tu CLAUDE.md primero. Luego: {mensaje}'
+    pegado llegó al pane (los callers que no lo necesitan lo ignoran).
+
+    `crudo=True` (respuesta a una pregunta en pantalla): el texto va tal cual,
+    sin el "Lee tu CLAUDE.md…" y con UN solo Enter — el segundo Enter a
+    ciegas podía confirmar la opción por defecto de la siguiente pregunta."""
+    if not crudo:
+        try:
+            from plotspace.core import orq_contexto
+            orq_contexto.registrar_envio(terminal_id, mensaje)
+        except Exception:
+            pass
+        mensaje = f'Lee tu CLAUDE.md primero. Luego: {mensaje}'
     session = f'jarvis_{terminal_id}'
     print(f'[send_to_agent] → {session}: {mensaje[:100]}')
 
@@ -2327,9 +2765,10 @@ async def send_to_agent(terminal_id: int, mensaje: str) -> bool:
         # Enter solo si el texto llegó: sin pegado, un Enter a ciegas manda
         # lo que el usuario tuviera a medio escribir en el prompt.
         await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
-        # Esperar 1s y enviar Enter adicional para que Claude procese la tarea
-        await asyncio.sleep(1)
-        await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
+        if not crudo:
+            # Esperar 1s y enviar Enter adicional para que Claude procese la tarea
+            await asyncio.sleep(1)
+            await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
 
     if not pegado:
         return False   # nada llegó al agente: no registrar un SENT que no ocurrió
@@ -2667,89 +3106,6 @@ async def _buscar_agente_disponible(project_id: int, excluir_id: int, ia_type: s
         return None
     finally:
         conn.close()
-
-
-def _formatear_estado(terminals: list, project_id: Optional[int] = None) -> str:
-    if not terminals:
-        return "No hay terminales activas."
-
-    # Cross-referenciar cada terminal con el workflow/paso que la creó
-    # para que el orquestador sepa "para qué es cada terminal".
-    mapa_workflow: dict = {}
-    if project_id is not None:
-        conn = get_db()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, nombre, pasos FROM workflows WHERE project_id = ? "
-                "ORDER BY created_at DESC LIMIT 20",
-                (project_id,)
-            )
-            for r in cursor.fetchall():
-                try:
-                    pasos = json.loads(r['pasos'])
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                for p in pasos:
-                    tid = p.get('terminal_id')
-                    if tid and tid not in mapa_workflow:
-                        mapa_workflow[tid] = {
-                            'workflow': r['nombre'],
-                            'agente':   p.get('agente', '?'),
-                            'estado':   p.get('estado', '?'),
-                        }
-        finally:
-            conn.close()
-
-    # Estado VIVO por terminal (fase de agent_watch) + dueños de archivos
-    # (Agents Live): el orquestador rutea sin pisar a nadie. Degradan a nada.
-    fases = {t['id']: _fase_terminal(t['id']) for t in terminals}
-    duenos: dict = {}
-    if terminals:
-        try:
-            from plotspace.core import agent_live
-            rows = [{'tid': t['id'], 'tnombre': t['nombre'],
-                     'tipo_ia': t.get('tipo_ia')} for t in terminals]
-            snap = agent_live.snapshot(project_id, rows) if project_id is not None else {}
-            for a in snap.get('agentes', []):
-                propios = [f['path'] for f in a.get('archivos', []) if f.get('dueno')]
-                if propios:
-                    duenos[a['terminal_id']] = propios
-        except Exception:
-            pass
-    return _formatear_estado_core(terminals, mapa_workflow, fases=fases, duenos=duenos)
-
-
-def _formatear_estado_core(terminals: list, mapa_workflow: dict,
-                           fases: dict = None, duenos: dict = None) -> str:
-    """Núcleo PURO del bloque [Estado actual]: una línea por terminal con
-    id/nombre/CLI + fase viva + rol de workflow (o libre) + archivos propios."""
-    if not terminals:
-        return "No hay terminales activas."
-    fases = fases or {}
-    duenos = duenos or {}
-    _FASES = {'trabajando': '🟢 trabajando AHORA', 'idle': '⚪ quieta',
-              'arrancando': '⏳ arrancando'}
-    lineas = [f"Terminales activas: {len(terminals)}"]
-    for t in terminals:
-        seg = [f"ID {t['id']}: {t['nombre']} ({t['tipo_ia']})"]
-        fase = _FASES.get(fases.get(t['id']) or '')
-        if fase:
-            seg.append(fase)
-        info = mapa_workflow.get(t['id'])
-        if info:
-            seg.append(f"rol '{info['agente']}' del workflow "
-                       f"'{info['workflow']}' ({info['estado']})")
-        else:
-            seg.append("terminal libre")
-        propios = duenos.get(t['id']) or []
-        if propios:
-            vista = ', '.join(propios[:3])
-            if len(propios) > 3:
-                vista += f' (+{len(propios) - 3} más)'
-            seg.append(f'dueña de: {vista}')
-        lineas.append('  - ' + ' — '.join(seg))
-    return "\n".join(lineas)
 
 
 def _formatear_skills_activas(project_id: int) -> str:

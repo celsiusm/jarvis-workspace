@@ -8,8 +8,12 @@ recording and TTS lives in the shell (`workspace.js`) via callbacks `window._orc
 - **Public global:** `window.jarvisPanel` (the panel instance). The shell adds
   messages and changes state via the instance directly
   (`jarvisPanel.addMessage(...)` / `jarvisPanel.setSphereState(state)`).
-- **Consumes from the shell:** `window._orchOnSend`, `_orchOnMicHold`, `_orchOnMicRelease`,
-  `_orchGetFiles`, `_orchOnHeaderAction` (defined in `workspace.js`). Don't reimplement
+- **Consumes from the shell:** `window._orchOnSend`, `_orchOnStop`, `_orchOnMicHold`, `_orchOnMicRelease`,
+  `_orchGetFiles`, `_orchOnHeaderAction` (defined in `workspace.js`).
+- **Live query state:** the shell calls `jarvisPanel.setBusy(true|false)` (the send button turns
+  into Stop → `onStop`) and `jarvisPanel.setTypingStatus(text)` (line inside the typing bubble:
+  the context blocks Jarvis received, then each file it reads). Labels are set in SPANISH;
+  the i18n engine translates them (it now respects attributes the app changes). Don't reimplement
   network/voice logic here: this is UI only.
 
 ## Orchestrator chrome (CONSTELLATION redesign)

@@ -11,6 +11,7 @@ const ORCH_SVG = {
   attach:  `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>`,
   // Enviar = flecha ↑ (estándar de los composers de chat modernos).
   // Minimalista, se lee "enviar" al instante y equilibra el círculo del botón.
+  stop: `<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/></svg>`,
   send: `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5"/><path d="m5 12 7-7 7 7"/></svg>`,
   // Mini-iconos contextuales para quick replies (12px, stroke 1.7px)
   chip_status:   `<svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="3" y1="13" x2="3" y2="9.5"/><line x1="7" y1="13" x2="7" y2="6.5"/><line x1="11" y1="13" x2="11" y2="3.5"/></svg>`,
@@ -76,6 +77,7 @@ class OrchestratorPanel {
     this.messages        = opts.messages        || [];
     this.sphereState     = opts.sphereState     || 'idle';
     this.onSend          = opts.onSend          || (() => {});
+    this.onStop          = opts.onStop          || (() => {});
     this.onQuickReply    = opts.onQuickReply    || (() => {});
     this.onHeaderAction  = opts.onHeaderAction  || (() => {});
 
@@ -247,7 +249,10 @@ class OrchestratorPanel {
     // a esos callbacks vía start/stopListening (que ya están cableados).
 
     // Send button
-    this.$sendBtn.addEventListener('click', () => this._send());
+    this.$sendBtn.addEventListener('click', () => {
+      if (this._busy) this.onStop();
+      else this._send();
+    });
 
     // Mic: ya no hay botón en el composer. La voz se activa SIEMPRE desde la
     // tecla de PTT global (configurable en Controles del sidebar).
@@ -366,7 +371,36 @@ class OrchestratorPanel {
   }
 
   _updateSendBtn() {
+    if (this._busy) { this.$sendBtn.disabled = false; return; }
     this.$sendBtn.disabled = !this.$textarea.value.trim() && !this._pendingImg;
+  }
+
+  // Mientras Jarvis procesa, el botón de enviar pasa a DETENER (cancela la
+  // consulta; las acciones que ya empezaron a ejecutarse se completan).
+  setBusy(busy) {
+    this._busy = !!busy;
+    this.$sendBtn.classList.toggle('is-stop', this._busy);
+    this.$sendBtn.innerHTML = this._busy ? ORCH_SVG.stop : ORCH_SVG.send;
+    // En español: el motor i18n los traduce (y ahora respeta el cambio).
+    this.$sendBtn.setAttribute('aria-label', this._busy ? 'Detener' : 'Enviar mensaje (⌘↵)');
+    this.$sendBtn.title = this._busy ? 'Detener' : 'Enviar (⌘↵)';
+    this._updateSendBtn();
+  }
+
+  // Línea de estado dentro de la burbuja de "escribiendo": qué contexto
+  // recibió Jarvis y qué archivo está leyendo, en vez de tres puntitos mudos.
+  setTypingStatus(texto) {
+    if (!this.$messages) return;
+    if (!this.$messages.querySelector('.orch-typing')) this._showTyping();
+    const burbuja = this.$messages.querySelector('.orch-typing .orch-typing-bubble');
+    if (!burbuja) return;
+    let linea = burbuja.querySelector('.orch-typing-status');
+    if (!linea) {
+      linea = document.createElement('span');
+      linea.className = 'orch-typing-status';
+      burbuja.appendChild(linea);
+    }
+    linea.textContent = texto || '';
   }
 
   /* ── Menu triggers ─────────────────────────────────────────── */
@@ -461,6 +495,7 @@ class OrchestratorPanel {
 
   /* ── Send ──────────────────────────────────────────────────── */
   _send() {
+    if (this._busy) return;
     const text = this.$textarea.value.trim();
     if (!text && !this._pendingImg) return;
     const img = this._pendingImg;
@@ -1223,6 +1258,9 @@ document.addEventListener('DOMContentLoaded', () => {
     },
     onQuickReply(text) {
       window._orchOnSend?.(text);
+    },
+    onStop() {
+      window._orchOnStop?.();
     },
     onHeaderAction(action) {
       // Bridge → workspace.js: 'history' | 'new-thread' | 'export' | 'workflows' | 'clear-history'

@@ -62,3 +62,30 @@ def test_mensaje_de_intervencion():
 def test_mensaje_sin_motivo():
     m = _mensaje_auto_intervencion('TASK_ERROR', 0, 'X', '', 'Front')
     assert 'sin motivo' in m
+
+
+def test_lanzar_dispara_en_fondo_con_referencia_fuerte(monkeypatch):
+    """Con el flag prendido, BLOCKED dispara la intervención en background y la
+    tarea queda referenciada hasta terminar (sin eso el GC podía matarla)."""
+    import asyncio
+    import plotspace.routers.orchestrator as orch
+    monkeypatch.setattr(orch, 'ORQ_AUTO_INTERVENCION', True)
+    monkeypatch.setattr(orch, 'ORQUESTADOR_MOTOR', 'suscripcion')
+    monkeypatch.setattr(orch, '_actualizar_workflow_db', lambda *a, **k: None)
+    llamadas = []
+
+    async def falso(*args):
+        llamadas.append(args)
+
+    monkeypatch.setattr(orch, '_auto_intervenir', falso)
+
+    async def main():
+        pasos = [{'estado': 'blocked'}]
+        orch._lanzar_auto_intervencion({'id': 1, 'nombre': 'W'}, pasos, 0, 7,
+                                       'TASK_BLOCKED', 'falta dato', 'Back')
+        assert len(orch._tareas_fondo) == 1
+        await asyncio.gather(*list(orch._tareas_fondo))
+        assert pasos[0]['auto_intervencion_ts']
+    asyncio.run(main())
+    assert llamadas and llamadas[0][0] == 7
+    assert not orch._tareas_fondo
