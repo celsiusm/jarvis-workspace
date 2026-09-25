@@ -91,7 +91,10 @@ def _workflows_running():
     try:
         cur = conn.cursor()
         cur.execute(
-            "SELECT id, project_id, nombre, pasos FROM workflows WHERE estado = 'running'"
+            # 'paused' también: un BLOCKED pausa el workflow ENTERO, pero sus
+            # pasos paralelos siguen corriendo y hay que seguir vigilándolos.
+            "SELECT id, project_id, nombre, pasos FROM workflows "
+            "WHERE estado IN ('running', 'paused')"
         )
         out = []
         for r in cur.fetchall():
@@ -158,7 +161,7 @@ async def _ciclo():
 
     for wf in wfs:
         pasos = wf['pasos']
-        dirty = False
+        sin_sello = False
         for idx, paso in enumerate(pasos):
             tid = paso.get('terminal_id')
             if paso.get('estado') != 'running' or not tid:
@@ -166,8 +169,7 @@ async def _ciclo():
 
             # Auto-sello de pasos legacy sin iniciado_ts: medir desde ahora.
             if paso.get('iniciado_ts') is None:
-                paso['iniciado_ts'] = ahora
-                dirty = True
+                sin_sello = True
                 continue
 
             trabajando = _esta_trabajando(tid)
@@ -215,12 +217,12 @@ async def _ciclo():
                 'ultima_linea': ultima,
             })
 
-        if dirty:
-            from plotspace.routers.orchestrator import _actualizar_workflow_db
-            estado_paso_actual = next((i for i, p in enumerate(pasos)
-                                       if p.get('estado') == 'running'), 0)
-            await asyncio.to_thread(_actualizar_workflow_db, wf['id'], 'running',
-                                    pasos, estado_paso_actual)
+        if sin_sello:
+            # Re-lee y sella DENTRO del lock del workflow: reescribir esta copia
+            # (leída hace un rato) pisaba un done recién guardado y forzaba
+            # 'running' sobre un workflow en pausa.
+            from plotspace.routers.orchestrator import sellar_pasos_sin_inicio
+            await sellar_pasos_sin_inicio(wf['id'], ahora)
 
 
 def _ultima_linea_scrollback(texto) -> str:

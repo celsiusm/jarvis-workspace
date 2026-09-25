@@ -120,7 +120,7 @@ def _workflows_running():
         cur.execute(
             "SELECT w.id, w.project_id, w.pasos, p.ruta "
             "FROM workflows w JOIN projects p ON p.id = w.project_id "
-            "WHERE w.estado = 'running'"
+            "WHERE w.estado IN ('running', 'paused')"
         )
         out = []
         for r in cur.fetchall():
@@ -148,11 +148,18 @@ def _terminales_activas():
         conn.close()
 
 
+# Pasos cuya señal es del WORKFLOW (la pasada libre no debe comérsela): el
+# running, y el blocked — su agente puede destrabarse y cerrar el paso. Antes
+# un workflow en pausa por un BLOCKED quedaba fuera de la pasada y las señales
+# de sus pasos paralelos se consumían como "libres" sin avanzar nada.
+_ESTADOS_VIGILADOS = ('running', 'blocked')
+
+
 def terminales_libres(terminales: list, wfs: list) -> list:
     """Filtra las terminales que NO son un paso running de un workflow — esas
     señales las consume la pasada de workflows (que además avanza el paso)."""
     ocupadas = {p.get('terminal_id') for wf in wfs for p in wf.get('pasos', [])
-                if p.get('estado') == 'running' and p.get('terminal_id')}
+                if p.get('estado') in _ESTADOS_VIGILADOS and p.get('terminal_id')}
     return [t for t in terminales if t['id'] not in ocupadas]
 
 
@@ -211,7 +218,7 @@ async def _ciclo():
     for wf in wfs:
         for paso in wf['pasos']:
             tid = paso.get('terminal_id')
-            if paso.get('estado') != 'running' or not tid:
+            if paso.get('estado') not in _ESTADOS_VIGILADOS or not tid:
                 continue
             d = leer_y_consumir(wf['ruta'], tid, paso.get('iniciado_ts'))
             if d is None:

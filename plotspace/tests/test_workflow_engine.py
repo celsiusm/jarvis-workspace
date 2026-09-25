@@ -113,3 +113,78 @@ if __name__ == '__main__':
             except Exception:
                 fallos += 1; print(f'FAIL {nombre}'); traceback.print_exc()
     sys.exit(1 if fallos else 0)
+
+
+# ─── Dependencias múltiples, saneadas y pasos varados ───────────────────────
+
+from plotspace.routers.orchestrator import (  # noqa: E402
+    _deps_indices, _pasos_varados, _sanear_dependencias, _paso_de_terminal,
+)
+
+
+def test_deps_indices_acepta_varias_y_listas():
+    assert _deps_indices(None) == []
+    assert _deps_indices('paso_2') == [2]
+    assert _deps_indices('paso_0, paso_1') == [0, 1]
+    assert _deps_indices(['paso_0', 'paso_3']) == [0, 3]
+    assert _deps_indices(1) == [1]
+    assert _deps_indices('ninguno') == []
+
+
+def test_multiples_deps_esperan_a_todas():
+    pasos = [{'estado': 'done'}, {'estado': 'running'},
+             {'estado': 'pending', 'depende_de': 'paso_0, paso_1'}]
+    assert _pasos_listos_para_arrancar(pasos) == []
+    pasos[1]['estado'] = 'done'
+    assert _pasos_listos_para_arrancar(pasos) == [2]
+
+
+def test_sanear_descarta_autodeps_ciclos_y_fuera_de_rango():
+    """Solo vale depender de un paso ANTERIOR: eso hace imposible un ciclo y
+    un paso que espera algo que no existe (antes quedaban pending para siempre)."""
+    pasos = [
+        {'depende_de': 'paso_0'},            # a sí mismo
+        {'depende_de': 'paso_2'},            # hacia adelante (ciclo potencial)
+        {'depende_de': 'paso_1'},            # válido
+        {'depende_de': 'paso_9, paso_0'},    # uno fuera de rango, uno válido
+        {'depende_de': 'basura'},            # no parseable
+    ]
+    avisos = _sanear_dependencias(pasos)
+    assert [p['depende_de'] for p in pasos] == [None, None, 'paso_1', 'paso_0', None]
+    assert len(avisos) == 4
+
+
+def test_paso_con_dep_bloqueada_queda_varado_transitivamente():
+    pasos = [{'estado': 'blocked'},
+             {'estado': 'pending', 'depende_de': 'paso_0'},
+             {'estado': 'pending', 'depende_de': 'paso_1'},
+             {'estado': 'pending', 'depende_de': None}]
+    assert _pasos_varados(pasos) == {1, 2}
+
+
+def test_reviewer_arranca_aunque_haya_pasos_varados():
+    """Un paso que depende de uno bloqueado nunca va a arrancar: el Reviewer
+    no puede esperarlo (antes el workflow quedaba colgado para siempre)."""
+    pasos = [{'estado': 'error'},
+             {'estado': 'pending', 'depende_de': 'paso_0'},
+             {'estado': 'pending', 'rol': 'reviewer'}]
+    assert _pasos_listos_para_arrancar(pasos) == [2]
+    pasos[2]['estado'] = 'done'
+    assert _workflow_terminado(pasos)
+
+
+def test_paso_de_terminal_prioriza_running_y_no_inventa():
+    pasos = [{'terminal_id': 5, 'estado': 'done'},
+             {'terminal_id': 5, 'estado': 'running'},
+             {'terminal_id': 6, 'estado': 'blocked'}]
+    assert _paso_de_terminal(pasos, 5) == 1
+    assert _paso_de_terminal(pasos, 6) == 2, 'un bloqueado que se destraba cierra su paso'
+    assert _paso_de_terminal(pasos, 99) is None, 'terminal ajena: jamás paso_actual'
+
+
+def test_entero_tolera_basura_del_modelo():
+    from plotspace.routers.orchestrator import _entero
+    assert _entero('3', 1) == 3
+    assert _entero(None, 1) == 1
+    assert _entero('dos', None) is None
+    assert _entero(2.0, 1) == 2
