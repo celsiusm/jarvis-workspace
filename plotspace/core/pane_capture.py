@@ -18,7 +18,7 @@ from plotspace.core.terminal_backend import backend as motor_terminales
 
 LINEAS_PANE = 120          # el máximo que pide cualquier consumidor (agent_live)
 _TTL = 1.2                 # ventana de cache DEFAULT (s), para los pollers de 2s
-                           # (agent_live/dev_detect/deck): con 1.2 > 1s reusan SIEMPRE
+                           # (agent_live/dev_detect): con 1.2 > 1s reusan SIEMPRE
                            # la captura fresca que agent_watch acaba de hacer (antes,
                            # con 0.8 < tick, el miss era frecuente → forks extra).
                            # agent_watch pide ttl=TTL_CAPTURA_PROPIA (<1s) explícito:
@@ -55,9 +55,3 @@ async def capturar(terminal_id: int, ttl: float = _TTL) -> str:
                 _cache.pop(tid, None)
                 _locks.pop(tid, None)
         return texto
-
-
-def purgar(terminal_id: int) -> None:
-    """Limpia el estado de una terminal muerta (lo llaman los pollers al purgar)."""
-    _cache.pop(terminal_id, None)
-    _locks.pop(terminal_id, None)

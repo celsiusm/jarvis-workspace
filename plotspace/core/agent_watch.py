@@ -39,7 +39,7 @@ TTL_CAPTURA_PROPIA = 0.9    # < INTERVALO_S SIEMPRE: la máquina de estados comp
                             # devolvería el mismo texto tick por medio y el conteo
                             # de cambios consecutivos no llegaría nunca al umbral.
                             # Este poller es el CAPTURADOR fresco del sistema; los
-                            # de 2s (agent_live/dev_detect/deck) reusan su captura
+                            # de 2s (agent_live/dev_detect) reusan su captura
                             # vía el TTL default más largo de pane_capture.
 POLLS_PARA_TRABAJANDO = 4   # ≥4 polls seguidos con cambios = trabajando (~4s);
                             # filtra comandos manuales y tipeo breve. Las CLIs
@@ -142,7 +142,6 @@ _LIMITE_GENERICOS = [re.compile(p, re.I) for p in (
     r'too many requests',
     r'try again (?:at|in)\b',                       # "...at 3pm" / "...in 25 min" (reset)
 )]
-_LIMITE_PATRONES = _LIMITE_FUERTES + _LIMITE_GENERICOS   # compat: puerta barata
 
 
 def linea_limite(texto):
@@ -159,16 +158,6 @@ def linea_limite(texto):
         if any(p.search(l) for p in _LIMITE_GENERICOS):
             return l, 'generica'
     return None, None
-
-
-def detectar_limite(texto, tipo_ia=None) -> bool:
-    """¿La COLA del pane muestra una firma CLARA de rate/usage limit?
-
-    Estricto y conservador: ante duda, False. Evalúa solo las últimas
-    _LINEAS_LIMITE líneas con contenido (un límite que ya scrolleó arriba no
-    cuenta). `tipo_ia` se acepta para una futura especialización por CLI; hoy las
-    firmas son compartidas (los proveedores comparten la jerga de límite)."""
-    return linea_limite(texto)[0] is not None
 
 
 def debe_rotar(texto, fase) -> tuple:
@@ -716,8 +705,7 @@ async def _ciclo():
         await _quizas_rotar(row, texto)
         st = _estados.get(tid) or estado_inicial(ts=time.monotonic())
         nuevo, evento = transicionar(st, hash(texto))
-        # Sello de cuándo entró a la fase ACTUAL: lo consume el Command Deck
-        # ("lleva N min trabajando"). transicionar es pura (no ve el reloj),
+        # Sello de cuándo entró a la fase ACTUAL ("lleva N min trabajando"). transicionar es pura (no ve el reloj),
         # así que el timestamp se pone acá, en la capa impura.
         if nuevo.get('fase') != st.get('fase'):
             nuevo['fase_desde'] = time.monotonic()

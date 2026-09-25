@@ -1,8 +1,8 @@
 """
-Test: tracking de uso/costo del orquestador.
+Test: tracking de uso del orquestador.
 
-Pricing puro (_costo_usd con tarifas de haiku) + el UPSERT acumulativo en la
-tabla orquestador_uso (antes response.usage se tiraba).
+El UPSERT acumulativo en la tabla orquestador_uso (antes response.usage se
+tiraba).
 """
 import os
 import sys
@@ -10,19 +10,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from plotspace.tests._harness import fresh_db
-from plotspace.routers.orchestrator import _costo_usd
-
-
-def test_costo_pricing_haiku():
-    # $1.00/MTok in, $5.00/MTok out
-    assert _costo_usd(1_000_000, 0) == 1.00
-    assert _costo_usd(0, 1_000_000) == 5.00
-    assert _costo_usd(1_000_000, 1_000_000) == 6.00
-    assert _costo_usd(0, 0) == 0.0
-
-
-def test_costo_tolera_none():
-    assert _costo_usd(None, None) == 0.0
 
 
 def test_upsert_acumula():

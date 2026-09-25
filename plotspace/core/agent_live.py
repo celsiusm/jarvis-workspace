@@ -74,27 +74,9 @@ def _limpiar_path(p: str) -> str:
     return p
 
 
-def extraer_operaciones(texto) -> list:
-    """[(op, path)] de un texto de pane, en orden de aparición.
-    op ∈ {'read', 'write'}. Limpia ANSI. No deduplica (eso es
-    operaciones_nuevas)."""
-    limpio = _ANSI_RE.sub('', texto or '')
-    ops = []
-    for linea in limpio.splitlines():
-        linea = linea.strip()
-        for pat in _PATRONES_OPS:
-            m = pat.match(linea)
-            if not m:
-                continue
-            op = 'read' if m.group('verbo') in _VERBOS_READ else 'write'
-            ops.append((op, _limpiar_path(m.group('path'))))
-            break
-    return ops
-
-
 def operaciones_nuevas(texto, vistos: dict) -> list:
-    """Como extraer_operaciones pero solo lo NUEVO respecto de la captura
-    anterior (ventanas solapadas). `vistos` (mutado en el lugar) guarda
+    """[(op, path)] de un texto de pane (op ∈ {'read','write'}), solo lo
+    NUEVO respecto de la captura anterior (ventanas solapadas). `vistos` (mutado en el lugar) guarda
     {hash_linea: ocurrencias_en_la_captura_anterior}: una línea repetida MÁS
     veces que antes son ops nuevas. Una re-edición real del mismo archivo
     imprime una línea idéntica — el dedup viejo (presencia en un FIFO sin

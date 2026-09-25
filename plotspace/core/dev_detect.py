@@ -13,9 +13,9 @@ Eventos WS por el broadcaster del proyecto:
   - dev_server_detectado {url, terminal_id, terminal_nombre}  (uno por URL nueva)
   - dev_server_caido     {url}                                (uno por URL muerta)
 
-El registro lo consultan orchestrator._preview_url_activo() (pill, single) y
-_preview_urls_activas() (todas, para abrir las pestañas); el stop del pill
-descarta una URL puntual vía descartar().
+El registro lo consulta orchestrator._preview_url_activo() (pill, single);
+urls_detectadas() da todas. El stop del pill descarta una URL puntual vía
+descartar().
 """
 
 import asyncio

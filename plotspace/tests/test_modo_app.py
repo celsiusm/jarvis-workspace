@@ -12,28 +12,6 @@ import sys
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 
-def test_puerto_jarvis_sigue_env_en_orchestrator():
-    """El guard de embebibilidad (localhost:<puerto de Jarvis>) sigue a
-    JARVIS_PORT — con la app en un puerto dinámico, `localhost:3000` deja de
-    ser especial."""
-    import plotspace.routers.orchestrator as orch
-    previo = os.environ.get('JARVIS_PORT')
-    try:
-        os.environ['JARVIS_PORT'] = '5432'
-        o2 = importlib.reload(orch)
-        assert o2._JARVIS_PORT == '5432'
-        assert o2._fuente_permite_jarvis('http://localhost:5432')
-        assert not o2._fuente_permite_jarvis('http://localhost:3000')
-        os.environ.pop('JARVIS_PORT', None)
-        assert importlib.reload(orch)._JARVIS_PORT == '3000'
-    finally:
-        if previo is None:
-            os.environ.pop('JARVIS_PORT', None)
-        else:
-            os.environ['JARVIS_PORT'] = previo
-        importlib.reload(orch)
-
-
 def test_puerto_jarvis_sigue_env_en_dev_detect():
     """dev_detect excluye al puerto REAL de Jarvis (no al 3000 fijo) de la
     detección de dev servers y los demos /static."""
