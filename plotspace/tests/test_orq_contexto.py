@@ -228,3 +228,48 @@ def test_infos_con_workflows_explicitos_ignora_los_excluidos(tmp_path):
               'pasos': [{'terminal_id': 11, 'estado': 'pending', 'tarea': 't'}]}
     assert not oc.es_libre(oc.infos_terminales(1, ts, [propio], [], con_live=False)[11])
     assert oc.es_libre(oc.infos_terminales(1, ts, [], [], con_live=False)[11])
+
+
+def test_titulos_contexto_para_mostrar_que_vio():
+    from plotspace.routers.orchestrator import _titulos_contexto
+    msg = ('[Estado actual]\nx\n\n[Proyecto]\ny\n\n[Memoria relevante al pedido — '
+           'tenela en cuenta:]\nz\n\n[Orden]\nhola')
+    assert _titulos_contexto([{'role': 'user', 'content': msg}]) == [
+        'Estado actual', 'Proyecto', 'Memoria relevante al pedido']
+    assert _titulos_contexto([]) == []
+
+
+def test_stream_sse_emite_contexto_progreso_reinicio_y_done(tmp_path, monkeypatch):
+    _proyecto(tmp_path)
+    import plotspace.routers.orchestrator as orch
+    from plotspace.core import orq_cli, pane_capture
+
+    async def pane(tid, ttl=0):
+        return ''
+    monkeypatch.setattr(pane_capture, 'capturar', pane)
+    monkeypatch.setattr(orch, 'ORQUESTADOR_MOTOR', 'suscripcion')
+    monkeypatch.setattr(orch, '_guard_cli', lambda: None)
+
+    async def falso_stream(*a, **k):
+        yield {'tipo': 'delta', 'texto': '{"message": "mir'}
+        yield {'tipo': 'herramienta', 'nombre': 'Read', 'detalle': 'main.py'}
+        yield {'tipo': 'reinicio'}
+        yield {'tipo': 'delta', 'texto': '{"message": "listo"'}
+        yield {'tipo': 'resultado', 'texto': '{"message":"listo","actions":[]}',
+               'error': False, 'input_tokens': 1, 'output_tokens': 1}
+    monkeypatch.setattr(orq_cli, 'stream', falso_stream)
+
+    async def procesar(*a, **k):
+        return {'response': 'listo', 'actions': [], 'created_terminals': [],
+                'closed_all': False, 'workflow_card': None}
+    monkeypatch.setattr(orch, '_procesar_respuesta_orquestador', procesar)
+
+    async def correr():
+        resp = await orch.chat_orquestador_stream(orch.ChatRequest(project_id=1, message='hola'))
+        return [json.loads(c[5:]) async for c in resp.body_iterator]
+    evs = asyncio.run(correr())
+    tipos = [e['type'] for e in evs]
+    assert tipos[0] == 'contexto' and 'Estado actual' in evs[0]['bloques']
+    assert {'type': 'progreso', 'herramienta': 'Read', 'detalle': 'main.py'} in evs
+    assert tipos.index('reinicio') < len(tipos) - 1
+    assert tipos[-1] == 'done'

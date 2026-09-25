@@ -3428,6 +3428,9 @@ async function enviarMensaje(texto, imagenBase64 = null, mediaType = null) {
   const textoMostrar = texto + (imagenBase64 ? (texto ? ' [imagen adjunta]' : '[imagen adjunta]') : '');
   agregarMensajeChat('user', textoMostrar);
   setEstado('processing');
+  const abort = new AbortController();
+  _orchAbort = abort;
+  _panel()?.setBusy?.(true);
 
   try {
     // Detectar rutas de archivos en el mensaje e inyectarlas como contexto
@@ -3451,8 +3454,16 @@ async function enviarMensaje(texto, imagenBase64 = null, mediaType = null) {
     // ANTES de empezar, fallback automático al /chat clásico → red de seguridad.
     let data;
     try {
-      data = await _chatStream(body, pid);     // crea/actualiza la burbuja en vivo; devuelve el 'done'
+      data = await _chatStream(body, pid, abort.signal);   // crea/actualiza la burbuja en vivo; devuelve el 'done'
     } catch (errStream) {
+      // Cancelado por el usuario, o el server ya contestó un error concreto
+      // (sin CLI, proyecto inexistente): reintentar por /chat repetiría la
+      // consulta — y, si ya había arrancado, las acciones.
+      if (errStream?.name === 'AbortError') {
+        if (pid === projectId) agregarMensajeChat('jarvis', _sbT('Cancelado.'));
+        return;
+      }
+      if (errStream?.sinFallback) throw errStream;
       console.warn('[orch] streaming no disponible → fallback /chat:', errStream?.message || errStream);
       data = await _chatNoStream(body);
       if (pid === projectId) agregarMensajeChat('jarvis', data.response);
@@ -3476,6 +3487,8 @@ async function enviarMensaje(texto, imagenBase64 = null, mediaType = null) {
   } catch (err) {
     if (pid === projectId) agregarMensajeChat('jarvis', `Error: ${err.message}`);
   } finally {
+    if (_orchAbort === abort) _orchAbort = null;
+    _panel()?.setBusy?.(false);
     setEstado('idle');
     // Solo recuperar el foco si el usuario no está escribiendo en otro campo
     // ni metido en un iframe (la respuesta tarda segundos; robarle el foco
@@ -3484,18 +3497,44 @@ async function enviarMensaje(texto, imagenBase64 = null, mediaType = null) {
   }
 }
 
+// Consulta en curso (una por vez): el botón Detener del panel la aborta.
+let _orchAbort = null;
+window._orchOnStop = () => _orchAbort?.abort();
+
+// Texto de progreso para cada tool de lectura que usa el orquestador.
+const _ORCH_VERBO_TOOL = { Read: 'Leyendo', Grep: 'Buscando', Glob: 'Explorando' };
+function _textoProgreso(ev) {
+  const verbo = _sbT(_ORCH_VERBO_TOOL[ev.herramienta] || 'Consultando');
+  const det = String(ev.detalle || '').split('/').slice(-2).join('/');
+  return det ? `${verbo} ${det}…` : `${verbo}…`;
+}
+
 // POST /chat-stream + revela el 'message' token a token. Devuelve el evento 'done'
 // (response + actions + created_terminals + workflow_card), igual que /chat. Solo
-// LANZA (→ fallback) si falla ANTES de emitir tokens; si ya empezó a streamear,
-// finaliza con lo que haya (no duplica la burbuja).
-async function _chatStream(body, pid) {
+// LANZA (→ fallback) si falla ANTES de recibir cualquier evento; si el server ya
+// empezó a contestar, finaliza con lo que haya (reintentar por /chat repetiría
+// las acciones). Mientras espera muestra qué contexto recibió Jarvis y qué lee.
+async function _chatStream(body, pid, signal) {
   const res = await fetch('/api/orchestrator/chat-stream', {
     method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+    signal,
   });
-  if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+  if (!res.ok || !res.body) {
+    const err = new Error(`HTTP ${res.status}`);
+    if (res.status >= 400 && res.status < 500) {
+      // Error concreto del server (409 sin CLI, 404…): /chat daría lo mismo.
+      err.sinFallback = true;
+      try {
+        const j = await res.json();
+        const d = j?.detail;
+        err.message = (typeof d === 'string' ? d : d?.message) || err.message;
+      } catch {}
+    }
+    throw err;
+  }
 
   const msgId = crypto.randomUUID?.() ?? String(Date.now() + Math.random());
-  let burbuja = false, acumulado = '', done = null;
+  let burbuja = false, acumulado = '', done = null, recibido = false;
   const reader = res.body.getReader();
   const dec = new TextDecoder();
   let buf = '';
@@ -3507,11 +3546,16 @@ async function _chatStream(body, pid) {
     if (!burbuja) { _renderMensaje('jarvis', t, { id: msgId }); burbuja = true; }
     else _panel()?.updateMessage(msgId, t);
   };
+  const estado = (t) => { if (pid === projectId && !burbuja) _panel()?.setTypingStatus?.(t); };
 
   for (;;) {
     let chunk;
     try { chunk = await reader.read(); }
-    catch (e) { if (!burbuja) throw e; break; }   // error antes de tokens → fallback; después → cortar
+    catch (e) {
+      if (e?.name === 'AbortError') throw e;
+      if (!recibido) throw e;    // error antes de cualquier evento → fallback
+      break;
+    }
     if (chunk.done) break;
     buf += dec.decode(chunk.value, { stream: true });
     let i;
@@ -3521,13 +3565,19 @@ async function _chatStream(body, pid) {
       if (!linea.startsWith('data:')) continue;
       let ev;
       try { ev = JSON.parse(linea.slice(5).trim()); } catch { continue; }
+      recibido = true;
       if (ev.type === 'token') {
         acumulado += ev.chunk;
         mostrar(acumulado);
+      } else if (ev.type === 'reinicio') {
+        acumulado = '';          // mensaje nuevo del asistente: no duplicar el texto
+      } else if (ev.type === 'contexto') {
+        if (ev.bloques?.length) estado(`${_sbT('Mirando')}: ${ev.bloques.join(' · ')}`);
+      } else if (ev.type === 'progreso') {
+        estado(_textoProgreso(ev));
       } else if (ev.type === 'done') {
         done = ev;
       } else if (ev.type === 'error') {
-        if (!burbuja) throw new Error(ev.detail || 'stream error');   // → fallback
         done = { response: acumulado || ('⚠ ' + (ev.detail || 'Error')), actions: [],
                  created_terminals: [], closed_all: false, workflow_card: null };
       }
@@ -3535,8 +3585,9 @@ async function _chatStream(body, pid) {
   }
 
   if (!done) {
-    if (!burbuja) throw new Error('stream vacío');   // → fallback
-    done = { response: acumulado, actions: [], created_terminals: [], closed_all: false, workflow_card: null };
+    if (!recibido) throw new Error('stream vacío');   // → fallback
+    done = { response: acumulado || ('⚠ ' + _sbT('La respuesta se cortó.')), actions: [],
+             created_terminals: [], closed_all: false, workflow_card: null };
   }
   mostrar(done.response || acumulado);   // texto final autoritativo
   (chatSesiones[pid] ||= []).push({ rol: 'jarvis', texto: done.response || acumulado });

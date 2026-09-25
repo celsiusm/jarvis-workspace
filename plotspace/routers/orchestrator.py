@@ -1336,6 +1336,25 @@ async def _preparar_contexto_chat(req):
     return project, terminals_activas, mensajes, client
 
 
+_TITULO_BLOQUE_RE = re.compile(r'^\[([^\]\n]{2,80})\]', re.M)
+
+
+def _titulos_contexto(mensajes: list) -> list:
+    """Nombres de los bloques de contexto del mensaje actual ('Estado actual',
+    'Proyecto', …) — para mostrarle al usuario qué está mirando el orquestador."""
+    if not mensajes:
+        return []
+    contenido = mensajes[-1].get('content')
+    if isinstance(contenido, list):
+        contenido = '\n'.join(b.get('text', '') for b in contenido if isinstance(b, dict))
+    titulos = []
+    for t in _TITULO_BLOQUE_RE.findall(contenido or ''):
+        t = t.split(' — ')[0].rstrip(':').strip()
+        if t and t != 'Orden' and t not in titulos:
+            titulos.append(t)
+    return titulos
+
+
 def _guard_cli():
     """409 estructurado si el CLI `claude` no está disponible (modo
     suscripción). Espejo de _guard_api_key para el motor nuevo."""
@@ -1438,6 +1457,10 @@ async def chat_orquestador_stream(req: ChatRequest):
         def sse(obj):
             return "data: " + json.dumps(obj, ensure_ascii=False) + "\n\n"
 
+        # Qué vio el orquestador (los bloques de contexto de este turno): el
+        # usuario lo ve mientras espera, en vez de tres puntitos mudos.
+        yield sse({"type": "contexto", "bloques": _titulos_contexto(mensajes)})
+
         if ORQUESTADOR_MOTOR != 'api':
             # Motor SUSCRIPCIÓN: streamear el 'message' desde los deltas del
             # claude -p. En 'reinicio' (mensaje nuevo del asistente, p.ej. tras
@@ -1453,7 +1476,14 @@ async def chat_orquestador_stream(req: ChatRequest):
                         cwd=(project.get('ruta') or None),
                         schema=RESPONDER_TOOL['input_schema']):
                     if ev['tipo'] == 'reinicio':
+                        # El cliente también resetea: antes seguía acumulando
+                        # y el texto se veía duplicado hasta el 'done'.
+                        if emitido_cli:
+                            yield sse({"type": "reinicio"})
                         raw_cli, emitido_cli = "", 0
+                    elif ev['tipo'] == 'herramienta':
+                        yield sse({"type": "progreso", "herramienta": ev['nombre'],
+                                   "detalle": ev['detalle']})
                     elif ev['tipo'] == 'delta':
                         raw_cli += ev['texto']
                         msg = _extraer_message_parcial(raw_cli)
@@ -1472,9 +1502,12 @@ async def chat_orquestador_stream(req: ChatRequest):
             usage_cli = SimpleNamespace(input_tokens=resultado['input_tokens'],
                                         output_tokens=resultado['output_tokens'])
             try:
-                res = await _procesar_respuesta_orquestador(
+                # Blindado: si el usuario cancela o se corta la conexión a mitad
+                # de las acciones, un workflow a medio spawnear queda peor que
+                # uno terminado — las acciones se completan igual.
+                res = await asyncio.shield(_en_fondo(_procesar_respuesta_orquestador(
                     resultado['texto'], usage_cli, project, req,
-                    terminals_activas, stop_reason='end_turn')
+                    terminals_activas, stop_reason='end_turn')))
             except Exception as e:
                 yield sse({"type": "error", "detail": f"Error procesando la respuesta: {e}"})
                 return
@@ -1521,8 +1554,8 @@ async def chat_orquestador_stream(req: ChatRequest):
 
         # Ejecutar actions/workflow + uso + STATE.md (idéntico a /chat).
         try:
-            resultado = await _procesar_respuesta_orquestador(
-                raw, usage, project, req, terminals_activas, stop_reason=stop)
+            resultado = await asyncio.shield(_en_fondo(_procesar_respuesta_orquestador(
+                raw, usage, project, req, terminals_activas, stop_reason=stop)))
         except Exception as e:
             yield sse({"type": "error", "detail": f"Error procesando la respuesta: {e}"})
             return

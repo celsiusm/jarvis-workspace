@@ -3,7 +3,7 @@
 'use strict';
 const assert = require('assert');
 const { _pure } = require('../i18n.js');
-const { traducir, normalizar, partes } = _pure;
+const { traducir, normalizar, partes, origenAtributo } = _pure;
 
 const DICT = { 'Nuevo proyecto': 'New project', 'Buscar…': 'Search…', 'Guardar': 'Save' };
 
@@ -37,3 +37,12 @@ assert.strictEqual(p.pre, ''); assert.strictEqual(p.core, 'Hola'); assert.strict
 });
 
 console.log('i18n: OK');
+
+// ── origenAtributo: un atributo que la APP cambia no se revierte ──
+const D2 = { 'Enviar': 'Send', 'Detener': 'Stop' };
+assert.strictEqual(origenAtributo(null, 'Enviar', 'en', D2), 'Enviar', 'primera vez: el actual');
+assert.strictEqual(origenAtributo('Enviar', 'Send', 'en', D2), 'Enviar', 'ya traducido: sigue el guardado');
+assert.strictEqual(origenAtributo('Enviar', 'Enviar', 'en', D2), 'Enviar');
+assert.strictEqual(origenAtributo('Enviar', 'Detener', 'en', D2), 'Detener', 'la app lo cambió: manda el nuevo');
+assert.strictEqual(origenAtributo('Enviar', 'Stop', 'en', D2), 'Stop', 'cambiado ya traducido: no se pisa');
+console.log('origenAtributo ok');

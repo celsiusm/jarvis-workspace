@@ -46,6 +46,18 @@
     return { pre: m[1], core: m[2], post: m[3] };
   }
 
+  // PURA: qué valor ORIGINAL (en español) usar para un atributo. `guardado`
+  // es el original que se recordó al traducirlo; `actual`, lo que tiene ahora.
+  // Si `actual` no es ni el original ni su traducción, lo cambió la APP (p.ej.
+  // el botón Enviar que pasa a Detener): ese es el nuevo original. Antes se
+  // restauraba siempre el guardado y ningún aria-label/title dinámico
+  // sobrevivía en inglés.
+  function origenAtributo(guardado, actual, lang, dict) {
+    if (guardado == null) return actual;
+    if (actual === guardado || actual === traducir(guardado, lang, dict)) return guardado;
+    return actual;
+  }
+
   // ── Motor DOM (solo navegador) ───────────────────────────────────────────
   if (typeof document !== 'undefined') {
     var _lang = (function () {
@@ -103,12 +115,14 @@
         var a = ATTRS[i];
         if (!el.hasAttribute(a)) continue;
         var guard = WM_ATTR.get(el) || {};
-        var orig = (a in guard) ? guard[a] : el.getAttribute(a);
+        var actual = el.getAttribute(a);
+        var orig = origenAtributo((a in guard) ? guard[a] : null, actual, 'en', DICT);
+        if ((a in guard) && orig !== guard[a]) delete guard[a];   // lo cambió la app
         if (_lang === 'en') {
           var tr = traducir(orig, 'en', DICT);
           if (tr != null) {
             if (!(a in guard)) { guard[a] = orig; WM_ATTR.set(el, guard); }
-            if (el.getAttribute(a) !== tr) el.setAttribute(a, tr);
+            if (actual !== tr) el.setAttribute(a, tr);
           }
         } else if (a in guard) {
           if (el.getAttribute(a) !== orig) el.setAttribute(a, orig);
@@ -180,7 +194,7 @@
     else init();
 
     var api = {
-      _pure: { traducir: traducir, normalizar: normalizar, partes: partes },
+      _pure: { traducir: traducir, normalizar: normalizar, partes: partes, origenAtributo: origenAtributo },
       t: t, setLang: setLang, aplicar: aplicar,
       lang: function () { return _lang; },
       DICT: DICT,
@@ -193,7 +207,7 @@
 
   // ── Export para Node (tests de la lógica pura) ─────────────────────────────
   return {
-    _pure: { traducir: traducir, normalizar: normalizar, partes: partes },
+    _pure: { traducir: traducir, normalizar: normalizar, partes: partes, origenAtributo: origenAtributo },
     DICT: DICT,
   };
 }));
