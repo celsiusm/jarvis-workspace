@@ -71,10 +71,13 @@ PROCESO MENTAL OBLIGATORIO — recorré estos pasos ANTES de escribir JSON
       - 3+ agentes: módulos verticalmente independientes (auth, pagos…).
       Nunca paralelices por gusto. Si un humano razonable lo haría solo,
       es un agente.
-   d. REUSAR antes de crear: si [Estado actual] muestra terminales LIBRES
-      (⚪, sin rol), asignales el trabajo — terminal_id en el paso, o la
-      action enviar_prompt si es una tarea suelta sin workflow. Nunca a
-      una 🟢 trabajando ni a una con rol en curso.
+   d. REUSAR antes de crear: si [Estado actual] marca terminales LIBRES
+      (la cabecera las lista), asignales el trabajo — terminal_id en el
+      paso, o la action enviar_prompt si es una tarea suelta sin workflow.
+      Nunca a una "ocupada": 🟢 trabajando, ❓ esperando respuesta, 💀
+      caída o con un paso de workflow en curso (el motor igual la rechaza).
+      Mirá su "tarea", lo que "editó" y su "pantalla": si una terminal ya
+      trabajó en esos archivos, es la candidata natural para seguir.
    e. ORDENAR dependencias: si paso_1 lee lo que paso_0 escribió,
       `depende_de: "paso_0"`. Si no, `depende_de: null` y van en paralelo.
 
@@ -160,23 +163,44 @@ CONTEXTO QUE RECIBÍS EN CADA TURNO
 Recibís la conversación REAL del thread (los turnos previos van incluidos:
 "ahora agregale X" refiere a lo que se habló antes). El mensaje actual puede
 venir precedido por bloques del sistema:
-  [Estado actual] — terminales activas con estado VIVO: fase (🟢 trabajando
-                    AHORA / ⚪ quieta / ⏳ arrancando), su rol en workflow o
-                    "terminal libre", y de qué archivos es dueña.
+  [Estado actual] — cada terminal con su estado VIVO: 🟢 trabajando / ⚪
+                    quieta / ⏳ arrancando (y hace cuánto), ❓ ESPERANDO
+                    RESPUESTA (hay una pregunta en su pantalla), 💀 CAÍDA
+                    (su CLI no corre), LIBRE u ocupada; su rol de workflow,
+                    la tarea que se le mandó, los archivos que editó (🔒 =
+                    es dueña), su último cierre (TASK_* + motivo), sus dev
+                    servers y las últimas líneas de su PANTALLA.
+  [Proyecto] — ruta, archivos de la raíz, rama git, lo que está sin
+                    commitear y los últimos commits (qué ya se hizo).
+  [Guía del proyecto] — intro + secciones del CLAUDE.md del proyecto: sus
+                    reglas mandan sobre tus preferencias. Leé el archivo
+                    con Read si necesitás una sección en detalle.
   [Mapa del proyecto] — stack detectado + árbol real de carpetas con conteo
                     de archivos y propósito de cada una. Es TU fuente para
                     el campo `archivos` y las rutas de cada tarea: usá
                     SIEMPRE carpetas/archivos que existan acá.
+  [Workflows activos] — workflows en curso paso por paso (estado, terminal,
+                    dependencias, archivos y motivo de cada bloqueo).
+  [Eventos] — los últimos TASK_DONE/BLOCKED/ERROR del proyecto, con motivo.
+  [Tablero de tareas] — tareas abiertas del kanban (y a quién están asignadas).
+  [Coordinación] — permisos pendientes, reservas y conflictos de archivos
+                    entre agentes.
+  [Dev servers] — todos los servers vivos y qué terminal levantó cada uno.
   [Skills activas] — plugins/skills cargados en el proyecto (si aplica).
   [Workflows recientes] — workflows previos con su progreso.
-  [Eventos] — TASK_DONE/BLOCKED/ERROR de agentes en curso (si aplica).
+  [Memoria relevante al pedido] — memorias del proyecto que tocan el pedido.
 
 Usalos para:
   • REUSAR terminales libres en vez de crear nuevas: enviar_prompt para
     una tarea suelta, o terminal_id en un paso de workflow. JAMÁS le
-    mandes trabajo a una 🟢 trabajando ni a una ocupada con un rol.
-  • Respetar el stack y las convenciones de las skills.
-  • No repetir trabajo de workflows anteriores.
+    mandes trabajo a una terminal ocupada.
+  • Si una terminal ESPERA RESPUESTA, su pantalla dice qué pregunta: si el
+    usuario te la contesta, mandásela con enviar_prompt; si no, avisale.
+  • Diagnosticar un bloqueo leyendo su motivo y la pantalla del agente
+    ANTES de re-instruirlo: no repitas la instrucción que ya falló.
+  • No asignar archivos que otro agente está editando (🔒 / [Coordinación])
+    ni rehacer lo que ya está en los últimos commits.
+  • Respetar el stack, las convenciones de las skills y la guía del proyecto.
 
 ══════════════════════════════════════════════════════════════════════
 PROACTIVIDAD POST-WORKFLOW
@@ -332,7 +356,7 @@ Contexto: [Evento: TASK_BLOCKED en paso_0 motivo: necesito saber si la tabla use
 {"message":"Le doy la info al agente.","actions":[{"type":"none"}],"workflow":{"nombre":"Resume auth con tabla users","objetivo":"Continuar paso_0 con la info que falta","pasos":[{"agente":"Implementación","ia_type":"claude","tarea":"CONTINUACIÓN del trabajo anterior: la tabla users no existe, creala vos en plotspace/database.py con columnas id, email UNIQUE, password_hash, created_at. Después seguí con auth como estabas. PERMITIDO: plotspace/auth/*, plotspace/database.py (solo agregar tabla users), plotspace/main.py. PROHIBIDO: plotspace/tests/*.","depende_de":null}]}}
 
 [10] PROMPT DIRECTO A UNA TERMINAL VIVA — sin workflow
-Contexto: [Estado actual]\n  - ID 151: Claude Code #2 (claude) — ⚪ quieta — terminal libre
+Contexto: [Estado actual]\n  - ID 151: Claude Code #2 (claude) — ⚪ quieta hace 12 min — LIBRE
 Usuario: "decile a la claude libre que pula el diseño de la landing"
 {"message":"Le mando la tarea a Claude Code #2.","actions":[{"type":"enviar_prompt","terminal_id":151,"prompt":"OBJETIVO: pulir el diseño de la landing. Trabajá sobre los archivos de la landing que muestra el mapa del proyecto (HTML + CSS). CRITERIO DE ÉXITO: jerarquía tipográfica consistente, espaciado uniforme y paleta cohesiva, sin romper el layout existente."}]}
 
@@ -852,6 +876,8 @@ def _mensaje_auto_intervencion(evento: str, paso_idx: int, wf_nombre: str,
     return (
         f"[Evento: {evento} en paso_{paso_idx} del workflow '{wf_nombre}' — "
         f"agente {term_nombre}. Motivo: {motivo or 'sin motivo reportado'}]\n"
+        f"Antes de decidir, leé en [Estado actual] la PANTALLA y los archivos "
+        f"de {term_nombre}: el motivo resume, la pantalla muestra qué pasó.\n"
         "AUTO-INTERVENCIÓN (el usuario NO está mirando este chat ahora): si el "
         "bloqueo se resuelve con información que tenés o una decisión técnica "
         "razonable, resolvelo YA re-instruyendo al agente — un workflow chico "
@@ -1097,8 +1123,12 @@ def _bloque_memoria_para_orden(project_ruta: str, mensaje: str) -> str:
         return ''
     try:
         from plotspace.core.memoria_recall import relevantes, usos_registrados
-        rel = relevantes(project_ruta, [], mensaje or '', k=4, usos=usos_registrados())
-    except Exception:
+        # Las rutas que nombra el pedido son la señal MÁS fuerte del recall (y
+        # la única que despierta una lápida): antes se pasaba [] siempre.
+        rel = relevantes(project_ruta, _rutas_en_texto(mensaje), mensaje or '',
+                         k=5, usos=usos_registrados())
+    except Exception as e:
+        print(f'[orquestador] recall de memorias falló: {e}')
         return ''
     if not rel:
         return ''
@@ -1107,6 +1137,42 @@ def _bloque_memoria_para_orden(project_ruta: str, mensaje: str) -> str:
     for m in rel:
         marca = ' ⚰️LÁPIDA(no reintroducir)' if m['estado'] == 'lapida' else ''
         lineas.append(f"  • {m['titulo']}{marca} — .jarvis/memory/{m['slug']}.md")
+        if m.get('resumen') and m['resumen'].lower() != m['titulo'].lower():
+            lineas.append(f"      ↳ {m['resumen']}")
+    return '\n'.join(lineas)
+
+
+_RUTA_EN_TEXTO_RE = re.compile(
+    r'(?<![\w@])((?:[\w.-]+/)+[\w.-]+|[\w-]+\.(?:py|js|ts|tsx|jsx|css|html|md|json|'
+    r'toml|yaml|yml|sh|go|rs|java|rb|php|vue|svelte|sql))(?![\w/])')
+
+
+def _rutas_en_texto(texto: str) -> list:
+    """Paths que el usuario nombró ('frontend/shell/workspace.js', 'main.py')."""
+    vistos = []
+    sin_urls = re.sub(r'\w+://\S+', ' ', texto or '')
+    for m in _RUTA_EN_TEXTO_RE.findall(sin_urls):
+        if m.startswith('./'):
+            m = m[2:]
+        if '://' in m or m in vistos:
+            continue
+        vistos.append(m)
+    return vistos[:12]
+
+
+def _formatear_dev_servers(project_id: int) -> str:
+    """TODOS los dev servers vivos del proyecto con la terminal que los
+    levantó (antes se veía una sola URL, sin dueño)."""
+    try:
+        from plotspace.core.dev_detect import servers_detectados
+        servers = servers_detectados(project_id)
+    except Exception:
+        return ''
+    lineas = []
+    for sv in servers[:10]:
+        quien = (f" — levantado por #{sv['terminal_id']} {sv.get('terminal_nombre') or ''}"
+                 if sv.get('terminal_id') else '')
+        lineas.append(f"  - {sv['url']}{quien}".rstrip())
     return '\n'.join(lineas)
 
 
@@ -1131,8 +1197,17 @@ async def _preparar_contexto_chat(req):
     finally:
         conn.close()
 
-    # Armado del contexto: solo agregar bloques que tengan contenido real.
-    bloques = [f"[Estado actual]\n{_formatear_estado(terminals_activas, req.project_id)}"]
+    # Armado del contexto: la foto COMPLETA del enjambre y del proyecto
+    # (core/orq_contexto): estado vivo de cada terminal con su pantalla, git,
+    # guía del proyecto, workflows, eventos, tablero y coordinación.
+    try:
+        from plotspace.core import orq_contexto
+        bloques = await orq_contexto.construir_bloques(project, terminals_activas)
+    except Exception as e:
+        print(f'[orquestador] contexto enriquecido falló (sigo con lo mínimo): {e}')
+        bloques = [f"[Estado actual]\nTerminales activas: {len(terminals_activas)} — "
+                   + ', '.join(f"ID {t['id']}: {t['nombre']} ({t['tipo_ia']})"
+                               for t in terminals_activas)]
 
     # Mapa del repo: el orquestador deja de adivinar rutas — planifica con las
     # carpetas REALES del proyecto (determinista, cacheado, degrada a nada).
@@ -1152,6 +1227,9 @@ async def _preparar_contexto_chat(req):
             f"  Para apagarlo usá la action 'stop_preview' (NO close_terminal — "
             f"el preview NO es una terminal)."
         )
+    dev_str = _formatear_dev_servers(req.project_id)
+    if dev_str:
+        bloques.append(f"[Dev servers]\n{dev_str}")
 
     skills_str = _formatear_skills_activas(req.project_id)
     if skills_str:
@@ -2533,6 +2611,11 @@ async def _cerrar_workflow(wf: dict, pasos: list, project_id: int) -> None:
 async def send_to_agent(terminal_id: int, mensaje: str) -> bool:
     """Envía un texto al agente via tmux (paste). Devuelve True SOLO si el
     pegado llegó al pane (los callers que no lo necesitan lo ignoran)."""
+    try:
+        from plotspace.core import orq_contexto
+        orq_contexto.registrar_envio(terminal_id, mensaje)
+    except Exception:
+        pass
     mensaje = f'Lee tu CLAUDE.md primero. Luego: {mensaje}'
     session = f'jarvis_{terminal_id}'
     print(f'[send_to_agent] → {session}: {mensaje[:100]}')
@@ -2912,89 +2995,6 @@ async def _buscar_agente_disponible(project_id: int, excluir_id: int, ia_type: s
         return None
     finally:
         conn.close()
-
-
-def _formatear_estado(terminals: list, project_id: Optional[int] = None) -> str:
-    if not terminals:
-        return "No hay terminales activas."
-
-    # Cross-referenciar cada terminal con el workflow/paso que la creó
-    # para que el orquestador sepa "para qué es cada terminal".
-    mapa_workflow: dict = {}
-    if project_id is not None:
-        conn = get_db()
-        try:
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id, nombre, pasos FROM workflows WHERE project_id = ? "
-                "ORDER BY created_at DESC LIMIT 20",
-                (project_id,)
-            )
-            for r in cursor.fetchall():
-                try:
-                    pasos = json.loads(r['pasos'])
-                except (json.JSONDecodeError, TypeError):
-                    continue
-                for p in pasos:
-                    tid = p.get('terminal_id')
-                    if tid and tid not in mapa_workflow:
-                        mapa_workflow[tid] = {
-                            'workflow': r['nombre'],
-                            'agente':   p.get('agente', '?'),
-                            'estado':   p.get('estado', '?'),
-                        }
-        finally:
-            conn.close()
-
-    # Estado VIVO por terminal (fase de agent_watch) + dueños de archivos
-    # (Agents Live): el orquestador rutea sin pisar a nadie. Degradan a nada.
-    fases = {t['id']: _fase_terminal(t['id']) for t in terminals}
-    duenos: dict = {}
-    if terminals:
-        try:
-            from plotspace.core import agent_live
-            rows = [{'tid': t['id'], 'tnombre': t['nombre'],
-                     'tipo_ia': t.get('tipo_ia')} for t in terminals]
-            snap = agent_live.snapshot(project_id, rows) if project_id is not None else {}
-            for a in snap.get('agentes', []):
-                propios = [f['path'] for f in a.get('archivos', []) if f.get('dueno')]
-                if propios:
-                    duenos[a['terminal_id']] = propios
-        except Exception:
-            pass
-    return _formatear_estado_core(terminals, mapa_workflow, fases=fases, duenos=duenos)
-
-
-def _formatear_estado_core(terminals: list, mapa_workflow: dict,
-                           fases: dict = None, duenos: dict = None) -> str:
-    """Núcleo PURO del bloque [Estado actual]: una línea por terminal con
-    id/nombre/CLI + fase viva + rol de workflow (o libre) + archivos propios."""
-    if not terminals:
-        return "No hay terminales activas."
-    fases = fases or {}
-    duenos = duenos or {}
-    _FASES = {'trabajando': '🟢 trabajando AHORA', 'idle': '⚪ quieta',
-              'arrancando': '⏳ arrancando'}
-    lineas = [f"Terminales activas: {len(terminals)}"]
-    for t in terminals:
-        seg = [f"ID {t['id']}: {t['nombre']} ({t['tipo_ia']})"]
-        fase = _FASES.get(fases.get(t['id']) or '')
-        if fase:
-            seg.append(fase)
-        info = mapa_workflow.get(t['id'])
-        if info:
-            seg.append(f"rol '{info['agente']}' del workflow "
-                       f"'{info['workflow']}' ({info['estado']})")
-        else:
-            seg.append("terminal libre")
-        propios = duenos.get(t['id']) or []
-        if propios:
-            vista = ', '.join(propios[:3])
-            if len(propios) > 3:
-                vista += f' (+{len(propios) - 3} más)'
-            seg.append(f'dueña de: {vista}')
-        lineas.append('  - ' + ' — '.join(seg))
-    return "\n".join(lineas)
 
 
 def _formatear_skills_activas(project_id: int) -> str:
