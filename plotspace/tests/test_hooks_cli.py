@@ -209,16 +209,75 @@ def test_el_session_hook_apunta_a_su_script(tmp_path):
 
 def test_el_session_hook_en_unix_no_cambia(tmp_path):
     cmd = hooks_cli.comando_session_hook(str(tmp_path), sistema='posix')
-    assert cmd.startswith('python3 /'), cmd
+    assert '|| python3 /' in cmd, cmd
     assert '"' not in cmd
 
 
 def test_en_unix_se_conserva_el_comando_de_siempre(tmp_path):
     cmd = hooks_cli.comando_hook(str(tmp_path), sistema='posix')
-    assert cmd.startswith('python3 -S /'), cmd
+    assert '|| python3 -S /' in cmd, cmd
     assert '"' not in cmd, 'en Unix no hacían falta comillas y no se agregan'
+
+
+def test_sin_tolerancia_el_comando_es_el_crudo(tmp_path):
+    """Antigravity no documenta que corra el hook con un shell: le va el
+    comando pelado."""
+    cmd = hooks_cli.comando_hook(str(tmp_path), sistema='posix', tolerante=False)
+    assert cmd.startswith('python3 -S /'), cmd
 
 
 def test_el_script_apuntado_es_el_de_provenance(tmp_path):
     for sistema in ('nt', 'posix'):
         assert hooks_cli.NOMBRE_SCRIPT in hooks_cli.comando_hook(str(tmp_path), sistema)
+
+
+# ── Un script que desaparece NO puede trabar al CLI ──────────────────────
+# REGRESIÓN (2026-09-25): el server se arrancó una vez desde una copia en
+# /tmp/.../scratchpad/old/ y registró el hook con ESA ruta. Al borrarse la
+# copia, `python3 -S <ruta>` salía con código 2 ("can't open file") y en
+# UserPromptSubmit el código 2 BLOQUEA el prompt: el usuario no podía mandar
+# ni un mensaje. El hook es best-effort: si no está, tiene que ser un no-op.
+
+import subprocess  # noqa: E402
+
+
+def _correr(cmd):
+    return subprocess.run(['sh', '-c', cmd], capture_output=True, text=True,
+                          input='{}', timeout=10)
+
+
+def test_script_ausente_sale_con_cero(tmp_path):
+    for armar in (hooks_cli.comando_hook, hooks_cli.comando_session_hook):
+        cmd = armar(str(tmp_path / 'no-existe'), sistema='posix')
+        r = _correr(cmd)
+        assert r.returncode == 0, (cmd, r.returncode, r.stderr)
+
+
+def test_script_presente_conserva_su_codigo_de_salida(tmp_path):
+    """El guard no se come el resultado del script real."""
+    (tmp_path / 'scripts').mkdir()
+    (tmp_path / 'scripts' / NOMBRE_SCRIPT).write_text('import sys; sys.exit(3)\n')
+    r = _correr(hooks_cli.comando_hook(str(tmp_path), sistema='posix'))
+    assert r.returncode == 3, r.stderr
+
+
+def test_ruta_con_espacios_en_unix(tmp_path):
+    raiz = tmp_path / 'con espacio'
+    (raiz / 'scripts').mkdir(parents=True)
+    (raiz / 'scripts' / NOMBRE_SCRIPT).write_text('import sys; sys.exit(4)\n')
+    r = _correr(hooks_cli.comando_hook(str(raiz), sistema='posix'))
+    assert r.returncode == 4, r.stderr
+
+
+def test_raiz_en_tmp_es_efimera(tmp_path):
+    """Una copia del repo bajo el directorio temporal NO instala hooks en el
+    settings del usuario: cuando la copia se borre, el hook queda apuntando a
+    la nada."""
+    import tempfile
+    assert hooks_cli.raiz_es_efimera('/tmp/x/scratchpad/old') is True
+    assert hooks_cli.raiz_es_efimera(os.path.join(tempfile.gettempdir(), 'r')) is True
+    assert hooks_cli.raiz_es_efimera('/home/user/jarvis-workspace') is False
+    assert hooks_cli.raiz_es_efimera('/tmpfoo/repo') is False
+
+
+import os  # noqa: E402

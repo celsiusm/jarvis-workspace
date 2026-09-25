@@ -303,6 +303,19 @@ async def _startup():
     # 2. Reconciliar sesiones tmux en background — no bloquea el startup
     _bg_tasks.append(asyncio.create_task(terminals.reconciliar_sesiones_tmux()))
 
+    # 2a. Una copia del repo bajo /tmp (scratchpad, checkout de prueba) NO
+    #     instala hooks en el settings del USUARIO: cuando la copia se borra,
+    #     el hook queda apuntando a la nada (2026-09-25: así se trabaron los
+    #     prompts de Claude Code). Ver hooks_cli.raiz_es_efimera.
+    try:
+        from plotspace.core import hooks_cli as _hc0
+        _raiz_efimera = _hc0.raiz_es_efimera(
+            os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+    except Exception:
+        _raiz_efimera = False
+    if _raiz_efimera:
+        print('[startup] repo bajo un directorio temporal: no instalo hooks de CLI')
+
     # 2b. Instalar el SessionStart hook de claude (idempotente): captura el
     #     session-id VIVO en cada arranque para que --resume traiga el transcript
     #     actual (claude rota el .jsonl al compactar). Ver [[persistencia-resume-terminales]].
@@ -310,7 +323,8 @@ async def _startup():
         from plotspace.core import hooks_cli as _hc
         _raiz_hook = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         _settings = os.path.join(os.path.expanduser('~'), '.claude', 'settings.json')
-        if terminals.asegurar_session_hook(_settings, _hc.comando_session_hook(_raiz_hook)):
+        if not _raiz_efimera and terminals.asegurar_session_hook(
+                _settings, _hc.comando_session_hook(_raiz_hook)):
             print('[startup] SessionStart hook de claude instalado')
     except Exception as e:
         print(f'[startup] no pude instalar el session hook: {e}')
@@ -324,7 +338,8 @@ async def _startup():
         from plotspace.core import hooks_cli
         _raiz = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
         _settings = os.path.join(os.path.expanduser('~'), '.claude', 'settings.json')
-        if hooks_cli.asegurar_hooks_provenance(_settings, hooks_cli.comando_hook(_raiz)):
+        if not _raiz_efimera and hooks_cli.asegurar_hooks_provenance(
+                _settings, hooks_cli.comando_hook(_raiz)):
             print('[startup] hooks de provenance del enjambre instalados')
     except Exception as e:
         print(f'[startup] no pude instalar los hooks de provenance: {e}')
@@ -336,11 +351,11 @@ async def _startup():
     try:
         from plotspace.core import cli_adapters
         _raiz_oc = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-        if cli_adapters.asegurar_opencode_plugin(_raiz_oc):
+        if not _raiz_efimera and cli_adapters.asegurar_opencode_plugin(_raiz_oc):
             print('[startup] plugin de provenance de opencode instalado')
-        if cli_adapters.asegurar_qwen_hook(_raiz_oc):
+        if not _raiz_efimera and cli_adapters.asegurar_qwen_hook(_raiz_oc):
             print('[startup] hook de provenance de qwen instalado')
-        if cli_adapters.asegurar_antigravity_hook(_raiz_oc):
+        if not _raiz_efimera and cli_adapters.asegurar_antigravity_hook(_raiz_oc):
             print('[startup] hook de provenance de Antigravity instalado')
     except Exception as e:
         print(f'[startup] no pude instalar los adaptadores de CLI: {e}')

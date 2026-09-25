@@ -129,7 +129,7 @@ def asegurar_antigravity_hook(raiz_repo: str, hooks_path: str = None) -> bool:
         deseado = {'PreToolUse': [{
             'matcher': _AGY_MATCHER,
             'hooks': [{'type': 'command',
-                       'command': hooks_cli.comando_hook(raiz_repo),
+                       'command': hooks_cli.comando_hook(raiz_repo, tolerante=False),
                        'timeout': _AGY_TIMEOUT}]}]}
         data = {}
         if os.path.exists(destino):
