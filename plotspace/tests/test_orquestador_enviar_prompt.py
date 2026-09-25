@@ -144,3 +144,74 @@ def test_estado_muestra_archivos_editados_con_tope():
 def test_estado_sin_terminales():
     from plotspace.core.orq_contexto import formatear_bloque_terminales
     assert formatear_bloque_terminales([], {}) == 'No hay terminales activas.'
+
+
+# ─── Guardas con estado VIVO (no solo pasos running) ──────────────────────────
+
+from plotspace.routers.orchestrator import (  # noqa: E402
+    _cierre_prompt_directo, _motivo_rechazo_envio,
+)
+
+
+def test_tarea_solo_a_una_terminal_libre():
+    assert _motivo_rechazo_envio({'fase': 'idle'}, False) == ''
+    assert 'trabajando' in _motivo_rechazo_envio({'fase': 'trabajando'}, False)
+    assert 'caído' in _motivo_rechazo_envio({'fase': 'idle', 'estado': 'caido'}, False)
+    assert 'pregunta' in _motivo_rechazo_envio({'fase': 'idle', 'esperando': True}, False)
+
+
+def test_respuesta_solo_a_quien_espera_una():
+    assert _motivo_rechazo_envio({'fase': 'idle', 'esperando': True}, True) == ''
+    assert 'ninguna pregunta' in _motivo_rechazo_envio({'fase': 'idle'}, True)
+    assert 'caído' in _motivo_rechazo_envio({'esperando': True, 'estado': 'sin_sesion'}, True)
+
+
+def test_la_tarea_suelta_lleva_su_cierre_estructurado():
+    c = _cierre_prompt_directo(42)
+    assert '.jarvis/signals/terminal_42.json' in c
+    assert '"estado":"done"' in c
+
+
+def test_schema_acepta_es_respuesta():
+    assert _props_action()['es_respuesta']['type'] == 'boolean'
+
+
+def test_procesar_respuesta_rechaza_ocupada_y_responde_crudo(tmp_path, monkeypatch):
+    """De punta a punta por _procesar_respuesta_orquestador: a la que trabaja
+    no se le manda nada; a la que espera se le contesta crudo."""
+    import asyncio
+    import json as _json
+    from types import SimpleNamespace
+    import plotspace.routers.orchestrator as orch
+    from plotspace.core import agent_watch
+    from plotspace.core.database import get_db
+    conn = get_db()
+    conn.execute("INSERT INTO projects (id,nombre,ruta,fecha_creacion,ultimo_acceso) "
+                 "VALUES (1,'P',?,'2026-01-01','2026-01-01')", (str(tmp_path),))
+    for tid in (21, 22):
+        conn.execute("INSERT INTO terminals (id,project_id,nombre,tipo_ia,activa,"
+                     "fecha_creacion) VALUES (?,1,?,'claude',1,'2026-01-01')", (tid, f'T{tid}'))
+    conn.commit(); conn.close()
+    monkeypatch.setitem(agent_watch._estados, 21, {'fase': 'trabajando'})
+    monkeypatch.setitem(agent_watch._estados, 22, {'fase': 'idle', 'esperando': True})
+    enviados = []
+
+    async def falso(tid, msg, crudo=False):
+        enviados.append((tid, msg, crudo))
+        return True
+    monkeypatch.setattr(orch, 'send_to_agent', falso)
+
+    async def nada(*a, **k):
+        return None
+    monkeypatch.setattr(orch, '_actualizar_state_md', nada)
+    raw = _json.dumps({'message': 'ok', 'actions': [
+        {'type': 'enviar_prompt', 'terminal_id': 21, 'prompt': 'hacé X'},
+        {'type': 'enviar_prompt', 'terminal_id': 22, 'prompt': 'y', 'es_respuesta': True}]})
+    ts = [{'id': 21, 'nombre': 'T21', 'tipo_ia': 'claude'},
+          {'id': 22, 'nombre': 'T22', 'tipo_ia': 'claude'}]
+    req = orch.ChatRequest(project_id=1, message='x')
+    res = asyncio.run(orch._procesar_respuesta_orquestador(
+        raw, SimpleNamespace(input_tokens=0, output_tokens=0),
+        {'id': 1, 'ruta': str(tmp_path), 'nombre': 'P'}, req, ts, stop_reason='end_turn'))
+    assert enviados == [(22, 'y', True)]
+    assert 'trabajando' in res['response']

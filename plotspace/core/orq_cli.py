@@ -52,11 +52,15 @@ def _env_suscripcion(base: dict = None) -> dict:
     return env
 
 
-def _argv(prompt: str, system_prompt: str, model: str,
+def _argv(prompt, system_prompt: str, model: str,
           schema: dict = None, tools: str = TOOLS_LECTURA) -> list:
-    """Línea de comando del claude headless (receta verificada en vivo)."""
+    """Línea de comando del claude headless (receta verificada en vivo).
+
+    `prompt=None` → el prompt viaja por STDIN (es lo que usa `stream`): con el
+    contexto completo + historial + archivos pegados el prompt puede pasar los
+    128 KB que Linux permite por argumento (MAX_ARG_STRLEN → E2BIG al spawnear)."""
     argv = [
-        BIN, '-p', prompt,
+        BIN, '-p', *([prompt] if prompt is not None else []),
         '--model', model,
         '--safe-mode',                       # sin plugins/MCPs/hooks/CLAUDE.md
         '--verbose',                         # requisito de stream-json
@@ -124,6 +128,13 @@ def eventos_desde_lineas(lineas) -> 'list[dict]':
                 delta = ev.get('delta') or {}
                 if delta.get('type') == 'text_delta' and delta.get('text'):
                     yield {'tipo': 'delta', 'texto': delta['text']}
+        elif t == 'assistant':
+            # Mensaje completo del asistente: de acá salen las tools que usa
+            # (Read/Glob/Grep) para mostrarle al usuario qué está mirando.
+            for b in ((d.get('message') or {}).get('content') or []):
+                if isinstance(b, dict) and b.get('type') == 'tool_use':
+                    yield {'tipo': 'herramienta', 'nombre': b.get('name') or '?',
+                           'detalle': _detalle_tool(b.get('input') or {})}
         elif t == 'result':
             estructurado = d.get('structured_output')
             if isinstance(estructurado, dict):
@@ -143,6 +154,15 @@ def eventos_desde_lineas(lineas) -> 'list[dict]':
             }
 
 
+def _detalle_tool(entrada: dict) -> str:
+    """Lo más legible del input de una tool: el archivo, el patrón o la ruta."""
+    for clave in ('file_path', 'pattern', 'path', 'query'):
+        v = entrada.get(clave)
+        if isinstance(v, str) and v:
+            return v[:160]
+    return ''
+
+
 # ─── Capa impura: el subproceso ──────────────────────────────────────────────
 
 async def stream(prompt: str, system_prompt: str, model: str, cwd: str = None,
@@ -159,12 +179,20 @@ async def stream(prompt: str, system_prompt: str, model: str, cwd: str = None,
         timeout_s = TIMEOUT_S
 
     proc = await asyncio.create_subprocess_exec(
-        *_argv(prompt, system_prompt, model, schema=schema, tools=tools),
+        *_argv(None, system_prompt, model, schema=schema, tools=tools),
+        stdin=asyncio.subprocess.PIPE,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.STDOUT,
         cwd=cwd if cwd and os.path.isdir(cwd) else None,
         env=_env_suscripcion(),
     )
+    try:
+        proc.stdin.write((prompt or '').encode('utf-8'))
+        await proc.stdin.drain()
+    except (BrokenPipeError, ConnectionResetError):
+        pass            # el CLI murió al arrancar: el diagnóstico sale de stdout
+    finally:
+        proc.stdin.close()
 
     deadline = asyncio.get_event_loop().time() + timeout_s
     cola_cruda: list = []       # últimas líneas no parseadas (diagnóstico)

@@ -217,3 +217,14 @@ def test_el_prompt_del_orquestador_lleva_el_contexto_completo(tmp_path, monkeypa
     assert '[Estado actual]' in txt and '¿Sobrescribo el archivo?' in txt
     assert '[Proyecto]' in txt and '[Guía del proyecto]' in txt
     assert txt.rstrip().endswith('revisá main.py')
+
+
+def test_infos_con_workflows_explicitos_ignora_los_excluidos(tmp_path):
+    """ejecutar_workflow valida el reuso SIN su propio workflow (ya guardado con
+    pasos pending): si no, la terminal pedida siempre figuraba ocupada."""
+    _proyecto(tmp_path)
+    ts = [{'id': 11, 'nombre': 'Back', 'tipo_ia': 'claude'}]
+    propio = {'id': 'nuevo', 'nombre': 'N', 'estado': 'running',
+              'pasos': [{'terminal_id': 11, 'estado': 'pending', 'tarea': 't'}]}
+    assert not oc.es_libre(oc.infos_terminales(1, ts, [propio], [], con_live=False)[11])
+    assert oc.es_libre(oc.infos_terminales(1, ts, [], [], con_live=False)[11])

@@ -260,6 +260,10 @@ actions[].type válidos (NADA MÁS):
                      ser autosuficiente (objetivo + archivos concretos del
                      [Mapa del proyecto] + criterio de éxito). Podés emitir
                      varias en una respuesta (una por terminal).
+                     Con `es_respuesta: true` el prompt es la RESPUESTA a la
+                     pregunta que esa terminal tiene en pantalla (❓ ESPERANDO
+                     RESPUESTA): se tipea tal cual ("y", "2", "usá JWT"), sin
+                     envoltorio. Solo vale para una terminal que espera.
 
 DIFERENCIA CRÍTICA — no confundir:
   • "cerrá la terminal" / "matá el agente X" / "borrá ese Claude"
@@ -600,6 +604,7 @@ RESPONDER_TOOL = {
                         "count": {"type": "integer", "description": "Solo spawn_terminal: cuántas terminales."},
                         "terminal_id": {"type": "integer", "description": "close_terminal: id a cerrar. enviar_prompt: id de la terminal destino."},
                         "prompt": {"type": "string", "description": "Solo enviar_prompt: la tarea/mensaje que se tipea en esa terminal. Autosuficiente, con archivos/carpetas concretos del [Mapa del proyecto]."},
+                        "es_respuesta": {"type": "boolean", "description": "Solo enviar_prompt: true si el prompt RESPONDE la pregunta que la terminal tiene en pantalla (❓ ESPERANDO RESPUESTA) — se tipea tal cual."},
                     },
                     "required": ["type"],
                 },
@@ -808,13 +813,36 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
             finally:
                 conn.close()
             tid, motivo = _validar_enviar_prompt(action, activas_ids, ocupadas)
+            es_respuesta = action.get('es_respuesta') is True
+            if not motivo:
+                # La regla "nunca a una ocupada" era solo texto del prompt: el
+                # código miraba únicamente los pasos running. Ahora decide el
+                # estado VIVO (trabajando, pregunta en pantalla, CLI caído).
+                try:
+                    from plotspace.core import orq_contexto
+                    fila = next(t for t in terminals_activas if t['id'] == tid)
+                    info = await asyncio.to_thread(orq_contexto.info_terminal,
+                                                   req.project_id, fila)
+                    motivo = _motivo_rechazo_envio(info, es_respuesta)
+                except Exception as e:
+                    print(f'[enviar_prompt] sin estado vivo de #{tid}: {e}')
             if motivo:
                 jarvis_message = (jarvis_message +
                                   f" ⚠️ No envié el prompt: {motivo}.").strip()
             else:
-                await send_to_agent(tid, action['prompt'].strip())
-                _logs.evento('prompt_directo', terminal_id=tid,
-                             project_id=req.project_id)
+                texto = action['prompt'].strip()
+                if es_respuesta:
+                    ok = await send_to_agent(tid, texto, crudo=True)
+                else:
+                    ok = await send_to_agent(tid, texto + _cierre_prompt_directo(tid))
+                if ok is False:
+                    jarvis_message = (jarvis_message + f" ⚠️ No pude entregar el "
+                                      f"prompt a la terminal #{tid} (su sesión "
+                                      "no responde).").strip()
+                else:
+                    _logs.evento('prompt_directo', terminal_id=tid,
+                                 project_id=req.project_id,
+                                 respuesta=es_respuesta)
 
     # ── Ejecutar workflow si lo hay ────────────────────────────────────────────
     if workflow_data:
@@ -964,6 +992,31 @@ def _validar_enviar_prompt(action: dict, activas_ids: set, ocupadas: set):
         return None, (f'la terminal #{tid} está ocupada con un paso de '
                       'workflow en curso')
     return tid, None
+
+
+def _motivo_rechazo_envio(info: dict, es_respuesta: bool) -> str:
+    """'' si se puede mandar; si no, el porqué legible. PURA.
+    Una respuesta solo va a quien ESPERA una; una tarea, solo a una libre."""
+    from plotspace.core.orq_contexto import motivo_no_libre
+    if info.get('estado') in ('caido', 'sin_sesion'):
+        return motivo_no_libre(info)
+    if es_respuesta:
+        return '' if info.get('esperando') else 'no tiene ninguna pregunta en pantalla'
+    if info.get('esperando'):
+        return ('tiene una pregunta en pantalla esperando respuesta — contestala '
+                'con es_respuesta o avisale al usuario')
+    return motivo_no_libre(info)
+
+
+def _cierre_prompt_directo(terminal_id: int) -> str:
+    """Cierre estructurado para una tarea suelta: el sentinel lo registra y el
+    orquestador lo ve en [Eventos] / 'último cierre' en el próximo turno."""
+    return (
+        "\n\nAl terminar, señalá tu cierre: "
+        f"mkdir -p .jarvis/signals && printf '%s' '{{\"estado\":\"done\",\"motivo\":\"\","
+        f"\"memorias_usadas\":[]}}' > .jarvis/signals/terminal_{terminal_id}.json "
+        "(estado blocked o error si no pudiste, con un motivo concreto)."
+    )
 
 
 def _terminal_reusable(tid, activas_ids: set, ocupadas: set, reclamadas: set) -> bool:
@@ -2203,12 +2256,31 @@ async def ejecutar_workflow(workflow_data: dict, project_id: int, count_base: in
     conn = get_db()
     try:
         cur = conn.cursor()
-        activas_ids = {r['id'] for r in cur.execute(
-            'SELECT id FROM terminals WHERE project_id = ? AND activa = 1',
-            (project_id,)).fetchall()}
+        activas = [dict(r) for r in cur.execute(
+            'SELECT id, nombre, tipo_ia FROM terminals WHERE project_id = ? AND activa = 1',
+            (project_id,)).fetchall()]
+        activas_ids = {t['id'] for t in activas}
         ocupadas = _terminales_ocupadas(cur, project_id)
     finally:
         conn.close()
+    # Reusar solo una terminal libre DE VERDAD (quieta, sin pregunta en
+    # pantalla y con el CLI vivo), no solo "sin paso running".
+    pedidas = {p.get('terminal_id') for p in pasos if isinstance(p.get('terminal_id'), int)}
+    if pedidas & activas_ids:
+        try:
+            from plotspace.core import orq_contexto
+            # Sin ESTE workflow: ya está en la DB con sus pasos pending, y la
+            # terminal pedida figuraría "con paso activo" por su propio paso.
+            otros_wfs = [w for w in await asyncio.to_thread(
+                orq_contexto.workflows_del_proyecto, project_id)
+                if w['id'] != workflow_id]
+            infos = await asyncio.to_thread(
+                orq_contexto.infos_terminales, project_id,
+                [t for t in activas if t['id'] in pedidas], otros_wfs)
+            ocupadas = ocupadas | {tid for tid, i in infos.items()
+                                   if not orq_contexto.es_libre(i)}
+        except Exception as e:
+            print(f'[workflow] sin estado vivo para validar reusos: {e}')
 
     # Spawnear un terminal por cada paso: DB row + sesión tmux + lanzar IA.
     # Todos los agentes trabajan directo en project_path (sin worktrees);
@@ -2608,15 +2680,20 @@ async def _cerrar_workflow(wf: dict, pasos: list, project_id: int) -> None:
     })
 
 
-async def send_to_agent(terminal_id: int, mensaje: str) -> bool:
+async def send_to_agent(terminal_id: int, mensaje: str, crudo: bool = False) -> bool:
     """Envía un texto al agente via tmux (paste). Devuelve True SOLO si el
-    pegado llegó al pane (los callers que no lo necesitan lo ignoran)."""
-    try:
-        from plotspace.core import orq_contexto
-        orq_contexto.registrar_envio(terminal_id, mensaje)
-    except Exception:
-        pass
-    mensaje = f'Lee tu CLAUDE.md primero. Luego: {mensaje}'
+    pegado llegó al pane (los callers que no lo necesitan lo ignoran).
+
+    `crudo=True` (respuesta a una pregunta en pantalla): el texto va tal cual,
+    sin el "Lee tu CLAUDE.md…" y con UN solo Enter — el segundo Enter a
+    ciegas podía confirmar la opción por defecto de la siguiente pregunta."""
+    if not crudo:
+        try:
+            from plotspace.core import orq_contexto
+            orq_contexto.registrar_envio(terminal_id, mensaje)
+        except Exception:
+            pass
+        mensaje = f'Lee tu CLAUDE.md primero. Luego: {mensaje}'
     session = f'jarvis_{terminal_id}'
     print(f'[send_to_agent] → {session}: {mensaje[:100]}')
 
@@ -2655,9 +2732,10 @@ async def send_to_agent(terminal_id: int, mensaje: str) -> bool:
         # Enter solo si el texto llegó: sin pegado, un Enter a ciegas manda
         # lo que el usuario tuviera a medio escribir en el prompt.
         await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
-        # Esperar 1s y enviar Enter adicional para que Claude procese la tarea
-        await asyncio.sleep(1)
-        await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
+        if not crudo:
+            # Esperar 1s y enviar Enter adicional para que Claude procese la tarea
+            await asyncio.sleep(1)
+            await asyncio.to_thread(backend().enviar_tecla, terminal_id, 'Enter')
 
     if not pegado:
         return False   # nada llegó al agente: no registrar un SENT que no ocurrió
