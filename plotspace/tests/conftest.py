@@ -61,6 +61,19 @@ def _stt_env_aislado(monkeypatch):
     monkeypatch.delenv('STT_MOTOR', raising=False)
 
 
+@pytest.fixture(autouse=True)
+def _sin_auto_intervencion(monkeypatch):
+    """La auto-intervención lanza el `claude -p` REAL en background: dentro de
+    un test, un TASK_BLOCKED terminaba spawneando el CLI de verdad (y si la
+    llamada completaba, un test unitario podía crear terminales o workflows
+    reales). Además `_auto_intervenciones` es global al proceso y el tope por
+    hora hacía que el resultado dependiera del orden de los tests. Apagada para
+    toda la suite; el test que la ejercita la prende con monkeypatch."""
+    import plotspace.routers.orchestrator as orch
+    monkeypatch.setattr(orch, 'ORQ_AUTO_INTERVENCION', False)
+    monkeypatch.setattr(orch, '_auto_intervenciones', [])
+
+
 @pytest.fixture
 def motor_tmux():
     """Fuerza el motor tmux para este test.

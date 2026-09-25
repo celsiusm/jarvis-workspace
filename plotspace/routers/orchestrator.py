@@ -820,6 +820,18 @@ ORQ_AUTO_INTERVENCION = (os.environ.get('ORQ_AUTO_INTERVENCION', 'on')
 _AUTO_INTERV_TOPE_HORA = 6
 _auto_intervenciones: list = []   # timestamps de intervenciones (ventana móvil)
 
+# Referencias FUERTES a las tareas en background: el event loop solo guarda
+# referencias débiles, así que un `asyncio.create_task` suelto puede ser
+# recolectado a mitad de camino (la auto-intervención moría en silencio).
+_tareas_fondo: set = set()
+
+
+def _en_fondo(coro) -> asyncio.Task:
+    tarea = asyncio.create_task(coro)
+    _tareas_fondo.add(tarea)
+    tarea.add_done_callback(_tareas_fondo.discard)
+    return tarea
+
 
 def _puede_auto_intervenir(paso: dict, habilitado: bool, recientes: list,
                            ahora: float, tope: int = _AUTO_INTERV_TOPE_HORA) -> bool:
@@ -892,7 +904,7 @@ def _lanzar_auto_intervencion(wf: dict, pasos: list, paso_idx: int,
     pasos[paso_idx]['auto_intervencion_ts'] = ahora
     _auto_intervenciones.append(ahora)
     _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
-    asyncio.create_task(_auto_intervenir(
+    _en_fondo(_auto_intervenir(
         project_id, wf.get('nombre') or 'Workflow', paso_idx, evento,
         motivo or '', term_nombre))
 
