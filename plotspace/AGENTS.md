@@ -10,6 +10,8 @@ plotspace/
 │                 # agent_live, agent_watch, dev_detect, fe_watch, mailbox,
 │                 # puertos, web_search (Radio's YouTube), stt_proc (STT worker in its own
 │                 # process — NEVER load ML models in-proc: the GIL freezes the loop)
+│   ├── orq_contexto.py # what the orchestrator sees each turn (terminals + pane, git, guide, workflows…)
+│   ├── orq_cli.py   # claude -p headless transport (prompt via stdin, stream-json parser)
 │   ├── database.py  # SQLite WAL (DB_PATH → data/jarvis.db), get_db(), init_db(), purgar_task_events()
 │   ├── events.py    # EventBroadcaster (WebSocket per project_id), singleton `broadcaster`
 │   └── auth.py      # token-gate + host_permitido/origen_permitido (anti rebinding/CSWSH)
