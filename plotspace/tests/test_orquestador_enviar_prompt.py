@@ -15,7 +15,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from plotspace.routers.orchestrator import (
-    RESPONDER_TOOL,
+    RESPONDER_SCHEMA,
     _terminal_reusable,
     _validar_enviar_prompt,
 )
@@ -24,7 +24,7 @@ from plotspace.routers.orchestrator import (
 # ─── Contrato del tool schema ────────────────────────────────────────────────
 
 def _props_action():
-    return RESPONDER_TOOL['input_schema']['properties']['actions']['items']['properties']
+    return RESPONDER_SCHEMA['properties']['actions']['items']['properties']
 
 
 def test_schema_incluye_enviar_prompt():
@@ -33,7 +33,7 @@ def test_schema_incluye_enviar_prompt():
 
 
 def test_schema_paso_acepta_terminal_id():
-    paso = (RESPONDER_TOOL['input_schema']['properties']['workflow']
+    paso = (RESPONDER_SCHEMA['properties']['workflow']
             ['properties']['pasos']['items']['properties'])
     assert 'terminal_id' in paso
 

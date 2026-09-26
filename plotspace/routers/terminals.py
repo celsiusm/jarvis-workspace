@@ -634,9 +634,9 @@ def _inyectar_skills_en_proyecto(project_id: int, project_path: str):
         base_md = _strip_skills_block(base_md).rstrip() + '\n'
 
         # ── 4. Construir bloque ────────────────────────────────────────────
-        from datetime import datetime
-        ts = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-
+        # Sin timestamp: el bloque cambia solo cuando cambian los plugins, así
+        # el CLAUDE.md no se reescribe distinto en cada regeneración (churn en
+        # git y un system prompt que nunca repite byte a byte entre sesiones).
         bloque = [
             _SKILLS_MARKER_START,
             '## INSTRUCCIÓN OBLIGATORIA',
@@ -658,8 +658,6 @@ def _inyectar_skills_en_proyecto(project_id: int, project_path: str):
                 pid = p['nombre'].split('@')[0]
                 desc = p.get('descripcion') or ''
                 bloque.append(f'- **{pid}**' + (f' — {desc}' if desc else ''))
-            bloque.append('')
-            bloque.append(f'_Estado verificado al: {ts}_')
             bloque.append('')
 
         if skills_md:

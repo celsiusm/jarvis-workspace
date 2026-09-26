@@ -49,7 +49,7 @@ evitar conflictos. Al terminar, los agentes commitean su propio trabajo y el
 paso Reviewer audita el diff — vos NO commiteás ni mergeás: coordinás.
 
 ══════════════════════════════════════════════════════════════════════
-PROCESO MENTAL OBLIGATORIO — recorré estos pasos ANTES de escribir JSON
+CÓMO PLANIFICAR
 ══════════════════════════════════════════════════════════════════════
 
 1. CLASIFICAR la orden en una de tres categorías:
@@ -57,7 +57,7 @@ PROCESO MENTAL OBLIGATORIO — recorré estos pasos ANTES de escribir JSON
    • Operativa simple (abrir/cerrar terminales, sin código de fondo).
    • Compleja (construir, implementar, agregar feature, refactorizar, testear).
 
-2. Si es COMPLEJA, hacé esta secuencia mental:
+2. Si es COMPLEJA, el plan respeta estas reglas:
    a. DESCOMPONER en unidades de trabajo INDEPENDIENTES. Cada unidad debe
       poder hacerse sin esperar el resultado de otra. Si dos cosas
       necesitan el mismo archivo, NO son independientes.
@@ -80,12 +80,6 @@ PROCESO MENTAL OBLIGATORIO — recorré estos pasos ANTES de escribir JSON
       trabajó en esos archivos, es la candidata natural para seguir.
    e. ORDENAR dependencias: si paso_1 lee lo que paso_0 escribió,
       `depende_de: "paso_0"`. Si no, `depende_de: null` y van en paralelo.
-
-3. VERIFICAR antes de escribir el JSON:
-   • ¿Las listas de archivos son realmente disjuntas y salen del mapa?
-   • ¿Tenés contexto suficiente, o falta UNA cosa específica?
-   • ¿Cada `tarea` incluye archivos permitidos/prohibidos y criterio de
-     éxito?
 
 ══════════════════════════════════════════════════════════════════════
 PLANTILLA OBLIGATORIA DEL CAMPO `tarea`
@@ -120,15 +114,11 @@ TONO Y FORMATO DEL `message`
 
 Estilo Jarvis (Iron Man): conciso, directo, técnico, sin relleno.
 
-PROHIBIDO arrancar el mensaje con: "Por supuesto", "Claro", "Entendido",
-"Con mucho gusto", "Perfecto", "Excelente", "Sin problema", "Por supuesto
-que sí". Ese tipo de relleno se elimina.
-
-OK: "De acuerdo, señor.", "Listo.", "Hecho.", "Lanzo X.", o ir directo al
+Arrancá directo: "De acuerdo, señor.", "Listo.", "Hecho.", "Lanzo X.", o el
 plan sin saludo. El usuario te está dando una orden, no buscás aprobación.
 
 REGLAS:
-  • Confirmaciones: 1 oración máximo, idealmente 5-12 palabras.
+  • Confirmaciones: una oración corta.
   • Reportes/planes: 1 línea por agente, no párrafos.
   • Preguntas: UNA SOLA pregunta concreta. Nunca lista.
        Mal:  "¿Qué framework? ¿Qué DB? ¿Con o sin tests?"
@@ -138,7 +128,7 @@ REGLAS:
   • Idioma: respondé en el mismo idioma que el usuario (default español).
 
 ══════════════════════════════════════════════════════════════════════
-MANEJO DE ERRORES, BLOQUEOS Y MERGE CONFLICTS
+MANEJO DE ERRORES Y BLOQUEOS
 ══════════════════════════════════════════════════════════════════════
 
 Si el contexto trae [Evento: TASK_BLOCKED + motivo]:
@@ -148,10 +138,6 @@ Si el contexto trae [Evento: TASK_BLOCKED + motivo]:
      info que necesita.
   3. Si requiere decisión del usuario: UNA pregunta concreta.
   4. Nunca escales sin diagnosticar.
-
-Si el contexto trae [Evento: merge conflict en archivo X]:
-  • Explicá qué archivo y qué partes chocan, en 1-2 líneas.
-  • Proponé cuál versión queda (no preguntes ambiguamente, sugerí).
 
 Si el contexto trae [Evento: TASK_ERROR + detalle]:
   • Diagnosticá brevemente, ofrecé el siguiente paso o pedí una decisión.
@@ -220,7 +206,7 @@ Cuando el usuario te habla después de un workflow done:
   • Si pide algo nuevo, lanzá el workflow nuevo aprovechando lo construido.
   • Si te pregunta el estado: contestá específico, no genérico.
     Mal:  "¿En qué te puedo ayudar?"
-    Bien: "Notes está mergeado. Preview en localhost:8082. ¿Tests ahora?"
+    Bien: "Notes está listo en main. Preview en localhost:8082. ¿Tests ahora?"
 
 Cuando un workflow termina e incluyó frontend:
   • El backend de JARVIS YA lanza un http.server automáticamente.
@@ -237,12 +223,12 @@ password + botón. Lanzo agente para implementarlo.").
 CÓMO RESPONDÉS
 ══════════════════════════════════════════════════════════════════════
 
-Tu ÚNICA vía de respuesta es llamar a la tool `responder` (exactamente una
-vez, siempre). Sus campos: 'message' (texto al usuario, tono Jarvis, va
+Tu respuesta FINAL debe ser ÚNICAMENTE un objeto JSON — sin fences, sin
+texto alrededor — con: 'message' (texto al usuario, tono Jarvis, va
 PRIMERO), 'actions' (array; usá [{"type":"none"}] cuando solo hay workflow
 o respuesta conversacional) y 'workflow' (opcional, solo si la tarea es
-compleja). La estructura la valida el schema de la tool — vos enfocate en
-la SEMÁNTICA correcta de cada campo (abajo).
+compleja). La estructura la valida un JSON Schema — vos enfocate en la
+SEMÁNTICA correcta de cada campo (abajo).
 
 actions[].type válidos (NADA MÁS):
   "none"           — no hacer nada operativo
@@ -265,13 +251,14 @@ actions[].type válidos (NADA MÁS):
                      RESPUESTA): se tipea tal cual ("y", "2", "usá JWT"), sin
                      envoltorio. Solo vale para una terminal que espera.
 
-DIFERENCIA CRÍTICA — no confundir:
+Cerrar una terminal no es cerrar el preview:
   • "cerrá la terminal" / "matá el agente X" / "borrá ese Claude"
       → close_terminal (con terminal_id) o close_all
   • "cerrá el servidor" / "apagá el preview" / "matá el puerto 8081" /
     "bajá el servidor" / "cerrá la pestaña del preview"
       → stop_preview (NO close_terminal — el preview NO corre en una
-        terminal de JARVIS, corre como proceso aparte iniciado al hacer merge)
+        terminal de JARVIS: es un proceso aparte que JARVIS lanza al cerrar
+        el workflow)
 
 Si [Preview activo] aparece en el contexto, sabés exactamente qué URL hay
 para apagar. Si el usuario te pasa una URL/puerto y matchea con la del
@@ -368,7 +355,7 @@ Usuario: "decile a la claude libre que pula el diseño de la landing"
 RECORDATORIO FINAL
 ══════════════════════════════════════════════════════════════════════
 
-Respondés SIEMPRE llamando a la tool `responder` (una sola vez), con
+Tu ÚLTIMO mensaje es SIEMPRE el objeto JSON de respuesta, con
 'message' primero en tono Jarvis. Antes de llamarla, revisá mentalmente:
 tono Jarvis, archivos disjuntos y sacados del mapa real, terminales libres
 reusadas antes de spawnear.
@@ -567,90 +554,89 @@ async def listar_workflows(project_id: int):
 
 # ─── Endpoints: chat ──────────────────────────────────────────────────────────
 
-# Tool ÚNICA forzada con tool_choice: haiku adhiere mucho mejor a un input_schema
-# que a "devolvé JSON puro" → mata el JSON malformado en origen. La estructura la
-# valida el schema; _sanitizar_respuesta queda como red de 2do nivel (el schema es
-# laxo a propósito: no garantiza enum de type ni pasos en workflow).
-# Constante a nivel módulo (DRY + tools render antes que system → cache byte-idéntico
-# entre requests; NO construir inline). 'message' va PRIMERO para que el partial_json
-# del stream lo entregue cuanto antes y arranque el live-typing.
-RESPONDER_TOOL = {
-    "name": "responder",
-    "description": (
-        "Única forma de responder al usuario. Llamás a esta tool EXACTAMENTE una vez. "
-        "'message' es el texto en tono Jarvis que ve el usuario y va PRIMERO. "
-        "'actions' son las acciones operativas (usá [{\"type\":\"none\"}] si solo hay "
-        "workflow o respuesta conversacional). 'workflow' solo si la tarea es compleja."
-    ),
-    "input_schema": {
-        "type": "object",
-        "properties": {
-            "message": {
-                "type": "string",
-                "description": "Texto al usuario, tono Jarvis (conciso, directo, sin relleno). Va PRIMERO. Se streamea token a token.",
-            },
-            "actions": {
-                "type": "array",
-                "description": "Acciones operativas. Usá [{\"type\":\"none\"}] si solo hay workflow o respuesta conversacional. Si hay workflow, los spawn_terminal se ignoran (el workflow crea sus terminales).",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "type": {
-                            "type": "string",
-                            "enum": ["none", "spawn_terminal", "close_terminal", "close_all", "stop_preview", "enviar_prompt"],
-                        },
-                        "name": {"type": "string", "description": "Solo spawn_terminal: nombre de la terminal."},
-                        "ia_type": {"type": "string", "enum": ["claude", "codex", "gemini", "opencode", "qwen", "antigravity", "grok", "manual"], "description": "Solo spawn_terminal."},
-                        "count": {"type": "integer", "description": "Solo spawn_terminal: cuántas terminales."},
-                        "terminal_id": {"type": "integer", "description": "close_terminal: id a cerrar. enviar_prompt: id de la terminal destino."},
-                        "prompt": {"type": "string", "description": "Solo enviar_prompt: la tarea/mensaje que se tipea en esa terminal. Autosuficiente, con archivos/carpetas concretos del [Mapa del proyecto]."},
-                        "es_respuesta": {"type": "boolean", "description": "Solo enviar_prompt: true si el prompt RESPONDE la pregunta que la terminal tiene en pantalla (❓ ESPERANDO RESPUESTA) — se tipea tal cual."},
-                    },
-                    "required": ["type"],
-                },
-            },
-            "workflow": {
+# Schema de la respuesta del orquestador: {message, actions, workflow?}. Lo usan
+# los DOS motores — el CLI con --json-schema y la API con structured outputs
+# (output_config.format), que garantiza JSON válido sin forzar una tool. El schema
+# es laxo a propósito (no garantiza pasos en workflow); _sanitizar_respuesta queda
+# como red de 2do nivel. 'message' va PRIMERO para que el stream lo entregue antes.
+RESPONDER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "message": {
+            "type": "string",
+            "description": "Texto al usuario, tono Jarvis (conciso, directo, sin relleno). Va PRIMERO. Se streamea token a token.",
+        },
+        "actions": {
+            "type": "array",
+            "description": "Acciones operativas. Usá [{\"type\":\"none\"}] si solo hay workflow o respuesta conversacional. Si hay workflow, los spawn_terminal se ignoran (el workflow crea sus terminales).",
+            "items": {
                 "type": "object",
-                "description": "Solo si la tarea es compleja (construir, implementar, feature, refactor, tests). Omitir en conversacional/operativa simple.",
                 "properties": {
-                    "nombre": {"type": "string"},
-                    "objetivo": {"type": "string"},
-                    "pasos": {
-                        "type": "array",
-                        "items": {
-                            "type": "object",
-                            "properties": {
-                                "agente": {"type": "string", "description": "Nombre descriptivo, ej 'Backend'."},
-                                "ia_type": {"type": "string", "enum": ["claude", "codex", "gemini", "opencode", "qwen", "antigravity", "grok", "manual"]},
-                                "terminal_id": {"type": "integer", "description": "OPCIONAL: id de una terminal activa LIBRE ([Estado actual]) para REUSARLA en este paso en vez de crear una nueva. Omitir para spawnear."},
-                                "rol": {"type": "string", "enum": ["scout", "builder"], "description": "Default 'builder'. 'scout' explora y guarda memorias, archivos []."},
-                                "archivos": {"type": "array", "items": {"type": "string"}, "description": "Paths/patrones EXCLUSIVOS de este paso. Scout usa []."},
-                                "tarea": {"type": "string", "description": "Prompt autosuficiente siguiendo la PLANTILLA: OBJETIVO, ARCHIVOS PERMITIDOS/PROHIBIDOS, CRITERIO DE ÉXITO, y CIERRE LITERAL con TASK_DONE/TASK_BLOCKED/TASK_ERROR."},
-                                "depende_de": {"type": ["string", "null"], "description": "null (paralelo) o 'paso_N' (índice 0-based del paso del que depende)."},
-                            },
-                            "required": ["agente", "ia_type", "tarea"],
-                        },
+                    "type": {
+                        "type": "string",
+                        "enum": ["none", "spawn_terminal", "close_terminal", "close_all", "stop_preview", "enviar_prompt"],
                     },
+                    "name": {"type": "string", "description": "Solo spawn_terminal: nombre de la terminal."},
+                    "ia_type": {"type": "string", "enum": ["claude", "codex", "gemini", "opencode", "qwen", "antigravity", "grok", "manual"], "description": "Solo spawn_terminal."},
+                    "count": {"type": "integer", "description": "Solo spawn_terminal: cuántas terminales."},
+                    "terminal_id": {"type": "integer", "description": "close_terminal: id a cerrar. enviar_prompt: id de la terminal destino."},
+                    "prompt": {"type": "string", "description": "Solo enviar_prompt: la tarea/mensaje que se tipea en esa terminal. Autosuficiente, con archivos/carpetas concretos del [Mapa del proyecto]."},
+                    "es_respuesta": {"type": "boolean", "description": "Solo enviar_prompt: true si el prompt RESPONDE la pregunta que la terminal tiene en pantalla (❓ ESPERANDO RESPUESTA) — se tipea tal cual."},
                 },
-                "required": ["nombre", "objetivo", "pasos"],
+                "required": ["type"],
             },
         },
-        "required": ["message", "actions"],
+        "workflow": {
+            "type": "object",
+            "description": "Solo si la tarea es compleja (construir, implementar, feature, refactor, tests). Omitir en conversacional/operativa simple.",
+            "properties": {
+                "nombre": {"type": "string"},
+                "objetivo": {"type": "string"},
+                "pasos": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "agente": {"type": "string", "description": "Nombre descriptivo, ej 'Backend'."},
+                            "ia_type": {"type": "string", "enum": ["claude", "codex", "gemini", "opencode", "qwen", "antigravity", "grok", "manual"]},
+                            "terminal_id": {"type": "integer", "description": "OPCIONAL: id de una terminal activa LIBRE ([Estado actual]) para REUSARLA en este paso en vez de crear una nueva. Omitir para spawnear."},
+                            "rol": {"type": "string", "enum": ["scout", "builder"], "description": "Default 'builder'. 'scout' explora y guarda memorias, archivos []."},
+                            "archivos": {"type": "array", "items": {"type": "string"}, "description": "Paths/patrones EXCLUSIVOS de este paso. Scout usa []."},
+                            "tarea": {"type": "string", "description": "Prompt autosuficiente siguiendo la PLANTILLA: OBJETIVO, ARCHIVOS PERMITIDOS/PROHIBIDOS, CRITERIO DE ÉXITO. El protocolo de cierre (TASK_* + sentinel) lo agrega el engine: no lo incluyas."},
+                            "depende_de": {"type": ["string", "null"], "description": "null (paralelo) o 'paso_N' (índice 0-based del paso del que depende)."},
+                        },
+                        "required": ["agente", "ia_type", "tarea"],
+                    },
+                },
+            },
+            "required": ["nombre", "objetivo", "pasos"],
+        },
     },
+    "required": ["message", "actions"],
 }
 
 
-def _extraer_respuesta_tool(message):
-    """Del Message final saca el input del bloque tool_use 'responder' (dict ya parseado
-    por el SDK) y su serialización JSON, para alimentar _procesar_respuesta_orquestador SIN
-    tocar su firma (recibe un string JSON → json.loads + _sanitizar_respuesta intactos).
-    Con tool_choice forzado SIEMPRE hay un tool_use; el fallback ({}, "{}") es defensa pura
-    (degradación segura → _sanitizar_respuesta devuelve 'Procesado.' + [{none}])."""
-    for block in getattr(message, "content", None) or []:
-        if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "responder":
-            inp = block.input if isinstance(block.input, dict) else {}
-            return inp, json.dumps(inp, ensure_ascii=False)
-    return {}, "{}"
+def _con_objetos_cerrados(schema):
+    """Copia del schema con additionalProperties:false en cada objeto: lo exige
+    structured outputs. El CLI recibe el schema original (--json-schema no lo pide)."""
+    if isinstance(schema, dict):
+        out = {k: _con_objetos_cerrados(v) for k, v in schema.items()}
+        if out.get('type') == 'object':
+            out.setdefault('additionalProperties', False)
+        return out
+    if isinstance(schema, list):
+        return [_con_objetos_cerrados(v) for v in schema]
+    return schema
+
+
+_FORMATO_SALIDA_API = {"format": {"type": "json_schema",
+                                  "schema": _con_objetos_cerrados(RESPONDER_SCHEMA)}}
+
+
+def _texto_respuesta(message) -> str:
+    """El JSON de la respuesta: con structured outputs llega como bloque de texto."""
+    return ''.join(getattr(b, "text", "") for b in (getattr(message, "content", None) or [])
+                   if getattr(b, "type", None) == "text") or "{}"
 
 
 _MSG_RE = re.compile(r'"message"\s*:\s*"((?:[^"\\]|\\.)*)', re.DOTALL)
@@ -1089,29 +1075,6 @@ def _system_con_cache() -> list:
              "cache_control": {"type": "ephemeral"}}]
 
 
-# En modo CLI no existe la tool `responder`: la salida es el JSON directo
-# (validado por --json-schema). Estos son los DOS párrafos del prompt base
-# que cambian — si el .replace no matchea, los tests de motor lo cazan.
-_PARRAFO_TOOL = """Tu ÚNICA vía de respuesta es llamar a la tool `responder` (exactamente una
-vez, siempre). Sus campos: 'message' (texto al usuario, tono Jarvis, va
-PRIMERO), 'actions' (array; usá [{"type":"none"}] cuando solo hay workflow
-o respuesta conversacional) y 'workflow' (opcional, solo si la tarea es
-compleja). La estructura la valida el schema de la tool — vos enfocate en
-la SEMÁNTICA correcta de cada campo (abajo)."""
-
-_PARRAFO_JSON = """Tu respuesta FINAL debe ser ÚNICAMENTE un objeto JSON — sin fences, sin
-texto alrededor — con: 'message' (texto al usuario, tono Jarvis, va
-PRIMERO), 'actions' (array; usá [{"type":"none"}] cuando solo hay workflow
-o respuesta conversacional) y 'workflow' (opcional, solo si la tarea es
-compleja). La estructura la valida un JSON Schema — vos enfocate en la
-SEMÁNTICA correcta de cada campo (abajo)."""
-
-_RECORDATORIO_TOOL = """Respondés SIEMPRE llamando a la tool `responder` (una sola vez), con
-'message' primero en tono Jarvis."""
-
-_RECORDATORIO_JSON = """Tu ÚLTIMO mensaje es SIEMPRE el objeto JSON de respuesta, con
-'message' primero en tono Jarvis."""
-
 _BLOQUE_OJOS = """
 
 ══════════════════════════════════════════════════════════════════════
@@ -1122,17 +1085,16 @@ Tenés Read/Glob/Grep sobre la carpeta del proyecto (SOLO lectura — jamás
 edites, crees ni ejecutes nada). Usalos ÚNICAMENTE cuando el pedido lo
 amerite: diseñar un workflow sobre código que no conocés, verificar que un
 archivo exista antes de asignarlo, o entender una estructura que el
-[Mapa del proyecto] no alcanza a mostrar. Sé quirúrgico (2-4 vistazos máximo)
-y para saludos/preguntas simples respondé DIRECTO sin tocar ninguna tool.
+[Mapa del proyecto] no alcanza a mostrar. Cada lectura suma latencia al chat:
+leé solo lo que cambia el plan, y para saludos/preguntas simples respondé
+directo sin tocar ninguna tool.
 """
 
 
 def _system_prompt_cli() -> str:
-    """Prompt del modo suscripción: el base con la mecánica de la tool
-    reemplazada por salida JSON directa + el bloque de exploración."""
-    s = SYSTEM_PROMPT.replace(_PARRAFO_TOOL, _PARRAFO_JSON)
-    s = s.replace(_RECORDATORIO_TOOL, _RECORDATORIO_JSON)
-    return s + _BLOQUE_OJOS
+    """Prompt del modo suscripción: el base + el bloque de exploración
+    (solo el CLI tiene tools de lectura)."""
+    return SYSTEM_PROMPT + _BLOQUE_OJOS
 
 
 _anthropic_cliente = None
@@ -1396,7 +1358,7 @@ async def _consultar_cli(mensajes: list, project: dict):
     resultado = None
     async for ev in orq_cli.stream(prompt, _system_prompt_cli(), ORQUESTADOR_MODEL,
                                    cwd=(project.get('ruta') or None),
-                                   schema=RESPONDER_TOOL['input_schema']):
+                                   schema=RESPONDER_SCHEMA):
         if ev['tipo'] == 'resultado':
             resultado = ev
     if resultado is None or resultado['error']:
@@ -1425,15 +1387,12 @@ async def chat_orquestador(req: ChatRequest):
     try:
         response = await client.messages.create(
             model=ORQUESTADOR_MODEL,
-            max_tokens=4096,
+            max_tokens=16000,
             system=_system_con_cache(),
-            tools=[RESPONDER_TOOL],
-            tool_choice={"type": "tool", "name": "responder"},
+            output_config=_FORMATO_SALIDA_API,
             messages=mensajes,
         )
-        # Con tool_choice forzado el (único) bloque es tool_use; re-serializamos su input
-        # para alimentar el helper compartido sin cambiarle la firma (round-trip barato).
-        _, raw_text = _extraer_respuesta_tool(response)
+        raw_text = _texto_respuesta(response)
     except anthropic.AuthenticationError:
         raise HTTPException(status_code=401, detail="ANTHROPIC_API_KEY inválida")
     except Exception as e:
@@ -1474,7 +1433,7 @@ async def chat_orquestador_stream(req: ChatRequest):
                 async for ev in orq_cli.stream(
                         prompt, _system_prompt_cli(), ORQUESTADOR_MODEL,
                         cwd=(project.get('ruta') or None),
-                        schema=RESPONDER_TOOL['input_schema']):
+                        schema=RESPONDER_SCHEMA):
                     if ev['tipo'] == 'reinicio':
                         # El cliente también resetea: antes seguía acumulando
                         # y el texto se veía duplicado hasta el 'done'.
@@ -1521,30 +1480,23 @@ async def chat_orquestador_stream(req: ChatRequest):
         try:
             async with client.messages.stream(
                 model=ORQUESTADOR_MODEL,
-                max_tokens=4096,
+                max_tokens=16000,
                 system=_system_con_cache(),
-                tools=[RESPONDER_TOOL],
-                tool_choice={"type": "tool", "name": "responder"},
+                output_config=_FORMATO_SALIDA_API,
                 messages=mensajes,
             ) as stream:
-                # OJO: con tool_choice forzado NO hay text block → stream.text_stream
-                # queda VACÍO. Hay que iterar los eventos y filtrar 'input_json'
-                # (InputJsonEvent: .partial_json = delta del JSON del tool input).
-                # 'raw' acumula ese JSON, que tiene la MISMA forma {"message":"..."} de
-                # siempre → _extraer_message_parcial se reusa TAL CUAL (cero regresión).
-                async for event in stream:
-                    if event.type == "input_json":
-                        raw += event.partial_json
-                        msg = _extraer_message_parcial(raw)
-                        if len(msg) > emitido:
-                            yield sse({"type": "token", "chunk": msg[emitido:]})
-                            emitido = len(msg)
+                # Structured outputs: el JSON llega como texto ({"message": ...}
+                # primero) → _extraer_message_parcial lo streamea igual que en el CLI.
+                async for texto in stream.text_stream:
+                    raw += texto
+                    msg = _extraer_message_parcial(raw)
+                    if len(msg) > emitido:
+                        yield sse({"type": "token", "chunk": msg[emitido:]})
+                        emitido = len(msg)
                 final = await stream.get_final_message()
                 usage = getattr(final, "usage", None)
                 stop = getattr(final, "stop_reason", None)
-                # raw canónico = input del tool_use ya parseado por el SDK (más robusto
-                # que el acumulado, que podría truncar por max_tokens).
-                _, raw = _extraer_respuesta_tool(final)
+                raw = _texto_respuesta(final)
         except anthropic.AuthenticationError:
             yield sse({"type": "error", "detail": "ANTHROPIC_API_KEY inválida"})
             return

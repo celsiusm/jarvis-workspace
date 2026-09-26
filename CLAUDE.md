@@ -73,7 +73,7 @@ No build step, no linter. Tests: pure Node suites (native assert, UMD `_pure` pa
 > **The native Windows app and the Rust engine were REMOVED by decision**: the workspace went back to 100% Linux (Python + uvicorn + tmux, the model that always was). Don't reintroduce `desktop/`, alternative terminal engines, or anything of the shell build circuit — if you need the historical detail it's in git and in the `estado: lapida` memories (category `desktop`).
 
 ### Folder structure
-- `plotspace/` — `main.py` (entrypoint), `core/` (domain: database, events, auth, ssrf, mantenimiento, control_mode, agent_live, agent_watch, dev_detect, fe_watch, mailbox, puertos, pane_capture, logs; orchestrator: orq_cli, orq_contexto, repo_map; swarm: swarm_watchdog, sentinel; cuentas: cli_accounts, cli_login, cuenta_watch; memoria: memoria_lint, memoria_recall, memoria_lecciones, memoria_categorias, memoria_global, memoria_endurecimiento), `routers/` (**15**, one per section), `tests/` (pytest + `__main__` scripts). See `plotspace/AGENTS.md`.
+- `plotspace/` — `main.py` (entrypoint), `core/` (domain: database, events, auth, ssrf, mantenimiento, control_mode, agent_live, agent_watch, dev_detect, fe_watch, mailbox, puertos, pane_capture, logs; orchestrator: orq_cli, orq_contexto, repo_map; swarm: swarm_watchdog, sentinel; cuentas: cli_accounts, cli_login, cuenta_watch; memoria: memoria_lint, memoria_recall, memoria_lecciones, memoria_categorias, memoria_global, memoria_endurecimiento), `routers/` (**17**, one per section), `tests/` (pytest + `__main__` scripts). See `plotspace/AGENTS.md`.
 - `frontend/` — `index.html` (home, at `/`), `shell/` (workspace.html + workspace.js, the frame), `shared/` (tokens.css + base.css + ui.js with `icon()/toast()/confirmar()` + i18n), `sections/<x>/` (each section with its .js + .css), `vendor/`. See `frontend/AGENTS.md` and each section's `AGENTS.md`.
 - Sections: `home`, `terminals`, `panel` (dock + strip), `preview` (dev-servers menu), `browser` (Web Preview), `radio`, `editor-slide`, `settings`, `orchestrator`, `editor`, `tasks`, `review`, `mobile-preview`, `memory`.
 - `data/` — local state (gitignored). `.workspace/` is a per-project artifact (gitignored): `STATE.md` (written by Jarvis every 10s, read by agents) + per-terminal logs in `.workspace/logs/terminal_{id}_{name}.log` (useful for debugging terminals).
@@ -145,15 +145,15 @@ Browser → POST /api/orchestrator/chat  (OPTIONAL path, unused by default)
 Don't build on this path assuming it runs: it doesn't by default. What DOES run is everything above.
 
 ### WebSocket events (emitted by the broadcaster in `plotspace/core/events.py`)
-`hola` (handshake, carries `boot_id`) · `task_event` · `workflow_update` · `orquestador_mensaje` · `workflow_done` (the only one with TTS) · `agente_termino/espera/trabajando` + `cuenta_rotada`/`limite_sin_cuenta` (agent_watch) · `dev_server_detectado/caido` · `paso_estancado/rescatado` · `conflicto_archivo`/`live_update`/`permiso_*` (Agents Live) · `mailbox_aviso` · `cuentas_update`/`cuenta_agregada`/`cuenta_watch_timeout` · `tasks_update` · `wb_pulido` · `frontend_actualizado`/`codigo_commiteado` (fe_watch). The list grows — grep `broadcaster.broadcast(`. Any backend module can subscribe to EVERYTHING with `broadcaster.escuchar(cb)`.
+`hola` (handshake, carries `boot_id`) · `task_event` · `workflow_update` · `orquestador_mensaje` · `workflow_done` (the only one with TTS) · `agente_termino/espera/trabajando` + `cuenta_rotada`/`limite_sin_cuenta` (agent_watch) · `dev_server_detectado/caido` · `paso_estancado/rescatado` · `conflicto_archivo`/`live_update`/`permiso_*` (Agents Live) · `mailbox_aviso` · `cuentas_update`/`cuenta_agregada`/`cuenta_watch_timeout` · `tasks_update` · `frontend_actualizado`/`codigo_commiteado` (fe_watch). The list grows — grep `broadcaster.broadcast(`. Any backend module can subscribe to EVERYTHING with `broadcaster.escuchar(cb)`.
 
 ### Startup (`plotspace/main.py`, lifespan)
-Whisper preloads in executor → `reconciliar_sesiones_tmux()` → `reanudar_workflows()` → purge task_events → asyncio pollers: STATE.md 10s · mailbox · dev_detect 2s · agent_watch 1s · agent_live 2s · fe_watch 2s · watchdog 20s · sentinel 2s · log purge 30 min.
+STT model on demand (preload only with `WHISPER_PRELOAD=on`) → `reconciliar_sesiones_tmux()` → `reanudar_workflows()` → purge task_events → asyncio pollers: STATE.md 10s · mailbox · dev_detect 2s · agent_watch 1s · agent_live 2s · fe_watch 2s · watchdog 20s · sentinel 2s · log purge 30 min.
 
 ### In-app updater and automatic versioning (`routers/system.py` + `sections/panel/updater.js`)
 - **`hay_update` = there is a NEW COMMIT since boot** (HEAD moved). Uncommitted edits don't light it. "Update now" banner at the strip bottom; **it does NOT hide while agents work** (`agentes_trabajando` from `/version` is informational, scope = Jarvis project).
 - **Who updates: THE USER** (click) or Jarvis itself — agents verify with pytest + import smoke and do NOT restart the server.
-- **Automatic versioning** (`VERSION`, format `x.x.xx`): patch +1 per update; if ALL new commits are `fix:` → hotfix (4th segment). **Canary:** `/api/system/restart` imports `backend.main` in a subprocess BEFORE the `os.execv`; if the new code doesn't start it answers 409 (modal with traceback) and the old server stays intact; canary OK → bump + re-exec in place (same PID).
+- **Automatic versioning** (`VERSION`, format `x.x.xx`): patch +1 per update; if ALL new commits are `fix:` → hotfix (4th segment). **Canary:** `/api/system/restart` imports `plotspace.main` in a subprocess BEFORE the `os.execv`; if the new code doesn't start it answers 409 (modal with traceback) and the old server stays intact; canary OK → bump + re-exec in place (same PID).
 - **fe_watch** (`core/fe_watch.py`): the browser reloads itself when the server restarts (the `boot_id` changes) or on editing `frontend/**` (reload held while agents work); a new commit emits `codigo_commiteado` → re-check of the banner. If the server ended up on uvloop the "Optimize typing" banner appears (restart with `--loop asyncio`).
 
 ### Circular import: `orchestrator.py` ↔ `terminals.py`
@@ -256,8 +256,6 @@ ntes de responder cualquier pregunta sobre tu configuración, plugins activos, s
 - **frontend-design** — Frontend design skill for UI/UX implementation
 - **expo**
 - **context7**
-
-_Estado verificado al: 2026-09-06 14:43:15_
 
 ### 📋 Skills del proyecto
 

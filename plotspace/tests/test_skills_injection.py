@@ -20,8 +20,7 @@ from plotspace.routers.terminals import (
 )
 
 # project_id inexistente → sin filas en project_skills (sin plugins ni skills
-# manuales): el bloque refleja solo las skills .md del tmp_path, sin la línea
-# de timestamp ('Estado verificado al'), por eso el resultado es determinista.
+# manuales): el bloque refleja solo las skills .md del tmp_path.
 PROJ_INEXISTENTE = 999_999_999
 
 CUERPO_QA = (

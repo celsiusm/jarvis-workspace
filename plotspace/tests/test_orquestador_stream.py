@@ -114,13 +114,48 @@ def test_tooluse_workflow_sanitiza():
     assert wf is not None and wf["pasos"][0]["agente"] == "A"
 
 
-def test_responder_tool_schema_valido():
-    from plotspace.routers.orchestrator import RESPONDER_TOOL
-    assert RESPONDER_TOOL["name"] == "responder"
-    props = RESPONDER_TOOL["input_schema"]["properties"]
+def test_responder_schema_valido():
+    from plotspace.routers.orchestrator import RESPONDER_SCHEMA
+    props = RESPONDER_SCHEMA["properties"]
     assert "message" in props and "actions" in props and "workflow" in props
     # message es required (siempre hay texto al usuario)
-    assert "message" in RESPONDER_TOOL["input_schema"]["required"]
+    assert "message" in RESPONDER_SCHEMA["required"]
+
+
+def test_schema_no_pide_escribir_el_cierre():
+    """El cierre TASK_* lo agrega el engine; si el modelo lo escribía en la
+    tarea (como pedía la descripción del campo), el engine salteaba el suyo."""
+    import json
+    from plotspace.routers.orchestrator import RESPONDER_SCHEMA
+    assert "CIERRE LITERAL" not in json.dumps(RESPONDER_SCHEMA, ensure_ascii=False)
+
+
+def test_formato_api_cierra_todos_los_objetos():
+    """Structured outputs exige additionalProperties:false en cada objeto; el
+    schema original (el que usa el CLI) no se toca."""
+    from plotspace.routers.orchestrator import RESPONDER_SCHEMA, _FORMATO_SALIDA_API
+
+    def objetos(n):
+        if isinstance(n, dict):
+            if n.get("type") == "object":
+                yield n
+            for v in n.values():
+                yield from objetos(v)
+        elif isinstance(n, list):
+            for v in n:
+                yield from objetos(v)
+    schema = _FORMATO_SALIDA_API["format"]["schema"]
+    assert _FORMATO_SALIDA_API["format"]["type"] == "json_schema"
+    assert all(o.get("additionalProperties") is False for o in objetos(schema))
+    assert "additionalProperties" not in RESPONDER_SCHEMA
+
+
+def test_texto_respuesta_lee_el_json_del_bloque_de_texto():
+    from types import SimpleNamespace as NS
+    from plotspace.routers.orchestrator import _texto_respuesta
+    msg = NS(content=[NS(type="text", text='{"message": "ok"}')])
+    assert _texto_respuesta(msg) == '{"message": "ok"}'
+    assert _texto_respuesta(NS(content=[])) == "{}"
 
 
 def test_fence_dentro_del_message_no_se_strippea():
