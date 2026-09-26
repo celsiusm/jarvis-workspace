@@ -15,9 +15,9 @@ plotspace/
 │   ├── database.py  # SQLite WAL (DB_PATH → data/jarvis.db), get_db(), init_db(), purgar_task_events()
 │   ├── events.py    # EventBroadcaster (WebSocket per project_id), singleton `broadcaster`
 │   └── auth.py      # token-gate + host_permitido/origen_permitido (anti rebinding/CSWSH)
-├── routers/         # one router per section (15): orchestrator, terminals,
+├── routers/         # one router per section (17): orchestrator, terminals,
 │   │                # projects, projects_files, plugins, voice, workspace,
-│   │                # mobile_preview, memory, tasks,
+│   │                # mobile_preview, memory, tasks, browser, radio,
 │   │                # review, live, system, cuentas, fs
 │   ├── orchestrator.py   # /api/orchestrator/* + workflows (the biggest)
 │   ├── terminals.py      # /api/terminals/* + keyword monitor + tmux/PTY
