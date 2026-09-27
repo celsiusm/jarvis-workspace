@@ -90,4 +90,32 @@ assert.strictEqual(L.totalContadores(ini), 0);
 assert.strictEqual(L.etiquetaAbrir({}), 'Abrir proyecto');
 assert.strictEqual(L.etiquetaAbrir({ claude: 1 }), 'Abrir con 1 terminal');
 assert.strictEqual(L.etiquetaAbrir({ claude: 2, codex: 1 }), 'Abrir con 3 terminales');
+// usadasDestino: el cupo del modal se mide contra el proyecto DESTINO, no contra
+// el que está abierto (antes un proyecto nuevo arrancaba en "3/12" y, desde un
+// proyecto con 12 terminales, no dejaba sumar ninguna al nuevo).
+{
+  const P = [
+    { id: 1, ruta: '/home/u/a', terminales_activas: 3 },
+    { id: 2, ruta: '/home/u/b', terminales_activas: 5 },
+  ];
+  assert.strictEqual(L.usadasDestino('', P, 1, 3), 3);               // sin carpeta → proyecto actual
+  assert.strictEqual(L.usadasDestino('sub/dir', P, 1, 3), 3);        // relativa → subcarpeta del actual
+  assert.strictEqual(L.usadasDestino('/home/u/a/', P, 1, 3), 3);     // el actual (usa el conteo vivo)
+  assert.strictEqual(L.usadasDestino('/home/u/b', P, 1, 3), 5);      // otro proyecto conocido
+  assert.strictEqual(L.usadasDestino('/home/u/b/src', P, 1, 3), 5);  // subcarpeta de otro proyecto
+  assert.strictEqual(L.usadasDestino('/home/u/bb', P, 1, 3), 0);     // prefijo sin "/" NO es ese proyecto
+  assert.strictEqual(L.usadasDestino('/home/u/nuevo', P, 1, 12), 0); // proyecto nuevo → cupo completo
+  assert.strictEqual(L.usadasDestino('/home/u/nuevo', null, 1, 12), 0);
+}
+// faltantes: CLIs sin instalar (estado de GET /api/clis). El shell nunca falta;
+// sin estado conocido no se pliega nada (informar ≠ esconder a ciegas).
+{
+  const est = { clis: [
+    { id: 'claude', instalado: true }, { id: 'codex', instalado: false },
+    { id: 'qwen', instalado: false }, { id: 'manual', instalado: false },
+  ] };
+  assert.deepStrictEqual(L.faltantes(L.CLI_ORDEN, est), ['codex', 'qwen']);
+  assert.deepStrictEqual(L.faltantes(L.CLI_ORDEN, null), []);
+  assert.deepStrictEqual(L.faltantes(L.CLI_ORDEN, { clis: 'x' }), []);
+}
 console.log('launcher-state.test.js OK');

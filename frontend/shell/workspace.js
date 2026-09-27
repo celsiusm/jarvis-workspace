@@ -1277,8 +1277,9 @@ async function cargarProyecto() {
   if (elTitulo) elTitulo.textContent = estado.project.nombre;
   const _elPath = document.getElementById('project-path');
   const _elSep  = document.querySelector('.gh-crumb-sep');
-  const _ruta = (estado.project.ruta || '').replace(/^\/home\/[^/]+/, '~');
-  if (_elPath) _elPath.textContent = _ruta;
+  const _ruta = window.JarvisRuta?.rutaCorta(estado.project.ruta)
+    ?? (estado.project.ruta || '').replace(/^\/home\/[^/]+/, '~');
+  if (_elPath) { _elPath.textContent = _ruta; _elPath.title = estado.project.ruta || ''; }
   if (_elSep) _elSep.style.display = _ruta ? '' : 'none';
   document.title = `JARVIS — ${estado.project.nombre}`;
 
@@ -4000,8 +4001,23 @@ function _tlSetCount(tipo, n) {
   // CLI sin instalar no se puede sumar (el estado viene cacheado del arranque).
   const st = (_tlEstadoClis?.clis || []).find(c => c.id === tipo);
   if (st && !st.instalado) return;
-  _tlCounts[tipo] = window.JarvisLauncherState.clampContador(n, terminales.size, _tlCounts, tipo);
+  _tlCounts[tipo] = window.JarvisLauncherState.clampContador(n, _tlUsadas(), _tlCounts, tipo);
   _tlSync();
+}
+
+// Terminales ya vivas en el proyecto al que va a parar el lanzamiento. El cupo
+// se mide contra ESE proyecto: un proyecto nuevo arranca con las 12 libres,
+// aunque el que tenés abierto esté lleno.
+function _tlRutaDestino() {
+  if (_tlMode === 'new') {
+    const nm = document.getElementById('tl-new-name')?.value.trim() || '';
+    const loc = (document.getElementById('tl-new-loc')?.value || '').trim() || _TL_LOC_DEF;
+    return loc.replace(/\/+$/, '') + '/' + (_tlSlug(nm) || '_');
+  }
+  return document.getElementById('tl-folder-input')?.value.trim() || '';
+}
+function _tlUsadas() {
+  return window.JarvisLauncherState.usadasDestino(_tlRutaDestino(), _sbProyectos, projectId, terminales.size);
 }
 
 // ── Grid COMPACTO de cards por CLI (estilo prototipo) ──
@@ -4020,6 +4036,39 @@ function _tlPintarFalta() {
     // sin instalar no se puede sumar: los botones mueren
     card.querySelectorAll('.inc').forEach(b => { b.disabled = falta; });
   });
+  _tlPlegarFaltan();
+}
+
+// Los CLIs sin instalar (7 de 9 en una máquina recién instalada) dominaban la
+// grilla: se pliegan en un bloque aparte detrás de «+N sin instalar». Mismo
+// orden relativo (CLI_ORDEN) en los dos lados; el shell queda último arriba.
+let _tlVerFaltan = false;
+function _tlPlegarFaltan() {
+  const L = window.JarvisLauncherState;
+  const grid = document.getElementById('tl-grid');
+  if (!grid || !L) return;
+  let extra = document.getElementById('tl-grid-faltan');
+  let btn = document.getElementById('tl-faltan-toggle');
+  if (!extra) {
+    btn = document.createElement('button');
+    btn.type = 'button'; btn.id = 'tl-faltan-toggle'; btn.className = 'cli-faltan-toggle';
+    btn.addEventListener('click', () => { _tlVerFaltan = !_tlVerFaltan; _tlPlegarFaltan(); });
+    extra = document.createElement('div');
+    extra.id = 'tl-grid-faltan'; extra.className = 'tl2-cli-grid cli-faltan-grid';
+    grid.after(btn, extra);
+  }
+  const faltan = new Set(L.faltantes(L.CLI_ORDEN, _tlEstadoClis));
+  const cards = new Map([...document.querySelectorAll('#modal-new-terminal .tl2-cli-card')].map(c => [c.dataset.tipo, c]));
+  for (const tipo of L.CLI_ORDEN) {
+    const c = cards.get(tipo); if (!c) continue;
+    (faltan.has(tipo) ? extra : grid).appendChild(c);
+  }
+  btn.hidden = faltan.size === 0;
+  extra.hidden = faltan.size === 0 || !_tlVerFaltan;
+  btn.setAttribute('aria-expanded', String(_tlVerFaltan));
+  btn.textContent = _tlVerFaltan
+    ? _sbT('Ocultar los que faltan instalar')
+    : _sbT('+{n} sin instalar').replace('{n}', faltan.size);
 }
 
 function _tlEstadoFaltantes() {
@@ -4073,8 +4122,13 @@ function _tlRenderGrid() {
 // ── Sincroniza contadores, badges, capacidad y CTA (en el lugar) ──
 function _tlSync() {
   const L = window.JarvisLauncherState;
+  const usadasDest = Math.min(_tlUsadas(), L.MAX_TERMINALES);
+  // Cambió el destino (modo, nombre o carpeta) y ya no entra lo elegido → recorta.
+  if (usadasDest + L.totalContadores(_tlCounts) > L.MAX_TERMINALES) {
+    Object.assign(_tlCounts, L.aplicarTemplate(_tlCounts, usadasDest));
+  }
   const total = L.totalContadores(_tlCounts);
-  const lleno = (terminales.size + total) >= L.MAX_TERMINALES;
+  const lleno = (usadasDest + total) >= L.MAX_TERMINALES;
   document.querySelectorAll('#tl-grid .tl2-cli-card').forEach(card => {
     const n = _tlCounts[card.dataset.tipo] | 0;
     card.classList.toggle('active', n > 0);
@@ -4088,7 +4142,7 @@ function _tlSync() {
   // Al llegar al tope aparece el porqué de los + apagados ("límite alcanzado").
   const cap = document.getElementById('tl-capacidad');
   if (cap) {
-    const usadas = Math.min(terminales.size, L.MAX_TERMINALES);
+    const usadas = usadasDest;
     const sel = Math.min(L.totalContadores(_tlCounts), L.MAX_TERMINALES - usadas);
     const segs = Array.from({ length: L.MAX_TERMINALES }, (_, i) =>
       `<i class="${i < usadas ? 'u' : (i < usadas + sel ? 's' : '')}"></i>`).join('');
@@ -4325,7 +4379,7 @@ function _tlSyncPick() {
   } else {
     empty.hidden = false; sel.hidden = true;
   }
-  _tlSyncCTA();
+  _tlSync();   // otra carpeta = otro proyecto destino → otro cupo (llama _tlSyncCTA)
 }
 function _tlSetMode(m) {
   _tlMode = m;
@@ -4333,11 +4387,11 @@ function _tlSetMode(m) {
   document.querySelectorAll('#modal-new-terminal .tl2-mode').forEach(el => el.classList.toggle('on', el.dataset.mode === m));
   const focoId = m === 'new' ? 'tl-new-name' : 'tl-folder-input';
   setTimeout(() => document.getElementById(focoId)?.focus(), 40);
-  _tlSyncCTA();
+  _tlSync();   // el cupo depende del destino (proyecto nuevo vs. carpeta abierta)
 }
 document.querySelectorAll('#tl-modes button').forEach(b => b.addEventListener('click', () => _tlSetMode(b.dataset.mode)));
-document.getElementById('tl-new-name')?.addEventListener('input', _tlUpdatePrev);
-document.getElementById('tl-new-loc')?.addEventListener('input', _tlUpdatePrev);
+document.getElementById('tl-new-name')?.addEventListener('input', () => { _tlUpdatePrev(); _tlSync(); });
+document.getElementById('tl-new-loc')?.addEventListener('input', () => { _tlUpdatePrev(); _tlSync(); });
 // Pegar ruta directa (modo Abrir) → reflejar en la tarjeta de selección.
 document.getElementById('tl-folder-input')?.addEventListener('input', _tlSyncPick);
 document.getElementById('modal-terminal-cancel')?.addEventListener('click', () => cerrarModalTerminal());

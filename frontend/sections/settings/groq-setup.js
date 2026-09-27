@@ -27,7 +27,14 @@
     return !!binding && binding.type === 'mouse' && Number(binding.value) === Number(button);
   }
 
-  const api = { CLAVE_URL, clavePareceGroq, siguientePaso, LS_TECLA, MOUSE_BOTONES, chipSeleccionado };
+  // Qué mostrar al CARGAR el workspace. La modal tapaba las terminales antes de
+  // verlas (aunque no fueras a usar la voz): ahora sale un aviso liviano UNA vez
+  // y la modal aparece recién al usar la voz (iniciarGrabacion → abrir()).
+  function introAlCargar({ groq, introVisto }) {
+    return (!groq && !introVisto) ? 'aviso' : null;
+  }
+
+  const api = { CLAVE_URL, clavePareceGroq, siguientePaso, LS_TECLA, MOUSE_BOTONES, chipSeleccionado, introAlCargar };
 
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = api;
@@ -197,16 +204,11 @@
       const d = await r.json();
       _groq = !!d.groq;
     } catch (_) { return; }
-    // Solo la PRIMERA vez (nunca vista/cerrada) aparece sola al cargar el
-    // workspace; despues se reabre solo bajo demanda (voz o editar el control).
     let introVisto = false;
     try { introVisto = localStorage.getItem(LS_INTRO) === '1'; } catch (_) {}
-    if (introVisto) return;
-    let teclaLista = false;
-    try { teclaLista = localStorage.getItem(LS_TECLA) === '1'; } catch (_) {}
-    const paso = siguientePaso({ groq: _groq, teclaLista });
-    if (paso === 'listo') return;
-    _pintar(paso);
+    if (introAlCargar({ groq: _groq, introVisto }) !== 'aviso') return;
+    try { localStorage.setItem(LS_INTRO, '1'); } catch (_) {}
+    global.toast?.(_t('Para dictar por voz hace falta una clave gratuita de Groq: mantené la tecla de voz y te guío.'), 'info', 7000);
   }
 
   function abrir() {

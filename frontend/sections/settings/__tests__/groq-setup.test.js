@@ -27,4 +27,10 @@ assert.strictEqual(G.chipSeleccionado({ type: 'mouse', value: 0 }, 2), false);
 assert.strictEqual(G.chipSeleccionado({ type: 'key', value: 'AltLeft' }, 0), false);
 assert.strictEqual(G.chipSeleccionado(null, 0), false);
 
+// introAlCargar: al entrar al workspace YA NO se abre la modal (tapaba las
+// terminales antes de verlas, aunque nunca uses la voz). Sale un aviso liviano
+// UNA vez; la modal aparece recién al usar la voz (iniciarGrabacion).
+assert.strictEqual(G.introAlCargar({ groq: false, introVisto: false }), 'aviso');
+assert.strictEqual(G.introAlCargar({ groq: false, introVisto: true }), null);
+assert.strictEqual(G.introAlCargar({ groq: true, introVisto: false }), null);
 console.log('ok  groq-setup');
