@@ -33,6 +33,19 @@ def test_salida_de_build_es_artefacto():
     assert pol.clasificar('desktop/dist/bundle.wsl') == 'artefacto'
 
 
+def test_build_en_la_raiz_es_artefacto():
+    # Los sufijos de build ('/dist/', '/build/'…) valen a CUALQUIER profundidad,
+    # también en la raíz del repo: antes 'dist/app.js' caía como 'real' porque
+    # el patrón exigía una barra delante (y Review lo mostraba como trabajo).
+    assert pol.clasificar('dist/app.js') == 'artefacto'
+    assert pol.clasificar('dist/') == 'artefacto'
+    assert pol.clasificar('build/index.html') == 'artefacto'
+    assert pol.clasificar('target/debug/x') == 'artefacto'
+    # …pero un NOMBRE que empieza igual no es la carpeta.
+    assert pol.clasificar('distribucion.md') == 'real'
+    assert pol.clasificar('builder/x.py') == 'real'
+
+
 def test_capturas_de_qa_son_artefacto():
     assert pol.clasificar('.jarvis/qa-shots/radio-8.png') == 'artefacto'
 

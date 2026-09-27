@@ -1767,5 +1767,10 @@
     "Paso rescatado: {n} había cerrado con {kw} y no se había registrado.": "Rescued step: {n} had closed with {kw} and it wasn't recorded.",
     "Terminal no encontrada, inactiva o de otro proyecto": "Terminal not found, inactive or from another project",
     "No se pudo enviar la tarea a la terminal (¿sesión caída?)": "Couldn't send the task to the terminal (session down?)",
+    // ── Liquid Glass + pliegue de CLIs + aviso de voz (2026-09) ──
+    "Material de vidrio translúcido en barras, paneles, modales y botones. Apagado: superficies sólidas.": "Translucent glass material on bars, panels, dialogs and buttons. Off: solid surfaces.",
+    "+{n} sin instalar": "+{n} not installed",
+    "Ocultar los que faltan instalar": "Hide the ones not installed",
+    "Para dictar por voz hace falta una clave gratuita de Groq: mantené la tecla de voz y te guío.": "Voice dictation needs a free Groq key: hold your voice key and I'll walk you through it.",
   });
 })();

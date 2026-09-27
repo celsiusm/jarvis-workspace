@@ -241,7 +241,7 @@ function _cardHTML(p, idx = 0) {
         <div class="hc-card-icon ${tone}">${esc(ini)}</div>
         <div class="hc-card-titles">
           <h3 class="hc-card-name">${esc(p.nombre)}</h3>
-          <div class="hc-card-path">${esc(p.ruta)}</div>
+          <div class="hc-card-path">${esc(window.JarvisRuta ? window.JarvisRuta.rutaCorta(p.ruta) : p.ruta)}</div>
         </div>
       </div>
       <div class="hc-card-meta">

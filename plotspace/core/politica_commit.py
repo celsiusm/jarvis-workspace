@@ -83,7 +83,8 @@ def clasificar(path) -> str:
         if p.startswith(d) or f'/{d}' in p:
             return ARTEFACTO
     for d in _SUFIJOS_DIR_ARTEFACTO:
-        if d in p:
+        # '/dist/' a cualquier profundidad, incluida la raíz ('dist/app.js').
+        if d in p or p.startswith(d[1:]):
             return ARTEFACTO
     if p.endswith(_EXT_ARTEFACTO):
         return ARTEFACTO

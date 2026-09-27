@@ -275,6 +275,7 @@
     push('apariencia', 'Tonalidad', 'matiz saturación profundidad tinte');
     push('apariencia', 'Escala de la app', 'zoom tamaño agrandar achicar interfaz letra grande');
     push('apariencia', 'Idioma de la interfaz', 'español english lang');
+    push('apariencia', 'Liquid Glass', 'vidrio translúcido transparencia material glass blur');
     push('apariencia', 'Auto-iniciar el preview móvil', 'expo metro mobile');
     push('cuentas', 'Conectar cuenta nueva', 'login oauth vincular cli', null);
     push('skills', 'Plugins instalados', 'marketplace extensiones', null);
@@ -757,6 +758,10 @@
              <button type="button" data-l="es" class="${idioma === 'es' ? 'on' : ''}">Español</button>
              <button type="button" data-l="en" class="${idioma === 'en' ? 'on' : ''}">English</button>
            </div>`, 'Idioma de la interfaz') +
+        setRow('Liquid Glass',
+          'Material de vidrio translúcido en barras, paneles, modales y botones. Apagado: superficies sólidas.',
+          sw('ap-glass', (window.JarvisGlass?.actual?.() ?? 'on') === 'on', 'Liquid Glass'),
+          'Liquid Glass') +
         setRow('Auto-iniciar el preview móvil',
           'En proyectos Expo, abre la pestaña móvil cuando detecta el Metro que levantó el agente.',
           sw('ap-mob', localStorage.getItem('jarvis.autoMobilePreview') !== '0', _t('Auto-iniciar el preview móvil')),
@@ -857,6 +862,8 @@
       b.querySelectorAll('#ap-lang button').forEach(x => x.classList.toggle('on', x === btn));
       window.JarvisI18n?.setLang?.(btn.dataset.l);
     });
+    b.querySelector('#ap-glass')?.addEventListener('change', (e) =>
+      window.JarvisGlass?.aplicar(e.target.checked ? 'on' : 'off'));
     b.querySelector('#ap-mob').addEventListener('change', (e) =>
       localStorage.setItem('jarvis.autoMobilePreview', e.target.checked ? '1' : '0'));
   }

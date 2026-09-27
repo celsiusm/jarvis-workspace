@@ -178,6 +178,23 @@
 }
 .rv-stat .mas   { color: var(--ob-run); }
 .rv-stat .menos { color: var(--ob-err); }
+/* Archivo/carpeta nuevo sin conteo de líneas (carpeta untracked, binario). */
+.rv-stat-nuevo { color: var(--ob-fg-3); text-transform: lowercase; }
+
+/* Grupo «Generado por herramientas»: salida de build/estado de Jarvis. Va al
+   final, apagado y plegado por defecto — está, pero no compite con el trabajo. */
+.rv-grupo.gen { opacity: .72; }
+.rv-grupo.gen .rv-gname { color: var(--ob-fg-3); }
+.rv-grupo.gen.plegado .rv-gsel { visibility: hidden; }
+.rv-gtoggle {
+  flex-shrink: 0;
+  font: 500 var(--text-2xs) var(--font-ui);
+  color: var(--ob-fg-2);
+  background: none; border: 1px solid var(--ob-line-2);
+  border-radius: var(--radius-pill, 999px);
+  padding: 1px 8px; cursor: pointer;
+}
+.rv-gtoggle:hover { color: var(--ob-fg-0); border-color: var(--ob-line-3); }
 .rv-open {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; flex-shrink: 0;

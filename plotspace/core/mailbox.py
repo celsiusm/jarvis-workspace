@@ -161,8 +161,11 @@ def asegurar_mailbox(project_path: str):
         if os.path.exists(gi):
             with open(gi, encoding='utf-8') as f:
                 actual = f.read()
-        faltan = [e for e in ('.jarvis/mailbox-pendientes.json',)
-                  if e not in actual]
+        # .workspace/ = STATE.md + logs por terminal que Jarvis reescribe cada
+        # 10s: sin esta línea aparecía como cambio sin commitear en Review.
+        ya = set(actual.splitlines())
+        faltan = [e for e in ('.jarvis/mailbox-pendientes.json', '.workspace/')
+                  if e not in ya]
         if faltan:
             with open(gi, 'a', encoding='utf-8') as f:
                 if actual and not actual.endswith('\n'):

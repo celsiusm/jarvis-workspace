@@ -246,6 +246,30 @@
         const chip = r.querySelector('.qp-falta');
         if (chip) chip.hidden = !falta;
       });
+      _plegarFaltan();
+    }
+
+    // Sin instalar → bloque plegado aparte («+N sin instalar»), mismo criterio
+    // que el modal de proyecto. Las teclas 1-9 siguen mapeando a OPCIONES.
+    let _verFaltan = false;
+    function _plegarFaltan() {
+      const grid = _el.querySelector('.qp-grid');
+      const extra = _el.querySelector('.qp-grid-faltan');
+      const btn = _el.querySelector('.qp-faltan-toggle');
+      let n = 0;
+      for (const o of OPCIONES) {
+        const r = _el.querySelector(`.qp-row[data-tipo="${o.tipo}"]`);
+        if (!r) continue;
+        const falta = _faltaDe(o.tipo);
+        if (falta) n++;
+        (falta ? extra : grid).appendChild(r);
+      }
+      btn.hidden = n === 0;
+      extra.hidden = n === 0 || !_verFaltan;
+      btn.setAttribute('aria-expanded', String(_verFaltan));
+      btn.textContent = _verFaltan
+        ? _L('Ocultar los que faltan instalar', 'Hide the ones not installed')
+        : _L(`+${n} sin instalar`, `+${n} not installed`);
     }
 
     function _build() {
@@ -276,6 +300,8 @@
                 <kbd class="qp-tecla">${o.tecla}</kbd>
               </button>`).join('')}
           </div>
+          <button class="cli-faltan-toggle qp-faltan-toggle" type="button" hidden></button>
+          <div class="qp-grid qp-grid-faltan cli-faltan-grid" hidden></div>
           <div class="qp-sec">
             <b class="qp-lbl">Disposición</b>
             <span class="qp-fill"></span>
@@ -295,6 +321,7 @@
         if (!_el.hidden && !_el.contains(document.activeElement)) _el.querySelector('.qp-panel').focus();
       });
       _el.querySelector('.qp-x').addEventListener('click', cerrar);
+      _el.querySelector('.qp-faltan-toggle').addEventListener('click', () => { _verFaltan = !_verFaltan; _plegarFaltan(); });
       _el.querySelector('.qp-go').addEventListener('click', _lanzar);
       _el.querySelectorAll('.qp-row').forEach(r => {
         // click suma 1; el − del stepper resta; click derecho resta (como el launcher)

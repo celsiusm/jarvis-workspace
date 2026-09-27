@@ -29,6 +29,40 @@
   --ob-glass-hi:   oklch(85% 0.02 300 / 0.10);  /* highlight del canto biselado */
   --ob-glass-lo:   oklch(0% 0 0 / 0.30);
 
+  /* ── LIQUID GLASS — material único de todas las superficies (shared/liquid-glass.css) ──
+     La receta sale de la píldora de las terminales (.terminal-chrome), que fue
+     la primera pieza Liquid Glass: cuerpo translúcido teñido con el ACENTO del
+     tema + canto refractivo (luz arriba → sombra abajo, en el border-box) +
+     gloss especular + sombra interior inferior. Todo deriva de --ob-* → sigue a
+     los 24 temas y a la Tonalidad sin tocar nada más.
+     Dos niveles de uso:
+       · chrome fijo (barra, franja, dock, cards): SIN backdrop-filter — conviven
+         con xterm y la regla de perf prohíbe filtrar su backdrop.
+       · flotantes (modales, popovers, toasts): CON --lg-blur (son transitorios). */
+  --lg-body-hi:  color-mix(in oklch, color-mix(in oklch, var(--ob-bg-3) 86%, var(--ob-accent) 10%) 66%, transparent);
+  --lg-body-lo:  color-mix(in oklch, color-mix(in oklch, var(--ob-bg-2) 94%, var(--ob-accent) 5%) 74%, transparent);
+  --lg-body:     linear-gradient(180deg, var(--lg-body-hi), var(--lg-body-lo));
+  --lg-body-float: linear-gradient(180deg,
+                   color-mix(in oklch, var(--ob-bg-2) 58%, transparent),
+                   color-mix(in oklch, var(--ob-bg-1) 70%, transparent));
+  --lg-rim:      linear-gradient(180deg, oklch(100% 0 0 / 0.26), oklch(100% 0 0 / 0.05) 40%, oklch(0% 0 0 / 0.20));
+  --lg-rim-accent: linear-gradient(180deg, color-mix(in oklch, white 42%, var(--ob-accent)),
+                   oklch(100% 0 0 / 0.05) 42%, oklch(0% 0 0 / 0.16));
+  --lg-gloss:    linear-gradient(180deg, oklch(100% 0 0 / 0.09), transparent 44%);
+  --lg-spec:     radial-gradient(140% 90% at 18% -34%, oklch(100% 0 0 / 0.10), transparent 56%);
+  --lg-inset:    inset 0 1px 0.5px oklch(100% 0 0 / 0.24), inset 0 -8px 14px -9px oklch(0% 0 0 / 0.34);
+  /* Canto como anillo interior (no border): no cambia el tamaño de nada. */
+  --lg-ring:     inset 0 0 0 1px color-mix(in oklch, var(--ob-fg-0) 11%, transparent);
+  --lg-drop:     0 8px 24px -12px oklch(0% 0 0 / 0.60), 0 2px 6px -3px oklch(0% 0 0 / 0.40);
+  --lg-drop-lg:  0 30px 80px -24px oklch(0% 0 0 / 0.75), 0 10px 26px -12px oklch(0% 0 0 / 0.55);
+  --lg-glow:     0 4px 16px -8px var(--ob-accent-glow);
+  --lg-blur:     blur(26px) saturate(185%);
+  /* CTA de acento: vidrio teñido de acento (no un relleno plano). */
+  --lg-accent-body: linear-gradient(180deg,
+                   color-mix(in oklch, var(--ob-accent) 88%, white 12%),
+                   var(--ob-accent) 55%,
+                   color-mix(in oklch, var(--ob-accent) 82%, black 18%));
+
   /* ── Líneas ── */
   --ob-line-1:     oklch(28% 0.022 300);   /* divisor sutil */
   --ob-line-2:     oklch(34% 0.024 300);   /* borde de card */
@@ -359,6 +393,32 @@ html[data-theme="alba"] {
   --ob-term-red: oklch(68% 0.20 22); --ob-term-green: oklch(78% 0.16 150); --ob-term-cyan: oklch(75% 0.13 230);
   --ob-term-blue: oklch(68% 0.14 268); --ob-term-blue-b: oklch(78% 0.11 268);
   --ob-term-magenta: oklch(70% 0.15 268); --ob-term-magenta-b: oklch(80% 0.11 268);
+}
+
+/* Liquid Glass en los temas CLAROS: el vidrio es BLANCO lechoso (no gris), el
+   canto brilla blanco puro y las sombras son cálidas/frías y suaves — un negro
+   al 60% sobre papel se lee como mancha, no como profundidad. */
+html[data-theme="papel"], html[data-theme="alba"] {
+  --lg-body-hi:  color-mix(in oklch, color-mix(in oklch, var(--ob-bg-2) 92%, var(--ob-accent) 4%) 72%, transparent);
+  --lg-body-lo:  color-mix(in oklch, var(--ob-bg-1) 80%, transparent);
+  --lg-body-float: linear-gradient(180deg, oklch(100% 0 0 / 0.72), color-mix(in oklch, var(--ob-bg-1) 78%, transparent));
+  --lg-rim:      linear-gradient(180deg, oklch(100% 0 0 / 0.95), oklch(100% 0 0 / 0.35) 40%, color-mix(in oklch, var(--ob-fg-0) 14%, transparent));
+  --lg-rim-accent: linear-gradient(180deg, oklch(100% 0 0 / 0.95), color-mix(in oklch, var(--ob-accent) 30%, transparent) 55%, color-mix(in oklch, var(--ob-accent) 45%, transparent));
+  --lg-gloss:    linear-gradient(180deg, oklch(100% 0 0 / 0.55), transparent 46%);
+  --lg-spec:     radial-gradient(140% 90% at 18% -34%, oklch(100% 0 0 / 0.60), transparent 56%);
+  --lg-inset:    inset 0 1px 0 oklch(100% 0 0 / 0.95), inset 0 -6px 12px -9px color-mix(in oklch, var(--ob-fg-0) 18%, transparent);
+  --lg-drop:     var(--shadow-2);
+  --lg-drop-lg:  var(--shadow-3);
+}
+
+/* Accesibilidad: con «reducir transparencia» del sistema el vidrio se vuelve
+   sólido (mismo dibujo, sin translucidez ni blur). */
+@media (prefers-reduced-transparency: reduce) {
+  :root {
+    --lg-body-hi: var(--ob-bg-3); --lg-body-lo: var(--ob-bg-2);
+    --lg-body-float: linear-gradient(180deg, var(--ob-bg-2), var(--ob-bg-1));
+    --lg-blur: none;
+  }
 }
 
 /* ═══════════════════════════════════════════════════════════════

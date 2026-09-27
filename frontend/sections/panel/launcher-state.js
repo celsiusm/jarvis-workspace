@@ -108,9 +108,29 @@
     return out;
   }
 
+  // Terminales ya vivas en el proyecto DESTINO del lanzamiento (mismo criterio
+  // que _tlResolverDestino): vacía/relativa → el actual; absoluta dentro de un
+  // proyecto conocido → ese; carpeta desconocida → proyecto nuevo (0).
+  function usadasDestino(ruta, proyectos, idActual, usadasActual) {
+    const r = (ruta || '').trim();
+    if (!r || !r.startsWith('/')) return usadasActual | 0;
+    const p = r.replace(/\/+$/, '');
+    const m = (proyectos || []).find(x => x && x.ruta && (p === x.ruta || p.startsWith(x.ruta + '/')));
+    if (!m) return 0;
+    if (String(m.id) === String(idActual)) return usadasActual | 0;
+    return (m.terminales_activas | 0);
+  }
+
+  // CLIs del orden que faltan instalar según GET /api/clis. Los pickers los
+  // pliegan al final («+N sin instalar») para que no dominen la grilla.
+  function faltantes(orden, estado) {
+    const clis = Array.isArray(estado && estado.clis) ? estado.clis : [];
+    return (orden || []).filter(t => t !== 'manual' && clis.some(c => c && c.id === t && !c.instalado));
+  }
+
   const pure = { MAX_TERMINALES, CLI_ORDEN, CLI_LABELS, PRESETS, MAX_TEMPLATES,
                  totalContadores, loteDesdeContadores, etiquetaCrear, etiquetaAbrir,
-                 countsIniciales, clampContador,
+                 countsIniciales, clampContador, usadasDestino, faltantes,
                  resumenCounts, aplicarTemplate, mismosCounts, templatesValidos };
   global.JarvisLauncherState = pure;
   if (typeof module !== 'undefined' && module.exports) module.exports = pure;

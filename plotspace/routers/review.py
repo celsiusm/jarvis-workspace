@@ -9,6 +9,7 @@ import re
 import subprocess
 from fastapi import APIRouter, Body, HTTPException, Query
 
+from plotspace.core import politica_commit
 from plotspace.core.database import get_db
 
 router = APIRouter(prefix="/api", tags=["review"])
@@ -200,6 +201,10 @@ def review_por_agente(project_id: int):
         archivos_cambiados.append({'path': path, 'status': '??',
                                    'diff': _cap_diff(diff)})
 
+    # Artefacto (salida de herramientas: .workspace/, dist/, logs) vs. trabajo
+    # real: el panel los separa para que no se commiteen por reflejo.
+    for f in archivos_cambiados:
+        f['clase'] = politica_commit.clasificar(f['path'])
     duenos = _duenos_para(project_id)
     return atribuir_cambios(archivos_cambiados, duenos)
 
@@ -300,10 +305,21 @@ def estado_review(project_id: int):
         if len(partes) == 3:
             mas, menos, path = partes
             stats[path] = {'mas': mas, 'menos': menos}
+    # Untracked: numstat contra /dev/null — un archivo nuevo son N líneas
+    # agregadas (antes quedaba '·' y el panel mostraba «+· −·»). Las carpetas
+    # untracked ('dir/') no tienen conteo: se quedan sin números.
+    for path in untracked[:40]:
+        if path.endswith('/') or path in stats:
+            continue
+        _, ns = _git(cwd, 'diff', '--no-index', '--numstat', '/dev/null', path)
+        partes = (ns.splitlines() or [''])[0].split('\t')
+        if len(partes) == 3:
+            stats[path] = {'mas': partes[0], 'menos': partes[1]}
     for a in archivos:
         s = stats.get(a['path'], {})
         a['mas']   = s.get('mas', '·')
         a['menos'] = s.get('menos', '·')
+        a['clase'] = politica_commit.clasificar(a['path'])
 
     # Branch + último commit para contexto
     _, branch = _git(cwd, 'branch', '--show-current')

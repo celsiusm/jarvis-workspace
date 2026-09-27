@@ -3125,3 +3125,21 @@ body.tl-resizing iframe {
   pointer-events: none !important;
 }
 
+
+/* ── «+N sin instalar»: pliegue de CLIs faltantes (launcher + picker rápido) ──
+   Los CLIs sin instalar se agrupan aparte y plegados: informan que existen sin
+   ocupar 7 de 9 filas de la grilla. */
+.cli-faltan-toggle {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  width: 100%; margin-top: 8px; padding: 6px 10px;
+  font: 500 var(--text-2xs) var(--font-ui); color: var(--ob-fg-3);
+  background: transparent;
+  border: 1px dashed var(--ob-line-2); border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
+              background var(--dur-1) var(--ease-out);
+}
+.cli-faltan-toggle:hover { color: var(--ob-fg-1); border-color: var(--ob-line-3); background: var(--ob-bg-2); }
+.cli-faltan-toggle[hidden] { display: none; }
+.cli-faltan-grid { margin-top: 8px; }
+.cli-faltan-grid[hidden] { display: none; }

@@ -1,0 +1,293 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — Liquid Glass · piel única de todas las superficies
+   Se carga ÚLTIMO (después de las secciones) y todo cuelga de
+   :root[data-glass="on"] (shared/glass.js; ⚙ → Apariencia lo apaga).
+   El material sale de los tokens --lg-* (shared/tokens.css), que a su
+   vez salen de --ob-*: sigue a los 24 temas + Tonalidad.
+
+   Reglas del material (no romper):
+   · El canto va como ANILLO INTERIOR (box-shadow), no como border: la
+     piel no cambia el tamaño de ningún elemento (cero reflow).
+   · Chrome fijo y todo lo que convive con xterm: SIN backdrop-filter
+     (regla de perf: filtrar el backdrop de un canvas vivo lo repinta
+     por frame). Solo los flotantes transitorios usan --lg-blur.
+   · Nada de animaciones infinitas nuevas: el único brillo que barre es
+     el de la píldora de terminal trabajando (ya existía).
+   · Colores SOLO por tokens (regla de oro: nunca hex).
+═══════════════════════════════════════════════════════════════ */
+
+/* ── 1 · Barra superior ─────────────────────────────────────── */
+:root[data-glass="on"] .jw-bar {
+  background: var(--lg-gloss), linear-gradient(var(--lg-body-lo), var(--lg-body-lo)), var(--ob-bg-void);
+  border-bottom-color: transparent;
+  box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--ob-fg-0) 8%, transparent),
+              inset 0 1px 0 oklch(100% 0 0 / 0.05);
+}
+:root[data-glass="on"] .jw-version-chip {
+  background: var(--lg-gloss), var(--lg-body);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+/* Botones de ícono: al hover aparece una gota de vidrio (cápsula). */
+:root[data-glass="on"] .jw-icon-btn { border-radius: var(--radius-pill); }
+:root[data-glass="on"] .jw-icon-btn:hover {
+  background: var(--lg-gloss), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+
+/* ── 2 · Franja de proyectos ────────────────────────────────── */
+:root[data-glass="on"] .jw-strip {
+  background:
+    var(--lg-gloss),
+    radial-gradient(150% 130px at 18% -30px, color-mix(in oklch, var(--ob-accent) 17%, transparent), transparent 72%),
+    radial-gradient(120% 90px at 95% -20px, color-mix(in oklch, var(--ob-info) 10%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--ob-bg-1), var(--ob-bg-0) 46%);
+}
+:root[data-glass="on"] .sb-search {
+  background: var(--lg-body);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lg-ring), inset 0 1px 3px oklch(0% 0 0 / 0.22);
+}
+:root[data-glass="on"] .sb-search:focus-within {
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), inset 0 1px 3px oklch(0% 0 0 / 0.22), 0 0 0 3px var(--ob-accent-08);
+}
+:root[data-glass="on"] .sb-row:hover:not(.activo) {
+  background: var(--lg-gloss), var(--lg-body);
+  box-shadow: var(--lg-ring);
+}
+:root[data-glass="on"] .sb-row.activo,
+:root[data-glass="on"] .sb-row.activo:hover {
+  background: var(--lg-gloss), var(--lg-spec),
+              linear-gradient(180deg, var(--ob-accent-14), var(--ob-accent-08));
+  border-color: transparent;
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-glow);
+}
+:root[data-glass="on"] .sb-new-ghost {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+:root[data-glass="on"] .sb-new-ghost:hover {
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-glow);
+}
+
+/* ── 3 · Dock (pestañas) ────────────────────────────────────── */
+:root[data-glass="on"] .jw-dock-tabs {
+  background: var(--lg-gloss), linear-gradient(var(--lg-body-lo), var(--lg-body-lo)), var(--ob-bg-1);
+  border-bottom-color: transparent;
+  box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--ob-fg-0) 8%, transparent);
+}
+:root[data-glass="on"] .jw-tab { border-radius: var(--radius-pill); }
+:root[data-glass="on"] .jw-tab:hover:not(.activa) { background: var(--lg-body); box-shadow: var(--lg-ring); }
+/* La pestaña activa es la misma "gota" que el conmutador de la franja. */
+:root[data-glass="on"] .jw-tab.activa {
+  background: var(--lg-gloss), var(--lg-spec),
+              linear-gradient(180deg, var(--ob-accent-24), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 38%, transparent),
+              var(--lg-inset), var(--lg-glow);
+}
+
+/* ── 4 · Flotantes (modales, pickers, popovers, toasts) ─────────
+   Son transitorios → pueden usar blur real del fondo. */
+:root[data-glass="on"] #modal-new-terminal .tl2-modal,
+:root[data-glass="on"] .qp-panel,
+:root[data-glass="on"] .sx-slab,
+:root[data-glass="on"] .gq-card,
+:root[data-glass="on"] .ob-confirm,
+:root[data-glass="on"] .orch-more-menu,
+:root[data-glass="on"] .orch-float-menu,
+:root[data-glass="on"] .tk-picker,
+:root[data-glass="on"] .jw-ds-pop {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body-float);
+  border-color: transparent;
+  -webkit-backdrop-filter: var(--lg-blur);
+          backdrop-filter: var(--lg-blur);
+  box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop-lg);
+}
+/* El toast conserva su borde izquierdo de color (es la señal de tipo). */
+:root[data-glass="on"] .ob-toast {
+  background: var(--lg-gloss), var(--lg-body-float);
+  -webkit-backdrop-filter: var(--lg-blur);
+          backdrop-filter: var(--lg-blur);
+  border-top-color: transparent; border-right-color: transparent; border-bottom-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop);
+}
+/* Cards de CLI dentro de los pickers: vidrio de chrome (sin blur propio). */
+:root[data-glass="on"] #modal-new-terminal .tl2-cli-card,
+:root[data-glass="on"] .qp-row {
+  background: var(--lg-gloss), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+:root[data-glass="on"] #modal-new-terminal .tl2-cli-card.active,
+:root[data-glass="on"] .qp-row.has {
+  background: var(--lg-gloss), var(--lg-spec), linear-gradient(180deg, var(--ob-accent-24), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 40%, transparent), var(--lg-inset), var(--lg-glow);
+}
+:root[data-glass="on"] #modal-new-terminal .tl2-cli-card.off,
+:root[data-glass="on"] .qp-row.off {
+  background: color-mix(in oklch, var(--ob-bg-void) 60%, transparent);
+  box-shadow: var(--lg-ring);
+}
+
+/* ── 5 · CTA de acento: vidrio teñido, no relleno plano ─────── */
+:root[data-glass="on"] #modal-new-terminal .tl2-create,
+:root[data-glass="on"] .qp-go,
+:root[data-glass="on"] .hc-cta,
+:root[data-glass="on"] .tk-nueva,
+:root[data-glass="on"] .rv-commitbtn,
+:root[data-glass="on"] .gq-btn.gq-prim,
+:root[data-glass="on"] .ob-confirm-btn.primario,
+:root[data-glass="on"] .orch-send-btn {
+  background: var(--lg-gloss), var(--lg-accent-body);
+  border-color: transparent;
+  color: var(--ob-on-accent);
+  box-shadow: inset 0 1px 0.5px oklch(100% 0 0 / 0.38),
+              inset 0 -6px 12px -8px oklch(0% 0 0 / 0.35),
+              inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 60%, white 12%),
+              0 6px 18px -8px var(--ob-accent-glow);
+}
+:root[data-glass="on"] :is(#modal-new-terminal .tl2-create, .qp-go, .hc-cta, .tk-nueva, .rv-commitbtn,
+                           .gq-btn.gq-prim, .ob-confirm-btn.primario, .orch-send-btn):hover:not(:disabled) {
+  filter: brightness(1.06);
+  box-shadow: inset 0 1px 0.5px oklch(100% 0 0 / 0.45),
+              inset 0 -6px 12px -8px oklch(0% 0 0 / 0.35),
+              inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 60%, white 20%),
+              0 8px 24px -8px var(--ob-accent-glow);
+}
+
+/* ── 6 · Home ───────────────────────────────────────────────── */
+:root[data-glass="on"] .hc-top {
+  background: var(--lg-gloss), linear-gradient(var(--lg-body-lo), var(--lg-body-lo));
+  box-shadow: inset 0 -1px 0 color-mix(in oklch, var(--ob-fg-0) 8%, transparent);
+}
+:root[data-glass="on"] .hc-card {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop);
+}
+:root[data-glass="on"] .hc-card:hover {
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-drop), var(--lg-glow);
+}
+:root[data-glass="on"] .hc-search {
+  background: var(--lg-body);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lg-ring), inset 0 1px 3px oklch(0% 0 0 / 0.22);
+}
+:root[data-glass="on"] .hc-filters {
+  background: var(--lg-gloss), var(--lg-body);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+:root[data-glass="on"] .hc-filter { border-radius: var(--radius-pill); }
+:root[data-glass="on"] .hc-filter.activo {
+  background: var(--lg-gloss), linear-gradient(180deg, var(--ob-accent-24), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 38%, transparent), var(--lg-inset);
+}
+
+/* ── 7 · Proyecto vacío (cards de arranque) ─────────────────── */
+:root[data-glass="on"] .tea-card {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop);
+}
+:root[data-glass="on"] .tea-card:hover {
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-drop), var(--lg-glow);
+}
+
+/* ── 8 · Chat de Jarvis ─────────────────────────────────────── */
+:root[data-glass="on"] .orch-input-box {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop);
+}
+:root[data-glass="on"] :is(.orch-hero-chip, .orch-chip, .orch-composer-chip) {
+  background: var(--lg-gloss), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+:root[data-glass="on"] :is(.orch-hero-chip, .orch-chip, .orch-composer-chip):hover {
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-glow);
+}
+:root[data-glass="on"] .orch-action-card {
+  background: var(--lg-gloss), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+
+/* ── 9 · Tareas (kanban) ────────────────────────────────────── */
+:root[data-glass="on"] .tk-topbar,
+:root[data-glass="on"] .rv-top {
+  background: var(--lg-gloss), linear-gradient(var(--lg-body-lo), var(--lg-body-lo)), var(--ob-bg-1);
+}
+:root[data-glass="on"] .tk-col {
+  background: var(--lg-gloss), linear-gradient(var(--lg-body-lo), var(--lg-body-lo));
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+:root[data-glass="on"] .tk-col.drag-over {
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-glow);
+}
+:root[data-glass="on"] .tk-card {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  border-color: transparent;
+  box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop);
+}
+
+/* ── 10 · Review ────────────────────────────────────────────── */
+:root[data-glass="on"] .rv-fila:hover { background: var(--lg-body); box-shadow: var(--lg-ring); }
+:root[data-glass="on"] .rv-fila.activo {
+  background: var(--lg-gloss), linear-gradient(180deg, var(--ob-accent-14), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset);
+}
+
+/* ── 11 · Navegador ─────────────────────────────────────────── */
+:root[data-glass="on"] .br-omni {
+  background: var(--lg-body);
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  box-shadow: var(--lg-ring), inset 0 1px 3px oklch(0% 0 0 / 0.20);
+}
+:root[data-glass="on"] .br-omni:focus-within {
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), inset 0 1px 3px oklch(0% 0 0 / 0.20), 0 0 0 3px var(--ob-accent-08);
+}
+:root[data-glass="on"] .br-tab.activa {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+
+/* ── 12 · Configuración ─────────────────────────────────────── */
+:root[data-glass="on"] .sx-item.on {
+  background: var(--lg-gloss), linear-gradient(180deg, var(--ob-accent-14), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset);
+}
+
+/* ── 13 · Terminales en temas CLAROS: bisel de vidrio ──────────
+   La pantalla de la terminal es SIEMPRE oscura (la paleta ANSI de los CLIs
+   asume fondo oscuro — decisión de terminal.js). Sobre papel/alba la losa
+   oscura con borde duro se veía pesada: la card gana un bisel de vidrio
+   blanco (canto brillante + anillo lechoso + sombra suave), como la
+   pantalla de un dispositivo. Sin blur: convive con xterm.
+   :where() deja la especificidad en la de base.css, así los estados
+   (.con-aura, .resizing, .swap-target, .dragging) siguen mandando. */
+:where(:root[data-glass="on"]:is([data-theme="papel"], [data-theme="alba"])) .terminal-card,
+:where(:root[data-glass="on"]:is([data-theme="papel"], [data-theme="alba"])) .terminal-card:hover {
+  background:
+    linear-gradient(var(--sb-bg-1), var(--sb-bg-1)) padding-box,
+    var(--lg-rim) border-box;
+  box-shadow: 0 0 0 3px oklch(100% 0 0 / 0.92),
+              0 0 0 4px color-mix(in oklch, var(--ob-fg-0) 16%, transparent),
+              var(--lg-drop);
+}
+:where(:root[data-glass="on"]:is([data-theme="papel"], [data-theme="alba"])) .terminal-card.activa {
+  background:
+    linear-gradient(var(--sb-bg-1), var(--sb-bg-1)) padding-box,
+    var(--lg-rim-accent) border-box;
+  box-shadow: 0 0 0 3px color-mix(in oklch, var(--ob-accent) 12%, white),
+              0 0 0 4px var(--ob-accent-24),
+              var(--lg-drop), 0 0 22px -6px var(--ob-accent-glow);
+}
