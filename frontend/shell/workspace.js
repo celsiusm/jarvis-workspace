@@ -3579,7 +3579,7 @@ async function _chatStream(body, pid, signal) {
       } else if (ev.type === 'reinicio') {
         acumulado = '';          // mensaje nuevo del asistente: no duplicar el texto
       } else if (ev.type === 'contexto') {
-        if (ev.bloques?.length) estado(`${_sbT('Mirando')}: ${ev.bloques.join(' · ')}`);
+        if (ev.bloques?.length) estado(`${_sbT('Mirando')}: ${ev.bloques.map(_sbT).join(' · ')}`);
       } else if (ev.type === 'progreso') {
         estado(_textoProgreso(ev));
       } else if (ev.type === 'done') {
