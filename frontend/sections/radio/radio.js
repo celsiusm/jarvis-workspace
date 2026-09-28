@@ -844,46 +844,55 @@
 
     // Popover + catcher (colgados de <body>)
     const pop = document.createElement('div'); pop.className = 'jr-pop'; pop.id = 'jarvis-radio-pop';
+    // Diseño "Vinilo Aurora": arriba el DECK (lo que suena: disco que gira,
+    // aura con la carátula, progreso, transporte y volumen); abajo la
+    // BIBLIOTECA (fuente, buscador, pestañas y listas). Los ids son el contrato
+    // con la lógica de abajo y con spotify.js — no renombrar.
     pop.innerHTML =
-      `<div class="jr-card"><div class="jr-inner">
-        <div class="jr-head"><span class="jr-mark">${svg('radio')}</span>
-          <span class="jr-title">Radio <span class="jr-livewrap" id="jr-live" hidden><span class="jr-eq on"><i></i><i></i><i></i></span> EN VIVO</span></span>
+      `<div class="jr-card"><div class="jr-amb" id="jr-amb" aria-hidden="true"></div><div class="jr-inner">
+        <div class="jr-head">
+          <span class="jr-mark">${svg('radio')}</span>
+          <span class="jr-title"><b>Radio</b> <span class="jr-livewrap" id="jr-live" hidden><span class="jr-eq on"><i></i><i></i><i></i></span> EN VIVO</span></span>
           <button class="jr-ibtn" id="jr-min" title="Minimizar">${svg('chevup')}</button>
           <button class="jr-ibtn" id="jr-close" title="Cerrar">${svg('close')}</button></div>
-        <div class="jr-src" id="jr-src"></div>
-        <div class="jr-src-hints" id="jr-src-hints" hidden></div>
-        <!-- Subida de música (card SOLO con fuente local activa): entre los
-             hints y la lista. El input file es ÚNICO (vive acá desde el montaje;
-             la fila de pills NO lo duplica). -->
-        <div class="jr-upload" id="jr-upload" hidden>
-          <button type="button" id="jr-upload-btn">${_upIco()} ${_t('Subir música')}</button>
-          <span class="jr-upload-note">${_t('Los archivos van a data/music')}</span>
-          <input type="file" multiple accept="audio/*" id="jr-src-file" hidden>
-        </div>
-        <label class="jr-search"><span>${svg('search')}</span><input id="jr-q" placeholder="Buscá música o pegá un link de YouTube…" spellcheck="false" autocomplete="off"></label>
-        <div class="jr-now" id="jr-now"></div>
-        <div class="jr-transport" id="jr-transport"></div>
-        <div class="jr-seek" id="jr-seek">
-          <span class="jr-seek-t" id="jr-seek-cur">0:00</span>
-          <div class="jr-seek-bar" id="jr-seek-bar" role="slider" aria-label="Progreso" tabindex="0"><div class="jr-seek-fill" id="jr-seek-fill"></div><div class="jr-seek-knob" id="jr-seek-knob"></div><span class="jr-seek-bub" id="jr-seek-bub">0:00</span></div>
-          <span class="jr-seek-t r" id="jr-seek-tot">0:00</span>
-        </div>
-        <div class="jr-vol" id="jr-vol">
-          <span class="jr-vol-l"><button class="jr-vol-btn" id="jr-vol-btn" type="button" title="Silenciar" aria-label="Silenciar">${svg('volume')}</button></span>
-          <div class="jr-vol-el" id="jr-vol-el" role="slider" aria-label="Volumen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="80" tabindex="0">
-            <div class="jr-vol-stretch" id="jr-vol-stretch"><div class="jr-vol-track"><div class="jr-vol-fill" id="jr-vol-fill"></div></div></div>
+        <section class="jr-deck" aria-label="Reproduciendo">
+          <div class="jr-now" id="jr-now"></div>
+          <div class="jr-seek" id="jr-seek">
+            <div class="jr-seek-bar" id="jr-seek-bar" role="slider" aria-label="Progreso" tabindex="0"><div class="jr-seek-fill" id="jr-seek-fill"></div><div class="jr-seek-knob" id="jr-seek-knob"></div><span class="jr-seek-bub" id="jr-seek-bub">0:00</span></div>
+            <div class="jr-seek-times"><span class="jr-seek-t" id="jr-seek-cur">0:00</span><span class="jr-seek-t r" id="jr-seek-tot">0:00</span></div>
           </div>
-          <span class="jr-vol-pct" id="jr-vol-pct">80</span>
-        </div>
-        <div id="jr-browse">
-          <div class="jr-seg" id="jr-seg"><button class="on" data-p="rel">Relacionados</button><button data-p="q">Cola</button><button data-p="st">Estaciones</button></div>
-          <div class="jr-scroll">
-            <div class="jr-pane" id="jr-pane-rel"><div class="jr-hint">Poné algo a sonar y te muestro relacionados.</div></div>
-            <div class="jr-pane" id="jr-pane-q" hidden></div>
-            <div class="jr-pane jr-stations" id="jr-pane-st" hidden></div>
+          <div class="jr-transport" id="jr-transport"></div>
+          <div class="jr-vol" id="jr-vol">
+            <span class="jr-vol-l"><button class="jr-vol-btn" id="jr-vol-btn" type="button" title="Silenciar" aria-label="Silenciar">${svg('volume')}</button></span>
+            <div class="jr-vol-el" id="jr-vol-el" role="slider" aria-label="Volumen" aria-valuemin="0" aria-valuemax="100" aria-valuenow="80" tabindex="0">
+              <div class="jr-vol-stretch" id="jr-vol-stretch"><div class="jr-vol-track"><div class="jr-vol-fill" id="jr-vol-fill"></div></div></div>
+            </div>
+            <span class="jr-vol-pct" id="jr-vol-pct">80</span>
           </div>
-        </div>
-        <div class="jr-channel" id="jr-channel" hidden></div>
+        </section>
+        <section class="jr-lib" aria-label="Biblioteca">
+          <div class="jr-lib-top">
+            <div class="jr-src" id="jr-src" role="tablist" aria-label="Fuente"></div>
+            <label class="jr-search"><span>${svg('search')}</span><input id="jr-q" placeholder="Buscá música o pegá un link de YouTube…" spellcheck="false" autocomplete="off"></label>
+          </div>
+          <div class="jr-src-hints" id="jr-src-hints" hidden></div>
+          <!-- Subida de música (SOLO con fuente local activa). El input file es
+               ÚNICO (vive acá desde el montaje; la fila de fuentes NO lo duplica). -->
+          <div class="jr-upload" id="jr-upload" hidden>
+            <button type="button" id="jr-upload-btn">${_upIco()} ${_t('Subir música')}</button>
+            <span class="jr-upload-note">${_t('Los archivos van a data/music')}</span>
+            <input type="file" multiple accept="audio/*" id="jr-src-file" hidden>
+          </div>
+          <div id="jr-browse">
+            <div class="jr-seg" id="jr-seg"><button class="on" data-p="rel">Relacionados</button><button data-p="q">Cola</button><button data-p="st">Estaciones</button></div>
+            <div class="jr-scroll">
+              <div class="jr-pane" id="jr-pane-rel"><div class="jr-hint">Poné algo a sonar y te muestro relacionados.</div></div>
+              <div class="jr-pane" id="jr-pane-q" hidden></div>
+              <div class="jr-pane jr-stations" id="jr-pane-st" hidden></div>
+            </div>
+          </div>
+          <div class="jr-channel" id="jr-channel" hidden></div>
+        </section>
       </div></div>`;
     document.body.appendChild(pop);
     const catcher = document.createElement('div'); catcher.className = 'jr-catch'; catcher.id = 'jarvis-radio-catch';
@@ -1025,7 +1034,14 @@
     const now = $('#jr-now'); if (!now) return;
     const t = _state && _state.track, son = _state && _state.sonando;
     const live = $('#jr-live'); if (live) live.hidden = !(t && son);
-    if (!t) { now.classList.remove('playing'); now.innerHTML = `<span class="jr-art ghost"></span><span class="jr-ninfo"><span class="jr-eyebrow">Lista para sonar</span><span class="jr-ntitle">Nada sonando todavía.</span></span>`; _renderTransport(); return; }
+    _renderAura(t);
+    if (!t) {
+      now.classList.remove('playing');
+      now.innerHTML = `<span class="jr-disc ghost" aria-hidden="true"><span class="jr-disc-label"></span></span>`
+        + `<span class="jr-ninfo"><span class="jr-eyebrow">Lista para sonar</span><span class="jr-ntitle">Nada sonando todavía.</span>`
+        + `<span class="jr-nsub">Buscá música o elegí una estación.</span></span>`;
+      _renderTransport(); return;
+    }
     const fid = _fuenteDe(t);
     const fu = _fuentes[fid];
     const nomFuente = _etiquetaFuente(fu);
@@ -1037,8 +1053,14 @@
     const chipFuente = fid === 'youtube'
       ? (v ? `<span class="jr-chip">${svg('eye')}<b>${_esc(v)}</b></span>` : `<span class="jr-chip">${svg('eye')}<b>YouTube</b></span>`)
       : `<span class="jr-chip">${svg('note')}<b>${_esc(nomFuente)}</b></span>`;
+    // Disco: la carátula recortada en círculo, con surcos y etiqueta central;
+    // gira mientras suena (solo transform → compositor). El brazo del
+    // tocadiscos baja sobre el disco al sonar.
     now.innerHTML =
-      `<span class="jr-art">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}${viz(!!son)}</span>`
+      `<span class="jr-disc" aria-hidden="true">`
+      + `<span class="jr-disc-vinyl">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}<span class="jr-disc-grooves"></span></span>`
+      + `<span class="jr-disc-label">${viz(!!son)}</span>`
+      + `<span class="jr-arm"><i></i></span></span>`
       + `<span class="jr-ninfo"><span class="jr-eyebrow">Reproduciendo</span>`
       + `<span class="jr-ntitle">${_esc(t.titulo)}</span>`
       + chanlink
@@ -1050,6 +1072,19 @@
     _renderTransport();
   }
   function chip(ic, val) { return `<span class="jr-chip">${svg(ic)}<b>${_esc(val)}</b></span>`; }
+
+  // Aura: la carátula de lo que suena, desenfocada y saturada, detrás de todo
+  // el popover — cada tema pinta la Radio con sus propios colores. Solo se
+  // re-arma cuando cambia la carátula (no en cada tick del progreso).
+  let _auraSrc = null;
+  function _renderAura(t) {
+    const amb = $('#jr-amb'); if (!amb) return;
+    const src = (t && t.thumb) || '';
+    if (src === _auraSrc) return;
+    _auraSrc = src;
+    amb.innerHTML = src ? `<img src="${_esc(src)}" alt="" onerror="this.remove()">` : '';
+    amb.classList.toggle('on', !!src);
+  }
 
   // Waveform de música: 28 barras que "bailan" con fase orgánica (senoidal, sin
   // random → estable) mientras suena; en pausa se aquietan a una línea baja.
@@ -1094,7 +1129,8 @@
   // ── Render: filas / cola / estaciones ──
   function _filaHTML(t, i) {
     return `<button class="jr-row${_state && _state.track && _state.track.id === t.id ? ' activa' : ''}" data-i="${i}" data-vid="${_esc(t.id)}">`
-      + `<span class="jr-thumb">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}${t.dur ? `<span class="jr-dur${/live|vivo/i.test(t.dur) ? ' live' : ''}">${_esc(t.dur)}</span>` : ''}</span>`
+      + `<span class="jr-thumb">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}${t.dur ? `<span class="jr-dur${/live|vivo/i.test(t.dur) ? ' live' : ''}">${_esc(t.dur)}</span>` : ''}`
+      + `<span class="jr-thumb-play" aria-hidden="true">${svg('play')}</span><span class="jr-thumb-eq" aria-hidden="true"><i></i><i></i><i></i></span></span>`
       + `<span class="jr-rmeta"><b>${_esc(t.titulo)}</b><span class="s">${_esc(t.canal)}${_vistas(t) ? ' · ' + _esc(_vistas(t)) : ''}</span></span>`
       + `<span class="jr-add" title="Agregar a la cola" data-add="${i}">${svg('addq')}</span></button>`;
   }
@@ -1264,7 +1300,7 @@
     const r = RY(); const viene = r ? r.loQueViene(_pl) : [];
     if (!viene.length) { box.innerHTML = '<div class="jr-hint">La cola está vacía. Se llena sola con los relacionados de lo que suena.</div>'; return; }
     box.innerHTML = viene.map((t, i) =>
-      `<div class="jr-qrow" data-i="${i}"><span class="jr-art jr-qart">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}</span>`
+      `<div class="jr-qrow" data-i="${i}"><span class="jr-qn">${i + 1}</span><span class="jr-art jr-qart">${t.thumb ? `<img src="${_esc(t.thumb)}" alt="" onerror="this.remove()">` : ''}</span>`
       + `<span class="jr-rmeta"><b>${_esc(t.titulo)}</b><span class="s">${_esc(t.canal)}</span></span>`
       + `<span class="jr-qdur">${_esc(t.dur || '')}</span></div>`).join('');
   }
@@ -1276,7 +1312,8 @@
   function _renderEstaciones() {
     const box = $('#jr-pane-st'); if (!box) return; const r = RY(); if (!r) return;
     box.innerHTML = r.ESTACIONES.map((e) =>
-      `<button class="jr-station jr-st-${e.id}" data-q="${_esc(e.q)}"><span class="jr-st-name">${_esc(e.nombre)}</span><span class="jr-st-tag">${_esc(ST_META[e.id] || '')}</span></button>`).join('');
+      `<button class="jr-station jr-st-${e.id}" data-q="${_esc(e.q)}"><span class="jr-st-on" aria-hidden="true">${svg('play')}</span>`
+      + `<span class="jr-st-txt"><span class="jr-st-name">${_esc(e.nombre)}</span><span class="jr-st-tag">${_esc(ST_META[e.id] || '')}</span></span></button>`).join('');
   }
   async function _estacion(q) {
     _setPane('rel');
@@ -1417,12 +1454,20 @@
     if (sc) requestAnimationFrame(() => { sc.scrollTop = snap.scrollTop; });
     return true;
   }
+  // Glifo de cada fuente en su pill (monocromo: toma el color del texto).
+  const _SRC_ICO = {
+    youtube: '<svg viewBox="0 0 24 24"><rect x="2.5" y="5.5" width="19" height="13" rx="4" fill="currentColor" opacity=".22"/><path d="M10 9.2v5.6l4.8-2.8z" fill="currentColor"/></svg>',
+    local: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3.5 7.5a2 2 0 0 1 2-2h4l2 2h7a2 2 0 0 1 2 2v7a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></svg>',
+    spotify: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="9" fill="currentColor" opacity=".18" stroke="none"/><path d="M7.5 9.6c3-1 6.4-.8 9.2.7M8.2 12.5c2.5-.7 5-.5 7.3.7M8.9 15.2c1.9-.5 3.7-.3 5.3.5"/></svg>',
+    _: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="2.2" fill="currentColor"/><path d="M8.6 8.6a4.8 4.8 0 0 0 0 6.8M15.4 8.6a4.8 4.8 0 0 1 0 6.8"/></svg>',
+  };
   function _renderFuentes() {
     _syncPlaceholder();
     const row = $('#jr-src'); if (!row) return;
     let html = _ordenFuentes.map((id) => {
       const fs = _fuentes[id];
-      return `<button type="button" class="jr-src-pill${id === _fuenteActiva ? ' on' : ''}" data-src="${id}" aria-pressed="${id === _fuenteActiva}">${_esc(_etiquetaFuente(fs))}</button>`;
+      return `<button type="button" class="jr-src-pill jr-src-${_esc(id)}${id === _fuenteActiva ? ' on' : ''}" data-src="${id}" aria-pressed="${id === _fuenteActiva}">`
+        + `<span class="jr-src-ico" aria-hidden="true">${_SRC_ICO[id] || _SRC_ICO._}</span>${_esc(_etiquetaFuente(fs))}</button>`;
     }).join('');
     row.innerHTML = html;
     // La subida de música NO vive en la fila de pills: es una card propia que
