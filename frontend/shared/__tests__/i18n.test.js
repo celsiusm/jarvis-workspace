@@ -92,3 +92,13 @@ console.log('origenAtributo ok');
   assert.strictEqual(origenAtributo('Copiar [[a-b]]', 'Copy [[a-b]]', 'en', D, P), 'Copiar [[a-b]]', 'traducido por plantilla: sigue el guardado');
   console.log('origenAtributo + plantillas ok');
 }
+{
+  const { compilarPlantillas } = _pure;
+  const D = { 'hace {t}': '{t} ago', 'en {branch}': 'on {branch}', 'Tarea: {x}': 'Task: {x}' };
+  const P = compilarPlantillas(D);
+  assert.strictEqual(traducir('hace 5 min', 'en', D, P), '5 min ago');
+  assert.strictEqual(traducir('hace falta el login', 'en', D, P), null, 'plantilla corta no pisa texto del usuario');
+  assert.strictEqual(traducir('en el camino', 'en', D, P), null);
+  assert.strictEqual(traducir('Tarea: arreglar el login', 'en', D, P), 'Task: arreglar el login', 'con texto fijo suficiente no pide número');
+  console.log('plantillas cortas ok');
+}

@@ -48,8 +48,12 @@
         else { re += _escRe(trozos[i]); if (trozos[i].length > ancla.length) ancla = trozos[i]; }
       }
       if (!/[A-Za-zÀ-ÿ¿¡]/.test(ancla) || ancla.trim().length < 2) continue;
+      var fijo = k.replace(_RE_MARCA, '').length;
+      // Poco texto fijo ("hace {t}", "en {branch}") = plantilla genérica que
+      // también calzaría con contenido del usuario ("hace falta el login"):
+      // solo vale si cada valor capturado trae un número ("hace 5 min").
       out.push({ clave: k, re: new RegExp(re + '$'), nombres: nombres, ancla: ancla, en: dict[k],
-                 fijo: k.replace(_RE_MARCA, '').length });
+                 fijo: fijo, conNumero: fijo < 6 });
     }
     // Más texto fijo primero: la plantilla más específica gana.
     out.sort(function (a, b) { return b.fijo - a.fijo; });
@@ -71,6 +75,7 @@
       if (k.indexOf(p.ancla) < 0) continue;
       var m = p.re.exec(k);
       if (!m) continue;
+      if (p.conNumero && !m.slice(1).every(function (c) { return /\d/.test(c); })) continue;
       var vals = {};
       for (var j = 0; j < p.nombres.length; j++) {
         var cap = m[j + 1], trc = dict[normalizar(cap)];
