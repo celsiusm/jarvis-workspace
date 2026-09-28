@@ -147,6 +147,14 @@
   const _t = (s) => global.JarvisI18n?.t?.(s) ?? s;
   const ic = (n, s = 14) => (typeof global.icon === 'function' ? global.icon(n, s) : '');
   const PAG_MARKET = 60;
+  // `detalle` llega del backend en español (core/skills_ia.py): 'siempre',
+  // 'modo {m}', 'aplica a {carpeta}/' o un glob. 'modo X' no entra por plantilla
+  // del DOM (poco texto fijo + valor sin dígitos): se traduce acá.
+  const _det = (d) => {
+    const s = String(d ?? '');
+    const m = /^modo (.+)$/.exec(s);
+    return m ? _t('modo {m}').replace('{m}', m[1]) : _t(s);
+  };
 
   const S = {
     root: null, pid: null, hooks: {},
@@ -463,7 +471,7 @@
         <span class="ex-card-d">${esc(it.descripcion || _t('(sin descripción)'))}</span>
         <span class="ex-card-f">
           <code title="${esc(it.path)}">${esc('\u200E' + it.path + '\u200E')}</code>
-          ${it.detalle ? `<span class="ex-det">${esc(it.detalle)}</span>` : ''}
+          ${it.detalle ? `<span class="ex-det">${esc(_det(it.detalle))}</span>` : ''}
           ${tambien.length ? `<span class="ex-also" title="${esc(_t('También lo leen') + ': ' + tambien.map(h => h.label).join(', '))}">${tambien.map(h => marca(h, 13)).join('')}</span>` : ''}
         </span>
       </button>`;
@@ -814,7 +822,7 @@
           ${fila('Lo lee', `${marca(h, 14)} ${esc(h.label)}`)}
           ${fila('Tipo', esc(_t((KINDS[it.kind] || { label: it.kind }).label)))}
           ${fila('Alcance', esc(esUsr ? _t('Tu usuario (~/) — aplica a todos tus proyectos') : _t('Este proyecto')))}
-          ${fila('Aplica a', it.detalle ? `<code>${esc(it.detalle)}</code>` : '')}
+          ${fila('Aplica a', it.detalle ? `<code>${esc(_det(it.detalle))}</code>` : '')}
           ${fila('También lo leen', tambien.map(t => `<span class="ex-d-also">${marca(t, 14)} ${esc(t.label)}</span>`).join(''))}
           ${fila('Tamaño', esc(_fmtBytes(it.bytes)))}
         </dl>

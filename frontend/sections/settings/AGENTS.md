@@ -31,7 +31,7 @@ new blocks.
 | Appearance | `apariencia` | Live test bench + the 24 themes as **spectrum** + tonality + language |
 | Accounts | `cuentas` | **Switchboard**: one CLI per row, its accounts as buttons of a selector |
 | Extensions | `skills` | Extensions studio (`extensions.js` + `extensions.css`): readers map per AI, skills/rules of every AI, Claude plugins + marketplace, side drawer |
-| Memory | `memoria` | **Console**: pulse, altimeter, boxes per category, recent, lessons |
+| Memory | `memoria` | **Not a settings page**: the nav item (and `open('memoria')`) closes Settings and opens the Memory panel (`JarvisMemory.abrir()`). The old console — pulse, altimeter, boxes per category, recent, lessons — lives in the panel's **Resumen** tab |
 | Workflows | `workflows` | Timeline with the step track |
 
 The rail shows the **live value** of each section (the key, the theme, how many

@@ -29,14 +29,62 @@
 
   function normalizar(s) { return (s == null ? '' : String(s)).replace(/\s+/g, ' ').trim(); }
 
-  // PURA: traducción de una frase a `lang` contra `dict`, o null si no aplica
-  // (idioma es, frase vacía, sin entrada, o traducción == original).
-  function traducir(texto, lang, dict) {
+  // PURA: compila las claves con {marcadores} del dict a plantillas regex.
+  // Así un texto con valores adentro ("hace 5 min", "Error en Backend: …",
+  // los avisos del backend al chat) se traduce sin que cada sitio del código
+  // tenga que llamar a t() antes de interpolar. Una clave sin texto fijo
+  // ("{a} {b}") se ignora: matchearía cualquier cosa.
+  var _RE_MARCA = /\{([A-Za-z_][\w]*)\}/g;
+  function _escRe(s) { return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+  function compilarPlantillas(dict) {
+    var out = [];
+    for (var k in dict) {
+      if (!Object.prototype.hasOwnProperty.call(dict, k) || k.indexOf('{') < 0) continue;
+      var trozos = k.split(_RE_MARCA);           // [lit, marca, lit, marca, lit…]
+      if (trozos.length < 3) continue;
+      var re = '^', nombres = [], ancla = '';
+      for (var i = 0; i < trozos.length; i++) {
+        if (i % 2) { re += '([\\s\\S]*?)'; nombres.push(trozos[i]); }
+        else { re += _escRe(trozos[i]); if (trozos[i].length > ancla.length) ancla = trozos[i]; }
+      }
+      if (!/[A-Za-zÀ-ÿ¿¡]/.test(ancla) || ancla.trim().length < 2) continue;
+      var fijo = k.replace(_RE_MARCA, '').length;
+      // Poco texto fijo ("hace {t}", "en {branch}") = plantilla genérica que
+      // también calzaría con contenido del usuario ("hace falta el login"):
+      // solo vale si cada valor capturado trae un número ("hace 5 min").
+      out.push({ clave: k, re: new RegExp(re + '$'), nombres: nombres, ancla: ancla, en: dict[k],
+                 fijo: fijo, conNumero: fijo < 6 });
+    }
+    // Más texto fijo primero: la plantilla más específica gana.
+    out.sort(function (a, b) { return b.fijo - a.fijo; });
+    return out;
+  }
+
+  // PURA: traducción de una frase a `lang` contra `dict` (y, si vienen, sus
+  // plantillas compiladas), o null si no aplica (idioma es, frase vacía, sin
+  // entrada, o traducción == original).
+  function traducir(texto, lang, dict, pats) {
     if (lang !== 'en') return null;
     var k = normalizar(texto);
     if (!k) return null;
     var v = dict[k];
-    return (v && v !== k) ? v : null;
+    if (v) return v !== k ? v : null;
+    if (!pats || !pats.length) return null;
+    for (var i = 0; i < pats.length; i++) {
+      var p = pats[i];
+      if (k.indexOf(p.ancla) < 0) continue;
+      var m = p.re.exec(k);
+      if (!m) continue;
+      if (p.conNumero && !m.slice(1).every(function (c) { return /\d/.test(c); })) continue;
+      var vals = {};
+      for (var j = 0; j < p.nombres.length; j++) {
+        var cap = m[j + 1], trc = dict[normalizar(cap)];
+        vals[p.nombres[j]] = (trc && cap.trim()) ? cap.replace(normalizar(cap), trc) : cap;
+      }
+      var r = String(p.en).replace(_RE_MARCA, function (x, n) { return (n in vals) ? vals[n] : x; });
+      return r !== k ? r : null;
+    }
+    return null;
   }
 
   // PURA: parte un valor de texto en (pre-espacios, núcleo, post-espacios) para
@@ -52,9 +100,9 @@
   // el botón Enviar que pasa a Detener): ese es el nuevo original. Antes se
   // restauraba siempre el guardado y ningún aria-label/title dinámico
   // sobrevivía en inglés.
-  function origenAtributo(guardado, actual, lang, dict) {
+  function origenAtributo(guardado, actual, lang, dict, pats) {
     if (guardado == null) return actual;
-    if (actual === guardado || actual === traducir(guardado, lang, dict)) return guardado;
+    if (actual === guardado || actual === traducir(guardado, lang, dict, pats)) return guardado;
     return actual;
   }
 
@@ -71,6 +119,17 @@
       // ⚙→Apariencia persiste la elección y desde entonces manda él.
       return 'en';
     })();
+    var _pats = null;          // plantillas compiladas (null = recompilar)
+    var _cache = new Map();    // frase -> traducción|null (se vacía al agregar)
+    function _tr(s) {
+      if (_lang !== 'en') return null;
+      if (_cache.has(s)) return _cache.get(s);
+      if (!_pats) _pats = compilarPlantillas(DICT);
+      var r = traducir(s, 'en', DICT, _pats);
+      if (_cache.size > 4000) _cache.clear();
+      _cache.set(s, r);
+      return r;
+    }
     var WM_TXT = new WeakMap();   // textNode -> nodeValue original (es)
     var WM_ATTR = new WeakMap();  // element  -> { attr: valorOriginal }
     var _obs = null;
@@ -97,7 +156,7 @@
       var orig = WM_TXT.has(node) ? WM_TXT.get(node) : node.nodeValue;
       if (_lang === 'en') {
         var p = partes(orig);
-        var tr = traducir(p.core, 'en', DICT);
+        var tr = _tr(p.core);
         if (tr != null) {
           if (!WM_TXT.has(node)) WM_TXT.set(node, orig);
           var nuevo = p.pre + tr + p.post;
@@ -116,10 +175,11 @@
         if (!el.hasAttribute(a)) continue;
         var guard = WM_ATTR.get(el) || {};
         var actual = el.getAttribute(a);
-        var orig = origenAtributo((a in guard) ? guard[a] : null, actual, 'en', DICT);
+        if (!_pats) _pats = compilarPlantillas(DICT);
+        var orig = origenAtributo((a in guard) ? guard[a] : null, actual, 'en', DICT, _pats);
         if ((a in guard) && orig !== guard[a]) delete guard[a];   // lo cambió la app
         if (_lang === 'en') {
-          var tr = traducir(orig, 'en', DICT);
+          var tr = _tr(orig);
           if (tr != null) {
             if (!(a in guard)) { guard[a] = orig; WM_ATTR.set(el, guard); }
             if (actual !== tr) el.setAttribute(a, tr);
@@ -181,7 +241,7 @@
     }
 
     function t(esFrase) {
-      var tr = traducir(esFrase, _lang, DICT);
+      var tr = _tr(esFrase);
       return tr != null ? tr : esFrase;
     }
 
@@ -194,11 +254,14 @@
     else init();
 
     var api = {
-      _pure: { traducir: traducir, normalizar: normalizar, partes: partes, origenAtributo: origenAtributo },
+      _pure: { traducir: traducir, normalizar: normalizar, partes: partes, origenAtributo: origenAtributo, compilarPlantillas: compilarPlantillas },
       t: t, setLang: setLang, aplicar: aplicar,
       lang: function () { return _lang; },
       DICT: DICT,
-      agregar: function (mas) { for (var k in mas) if (mas.hasOwnProperty(k)) DICT[normalizar(k)] = mas[k]; },
+      agregar: function (mas) {
+        for (var k in mas) if (mas.hasOwnProperty(k)) DICT[normalizar(k)] = mas[k];
+        _pats = null; _cache.clear();
+      },
     };
     // El IIFE externo asigna root.JarvisI18n = factory(); acá solo retornamos
     // (la factory no tiene `root` en su scope — referirlo tiraba ReferenceError).
@@ -207,7 +270,7 @@
 
   // ── Export para Node (tests de la lógica pura) ─────────────────────────────
   return {
-    _pure: { traducir: traducir, normalizar: normalizar, partes: partes, origenAtributo: origenAtributo },
+    _pure: { traducir: traducir, normalizar: normalizar, partes: partes, origenAtributo: origenAtributo, compilarPlantillas: compilarPlantillas },
     DICT: DICT,
   };
 }));

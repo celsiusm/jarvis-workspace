@@ -67,6 +67,24 @@ of its `<link>`/`<script>` in `shell/workspace.html` (or `index.html` for home).
 - **Accent/backgrounds**: ONLY via `var(--ob-*)` in `tokens.css`, including theme overrides
   under `[data-theme=<name>]`. Never hardcode hex in new sections.
 
+## Language (i18n ES⇆EN)
+
+The UI is authored in Spanish; `shared/i18n.js` translates the DOM at runtime against
+`shared/i18n-dict.js` (+ `JarvisI18n.agregar({...})` tables a module registers itself).
+Every new visible text needs its entry — with English on, nothing may stay in Spanish.
+- Text nodes and `title`/`placeholder`/`aria-label` are matched whole (whitespace
+  collapsed). Dynamic texts use **templates**: `"hace {t}": "{t} ago"` matches
+  "hace 5 min". Same markers on both sides (`shared/__tests__/i18n-dict.test.js` checks
+  it). A template with <6 fixed chars only matches when every captured value has a digit
+  (so "hace {t}" never rewrites user text like "hace falta…").
+- The engine never sees: xterm content (`term.write`), `.monaco-editor`, textarea
+  content, canvas, `[data-i18n-skip]`, `document.title`, OS notifications, TTS, text
+  sent to the backend. There, call `JarvisI18n.t('frase {x}').replace('{x}', v)`.
+- Text born on the SERVER and shown as-is (chat notices, workflow close, orchestrator
+  reply) is localized there with `plotspace.core.idioma_ui.L(es, en)`; the frontend
+  reports the UI language via presence and each chat request. Plain error `detail`s
+  just need a dict entry.
+
 ## Rules
 - No frameworks, npm or node as runtime dependency.
 - Each section exposes one global and consumes only the public surface of the others

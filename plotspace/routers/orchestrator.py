@@ -16,6 +16,8 @@ from pydantic import BaseModel
 
 from plotspace.core.database import get_db
 from plotspace.core import logs as _logs
+from plotspace.core import idioma_ui
+from plotspace.core.idioma_ui import L
 from plotspace.core.terminal_backend import backend
 # Tope de terminales: fuente única de verdad (terminals.py no importa este
 # módulo a nivel top-level, así que el import es acíclico). Antes el orquestador
@@ -125,7 +127,9 @@ REGLAS:
        Bien: "¿Postgres o SQLite?"
   • Si la duda es razonable, ASUMÍ lo más común del stack y avisá en una
     línea: "Asumo pytest. Decime si querés otro framework."
-  • Idioma: respondé en el mismo idioma que el usuario (default español).
+  • Idioma: respondé en el idioma que indica el bloque [Idioma] (es el de la
+    interfaz que eligió el usuario — todo lo demás de la app está en ese
+    idioma). Sin bloque: el mismo idioma que el usuario.
 
 ══════════════════════════════════════════════════════════════════════
 MANEJO DE ERRORES Y BLOQUEOS
@@ -363,6 +367,16 @@ reusadas antes de spawnear.
 
 # ─── Modelos ───────────────────────────────────────────────────────────────────
 
+def _bloque_idioma() -> str:
+    """Directiva de idioma por turno (no en el SYSTEM_PROMPT: así el prompt
+    fijo sigue siendo cacheable y el cambio de idioma aplica al instante)."""
+    if idioma_ui.actual() == 'en':
+        return ("[Idioma]\nEnglish — the user's interface is in English: write your "
+                "`message` in English (address the user as \"sir\"). Tasks for the "
+                "agents can stay in whatever language fits the project.")
+    return "[Idioma]\nEspañol — la interfaz del usuario está en español: tu `message` va en español."
+
+
 class ChatRequest(BaseModel):
     project_id: int
     message: str
@@ -372,6 +386,9 @@ class ChatRequest(BaseModel):
     # los tiene para pintar el chat; mandarlos da memoria conversacional real.
     # Untrusted: se sanean server-side en _mensajes_con_historial.
     historial: Optional[list] = None
+    # Idioma de la interfaz ('es'|'en'): el orquestador responde en ese idioma
+    # y los avisos que arma el server también (core/idioma_ui).
+    lang: Optional[str] = None
 
 
 class HistorialThread(BaseModel):
@@ -742,7 +759,9 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
     # 'tarea', pero podrían faltar pasos enteros que no llegaron a aparecer.)
     if stop_reason == "max_tokens" and workflow_data:
         workflow_data = None
-        jarvis_message = (jarvis_message + " (me corté por longitud, señor — repetime la orden más acotada).").strip()
+        jarvis_message = (jarvis_message + L(
+            " (me corté por longitud, señor — repetime la orden más acotada).",
+            " (I got cut off by length, sir — give me the order again, narrower).")).strip()
 
     created_terminals = []
     closed_all        = False
@@ -771,10 +790,12 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
             if trabajando:
                 # Guard: hay agentes a mitad de tarea → no se cerró NADA (todo-o-
                 # nada) y closed_all queda False (true borra TODAS las cards).
-                jarvis_message = (jarvis_message + " ⚠️ No cerré nada: " +
-                                  ", ".join(trabajando) +
-                                  " está(n) trabajando ahora mismo. Si igual querés "
-                                  "cerrarlas, repetime la orden.").strip()
+                jarvis_message = (jarvis_message + L(
+                    " ⚠️ No cerré nada: {q} está(n) trabajando ahora mismo. Si igual "
+                    "querés cerrarlas, repetime la orden.",
+                    " ⚠️ I didn't close anything: {q} is/are working right now. If you "
+                    "still want them closed, repeat the order.",
+                ).replace('{q}', ", ".join(trabajando))).strip()
             else:
                 _detener_preview_si_existe(req.project_id)
                 closed_all = True
@@ -784,7 +805,8 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
             if tid:
                 motivo = await _cerrar_terminal(tid, req.project_id)
                 if motivo:
-                    jarvis_message = (jarvis_message + f" ⚠️ Ojo: {motivo}.").strip()
+                    jarvis_message = (jarvis_message + L(f" ⚠️ Ojo: {motivo}.",
+                                                         f" ⚠️ Heads up: {motivo}.")).strip()
 
         elif atype == "stop_preview":
             _detener_preview_si_existe(req.project_id)
@@ -813,8 +835,9 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
                 except Exception as e:
                     print(f'[enviar_prompt] sin estado vivo de #{tid}: {e}')
             if motivo:
-                jarvis_message = (jarvis_message +
-                                  f" ⚠️ No envié el prompt: {motivo}.").strip()
+                jarvis_message = (jarvis_message + L(
+                    f" ⚠️ No envié el prompt: {motivo}.",
+                    f" ⚠️ I didn't send the prompt: {motivo}.")).strip()
             else:
                 texto = action['prompt'].strip()
                 if es_respuesta:
@@ -822,9 +845,11 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
                 else:
                     ok = await send_to_agent(tid, texto + _cierre_prompt_directo(tid))
                 if ok is False:
-                    jarvis_message = (jarvis_message + f" ⚠️ No pude entregar el "
-                                      f"prompt a la terminal #{tid} (su sesión "
-                                      "no responde).").strip()
+                    jarvis_message = (jarvis_message + L(
+                        f" ⚠️ No pude entregar el prompt a la terminal #{tid} (su "
+                        "sesión no responde).",
+                        f" ⚠️ I couldn't deliver the prompt to terminal #{tid} (its "
+                        "session isn't responding).")).strip()
                 else:
                     _logs.evento('prompt_directo', terminal_id=tid,
                                  project_id=req.project_id,
@@ -919,7 +944,7 @@ async def _auto_intervenir(project_id: int, wf_nombre: str, paso_idx: int,
             raw, usage, project, req, terminals_activas, stop_reason=stop)
         await broadcaster.broadcast(project_id, {
             "type":    "orquestador_mensaje",
-            "message": f"🤖 Auto-intervención: {res['response']}",
+            "message": L("🤖 Auto-intervención: ", "🤖 Auto-intervention: ") + res['response'],
         })
         _logs.evento('auto_intervencion', project_id=project_id, paso=paso_idx,
                      evento=evento, workflow=wf_nombre)
@@ -968,15 +993,17 @@ def _validar_enviar_prompt(action: dict, activas_ids: set, ocupadas: set):
         try:
             tid = int(tid)
         except (TypeError, ValueError):
-            return None, 'falta un terminal_id válido'
+            return None, L('falta un terminal_id válido', 'a valid terminal_id is missing')
     prompt = action.get('prompt')
     if not isinstance(prompt, str) or not prompt.strip():
-        return None, f'falta el prompt para la terminal #{tid}'
+        return None, L(f'falta el prompt para la terminal #{tid}',
+                       f'the prompt for terminal #{tid} is missing')
     if tid not in activas_ids:
-        return None, f'la terminal #{tid} no está activa en este proyecto'
+        return None, L(f'la terminal #{tid} no está activa en este proyecto',
+                       f'terminal #{tid} is not active in this project')
     if tid in ocupadas:
-        return None, (f'la terminal #{tid} está ocupada con un paso de '
-                      'workflow en curso')
+        return None, L(f'la terminal #{tid} está ocupada con un paso de workflow en curso',
+                       f'terminal #{tid} is busy with a running workflow step')
     return tid, None
 
 
@@ -987,10 +1014,13 @@ def _motivo_rechazo_envio(info: dict, es_respuesta: bool) -> str:
     if info.get('estado') in ('caido', 'sin_sesion'):
         return motivo_no_libre(info)
     if es_respuesta:
-        return '' if info.get('esperando') else 'no tiene ninguna pregunta en pantalla'
+        return '' if info.get('esperando') else L('no tiene ninguna pregunta en pantalla',
+                                                   'it has no question on screen')
     if info.get('esperando'):
-        return ('tiene una pregunta en pantalla esperando respuesta — contestala '
-                'con es_respuesta o avisale al usuario')
+        return L('tiene una pregunta en pantalla esperando respuesta — contestala '
+                 'con es_respuesta o avisale al usuario',
+                 'it has a question on screen waiting for an answer — answer it '
+                 'with es_respuesta or tell the user')
     return motivo_no_libre(info)
 
 
@@ -1111,8 +1141,10 @@ def _guard_api_key() -> str:
     if not api_key:
         raise HTTPException(status_code=409, detail={
             "error": "no_api_key",
-            "message": "Configurá ANTHROPIC_API_KEY (plotspace/.env) para usar el chat "
-                       "de Jarvis. Los agentes en terminales (BYOK) no la necesitan.",
+            "message": L("Configurá ANTHROPIC_API_KEY (plotspace/.env) para usar el chat "
+                         "de Jarvis. Los agentes en terminales (BYOK) no la necesitan.",
+                         "Set ANTHROPIC_API_KEY (plotspace/.env) to use the Jarvis chat. "
+                         "Agents in terminals (BYOK) don't need it."),
         })
     return api_key
 
@@ -1195,6 +1227,8 @@ async def _preparar_contexto_chat(req):
     """Contexto COMPARTIDO por /chat y /chat-stream: trae el proyecto + terminales,
     arma el prompt con contexto, valida la API key y devuelve el cliente Anthropic.
     Lanza HTTPException 404/500 igual que antes (sin cambios de comportamiento)."""
+    if getattr(req, 'lang', None):
+        idioma_ui.fijar(req.lang)
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -1258,6 +1292,7 @@ async def _preparar_contexto_chat(req):
     if mem_str:
         bloques.append(mem_str)
 
+    bloques.append(_bloque_idioma())
     bloques.append(f"[Orden]\n{req.message}")
     msg_con_ctx = "\n\n".join(bloques)
 
@@ -1324,9 +1359,12 @@ def _guard_cli():
     if not shutil.which('claude'):
         raise HTTPException(status_code=409, detail={
             "error": "no_cli",
-            "message": "El orquestador corre con tu suscripción de Claude vía "
-                       "el CLI `claude`, pero no lo encuentro en el PATH. "
-                       "Instalalo y logueá tu cuenta (o usá ORQUESTADOR_MOTOR=api).",
+            "message": L("El orquestador corre con tu suscripción de Claude vía "
+                         "el CLI `claude`, pero no lo encuentro en el PATH. "
+                         "Instalalo y logueá tu cuenta (o usá ORQUESTADOR_MOTOR=api).",
+                         "The orchestrator runs on your Claude subscription through "
+                         "the `claude` CLI, but I can't find it in PATH. "
+                         "Install it and log in (or use ORQUESTADOR_MOTOR=api)."),
         })
 
 
@@ -1380,7 +1418,7 @@ async def chat_orquestador(req: ChatRequest):
         try:
             raw_text, usage, stop = await _consultar_cli(mensajes, project)
         except OrqCliError as e:
-            raise HTTPException(status_code=502, detail=f"Orquestador (suscripción): {e}")
+            raise HTTPException(status_code=502, detail=L("Orquestador (suscripción): ", "Orchestrator (subscription): ") + str(e))
         return await _procesar_respuesta_orquestador(
             raw_text, usage, project, req, terminals_activas, stop_reason=stop)
 
@@ -1394,9 +1432,9 @@ async def chat_orquestador(req: ChatRequest):
         )
         raw_text = _texto_respuesta(response)
     except anthropic.AuthenticationError:
-        raise HTTPException(status_code=401, detail="ANTHROPIC_API_KEY inválida")
+        raise HTTPException(status_code=401, detail=L("ANTHROPIC_API_KEY inválida", "Invalid ANTHROPIC_API_KEY"))
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Error Claude API: {e}")
+        raise HTTPException(status_code=502, detail=L("Error de la API de Claude: ", "Claude API error: ") + str(e))
 
     # Post-procesado (parse JSON + ejecutar actions/workflow + uso + STATE.md) en un
     # helper COMPARTIDO con /chat-stream, así no hay drift en la lógica crítica.
@@ -1452,11 +1490,11 @@ async def chat_orquestador_stream(req: ChatRequest):
                     elif ev['tipo'] == 'resultado':
                         resultado = ev
             except orq_cli.OrqCliError as e:
-                yield sse({"type": "error", "detail": f"Orquestador (suscripción): {e}"})
+                yield sse({"type": "error", "detail": L("Orquestador (suscripción): ", "Orchestrator (subscription): ") + str(e)})
                 return
             if resultado is None or resultado['error']:
                 yield sse({"type": "error",
-                           "detail": "el CLI terminó sin resultado utilizable"})
+                           "detail": L("el CLI terminó sin resultado utilizable", "the CLI finished without a usable result")})
                 return
             usage_cli = SimpleNamespace(input_tokens=resultado['input_tokens'],
                                         output_tokens=resultado['output_tokens'])
@@ -1468,7 +1506,7 @@ async def chat_orquestador_stream(req: ChatRequest):
                     resultado['texto'], usage_cli, project, req,
                     terminals_activas, stop_reason='end_turn')))
             except Exception as e:
-                yield sse({"type": "error", "detail": f"Error procesando la respuesta: {e}"})
+                yield sse({"type": "error", "detail": L("Error procesando la respuesta: ", "Error processing the response: ") + str(e)})
                 return
             yield sse({"type": "done", **res})
             return
@@ -1498,10 +1536,10 @@ async def chat_orquestador_stream(req: ChatRequest):
                 stop = getattr(final, "stop_reason", None)
                 raw = _texto_respuesta(final)
         except anthropic.AuthenticationError:
-            yield sse({"type": "error", "detail": "ANTHROPIC_API_KEY inválida"})
+            yield sse({"type": "error", "detail": L("ANTHROPIC_API_KEY inválida", "Invalid ANTHROPIC_API_KEY")})
             return
         except Exception as e:
-            yield sse({"type": "error", "detail": f"Error Claude API: {e}"})
+            yield sse({"type": "error", "detail": L("Error de la API de Claude: ", "Claude API error: ") + str(e)})
             return
 
         # Ejecutar actions/workflow + uso + STATE.md (idéntico a /chat).
@@ -1509,7 +1547,7 @@ async def chat_orquestador_stream(req: ChatRequest):
             resultado = await asyncio.shield(_en_fondo(_procesar_respuesta_orquestador(
                 raw, usage, project, req, terminals_activas, stop_reason=stop)))
         except Exception as e:
-            yield sse({"type": "error", "detail": f"Error procesando la respuesta: {e}"})
+            yield sse({"type": "error", "detail": L("Error procesando la respuesta: ", "Error processing the response: ") + str(e)})
             return
 
         # Evento final con TODO lo estructurado (el cliente ejecuta/renderiza igual que /chat).
@@ -2434,7 +2472,8 @@ async def procesar_task_event_interno(terminal_id: int, event: str, project_id: 
             detalle = f": {motivo[:300]}" if motivo else ""
             await broadcaster.broadcast(project_id, {
                 "type":    "orquestador_mensaje",
-                "message": f"⚠️ {term_nombre} está bloqueado en el paso {paso_idx + 1}{detalle}. ¿Cómo continuamos?",
+                "message": L(f"⚠️ {term_nombre} está bloqueado en el paso {paso_idx + 1}{detalle}. ¿Cómo continuamos?",
+                             f"⚠️ {term_nombre} is blocked at step {paso_idx + 1}{detalle}. How do we proceed?"),
             })
             # Etapa 5: en vez de quedar esperando al humano, el orquestador se
             # llama solo con el motivo y re-instruye (guardas anti-loop adentro).
@@ -2469,20 +2508,22 @@ async def procesar_task_event_interno(terminal_id: int, event: str, project_id: 
                                             paso_actual=paso_idx)
                     from plotspace.routers.terminals import iniciar_monitor
                     iniciar_monitor(otro, project_id)
-                    detalle = f" Motivo: {motivo[:300]}." if motivo else ""
+                    detalle = (L(" Motivo: ", " Reason: ") + f"{motivo[:300]}.") if motivo else ""
                     await broadcaster.broadcast(project_id, {
                         "type":    "orquestador_mensaje",
-                        "message": f"⚡ Error en {term_nombre}.{detalle} Tarea reasignada al agente #{otro}.",
+                        "message": L(f"⚡ Error en {term_nombre}.{detalle} Tarea reasignada al agente #{otro}.",
+                                     f"⚡ Error in {term_nombre}.{detalle} Task reassigned to agent #{otro}."),
                     })
                 else:
                     pasos[paso_idx]["estado"] = "error"
             if not entregado:
                 wf['estado'] = 'paused'
                 _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
-                detalle = f" Motivo: {motivo[:300]}." if motivo else ""
+                detalle = (L(" Motivo: ", " Reason: ") + f"{motivo[:300]}.") if motivo else ""
                 await broadcaster.broadcast(project_id, {
                     "type":    "orquestador_mensaje",
-                    "message": f"❌ Error en {term_nombre} y no hay otro agente disponible.{detalle} Workflow pausado.",
+                    "message": L(f"❌ Error en {term_nombre} y no hay otro agente disponible.{detalle} Workflow pausado.",
+                                 f"❌ Error in {term_nombre} and no other agent is available.{detalle} Workflow paused."),
                 })
                 # Etapa 5: sin agente para reasignar → que decida el orquestador
                 # (re-instruir con workflow chico, o preguntar UNA cosa).
@@ -2648,15 +2689,18 @@ async def _cerrar_workflow(wf: dict, pasos: list, project_id: int) -> None:
     todos_ok    = all(p.get('estado') == 'done' for p in pasos)
     hubo_review = any(p.get('rol') == 'reviewer' for p in pasos)
     if todos_ok:
-        msg_final = f"Señor, {wf['nombre']} completado en main."
+        msg_final = L(f"Señor, {wf['nombre']} completado en main.",
+                      f"Sir, {wf['nombre']} is complete on main.")
         if hubo_review:
-            msg_final += " Review de calidad: APROBADA."
+            msg_final += L(" Review de calidad: APROBADA.", " Quality review: APPROVED.")
     else:
         fallidos = sum(1 for p in pasos if p.get('estado') in ('blocked', 'error'))
-        msg_final = (f"Señor, {wf['nombre']} terminó con {fallidos} paso(s) "
-                     "bloqueado(s)/con error — revisá el board de tareas antes de dar por bueno el resultado.")
+        msg_final = L(f"Señor, {wf['nombre']} terminó con {fallidos} paso(s) "
+                      "bloqueado(s)/con error — revisá el board de tareas antes de dar por bueno el resultado.",
+                      f"Sir, {wf['nombre']} finished with {fallidos} blocked/failed step(s) — "
+                      "check the task board before trusting the result.")
     if preview_url:
-        msg_final += f" Preview en {preview_url}"
+        msg_final += L(f" Preview en {preview_url}", f" Preview at {preview_url}")
 
     await broadcaster.broadcast(project_id, {
         "type":        "workflow_done",
@@ -3268,21 +3312,26 @@ async def _cerrar_terminal(terminal_id: int, project_id: int = None):
     finally:
         conn.close()
     if fila is None or not fila['activa']:
-        return f"no encontré la terminal #{terminal_id} activa"
+        return L(f"no encontré la terminal #{terminal_id} activa",
+                 f"I couldn't find an active terminal #{terminal_id}")
     if project_id is not None and fila['project_id'] != project_id:
         _logs.evento('cierre_rechazado', nivel='warn', terminal_id=terminal_id,
                      accion='close_terminal', motivo='otro_proyecto',
                      project_id=project_id)
-        return (f"no cerré la terminal #{terminal_id} ({fila['nombre']}): "
-                "pertenece a OTRO proyecto")
+        return L(f"no cerré la terminal #{terminal_id} ({fila['nombre']}): "
+                 "pertenece a OTRO proyecto",
+                 f"I didn't close terminal #{terminal_id} ({fila['nombre']}): "
+                 "it belongs to ANOTHER project")
 
     clave = ('t', terminal_id)
     if _fase_terminal(terminal_id) == 'trabajando' and not _insistencia_cierre(clave):
         _sellar_rechazo_cierre(clave)
         _logs.evento('cierre_rechazado', nivel='warn', terminal_id=terminal_id,
                      accion='close_terminal', motivo='trabajando')
-        return (f"no cerré {fila['nombre']}: está TRABAJANDO ahora mismo — "
-                "si igual querés cerrarla, repetime la orden")
+        return L(f"no cerré {fila['nombre']}: está TRABAJANDO ahora mismo — "
+                 "si igual querés cerrarla, repetime la orden",
+                 f"I didn't close {fila['nombre']}: it's WORKING right now — "
+                 "if you still want it closed, repeat the order")
     _cierres_rechazados.pop(clave, None)
 
     conn = get_db()

@@ -682,7 +682,9 @@ class OrchestratorPanel {
     if (!btn) return;
     if (this._unreadCount > 0) {
       const lbl = btn.querySelector('.orch-scroll-down-count');
-      if (lbl) lbl.textContent = `${this._unreadCount} ${this._unreadCount === 1 ? 'nuevo' : 'nuevos'}`;
+      // La palabra pasa por i18n (un template "{n} nuevo" calzaría con cualquier «X nuevo»).
+      const _t = (s) => (window.JarvisI18n?.t ? window.JarvisI18n.t(s) : s);
+      if (lbl) lbl.textContent = `${this._unreadCount} ${_t(this._unreadCount === 1 ? 'nuevo' : 'nuevos')}`;
       btn.hidden = false;
     } else {
       btn.hidden = true;
@@ -1102,7 +1104,11 @@ class OrchestratorPanel {
     art.dataset.id   = msg.id ?? '';
     art.dataset.role = msg.role === 'jarvis' ? 'jarvis' : 'user';
     art.style.setProperty('--i', Math.min(idx, 12));
-    art.setAttribute('aria-label', `${orchEsc(msg.author)}: ${orchEsc(msg.content)}`);
+    // Autor y contenido traducidos acá: el observer de i18n no puede partir
+    // "Autor: texto" (un solo atributo) y el cuerpo vive en zona sin traducir.
+    const _tA = (s) => (window.JarvisI18n?.t ? window.JarvisI18n.t(s) : s);
+    const _cont = msg.role === 'jarvis' ? _tA(msg.content) : msg.content;
+    art.setAttribute('aria-label', `${orchEsc(_tA(msg.author))}: ${orchEsc(_cont)}`);
     art.innerHTML  = this._buildMsgHTML(msg);
     this.$messages.appendChild(art);
 
