@@ -179,18 +179,26 @@
     clearInterval(_livePoll); _livePoll = null;
   }
 
+  // A dónde volver al cerrar (✕, Esc o click afuera): si se abrió desde
+  // ⚙ → Memoria, el usuario vuelve a Configuración, que es de donde venía.
+  let _alCerrar = null;
+
   function _cerrar() {
     _pararGrafo(); _pararLive();
     document.removeEventListener('keydown', _onKey);
+    const volver = _alCerrar; _alCerrar = null;
     const ov = document.querySelector('.mem-overlay');
     if (!ov) return;
+    if (typeof volver === 'function') { try { volver(); } catch (_) {} }
     if (_reducido()) { ov.remove(); return; }
     ov.classList.add('saliendo');
     setTimeout(() => ov.remove(), 160);
   }
 
   // opts.tab: abrir directo en una vista ('resumen' desde ⚙ → Memoria, etc.).
+  // opts.alCerrar: callback al cerrar (⚙ lo usa para que la ✕ vuelva a Configuración).
   async function abrir(opts) {
+    _alCerrar = (opts && typeof opts.alCerrar === 'function') ? opts.alCerrar : null;
     document.querySelector('.mem-overlay')?.remove();
     _pararGrafo(); _pararLive();
     document.removeEventListener('keydown', _onKey);

@@ -280,7 +280,7 @@ body.jw-rail .gh-crumb-center { left: calc(50% - 29px); }
 .gh-crumb-ws { color: var(--ob-fg-1); font: 600 11.5px var(--font-ui); flex-shrink: 0; max-width: 100%; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 /* Mismo criterio que la franja (.sb-row-name): el nombre nunca arranca en minúscula. */
 .gh-crumb-ws::first-letter { text-transform: uppercase; }
-.gh-crumb-center .gh-crumb-sep { color: var(--ob-fg-4); font-size: 10px; align-self: center; }
+.gh-crumb-center .gh-crumb-sep { color: var(--ob-fg-3); font-size: 10px; align-self: center; }
 .gh-crumb-center .gh-project {
   font: 500 10px var(--font-mono);
   color: var(--ob-fg-3);
@@ -325,7 +325,7 @@ body.jw-rail .gh-crumb-center { left: calc(50% - 29px); }
 
 /* ── Breadcrumb del proyecto activo (movido del header global) ── */
 .gh-crumb-sep {
-  color: var(--sb-fg-4);
+  color: var(--sb-fg-3);
   font: 300 14px var(--font-ui);
   user-select: none;
   flex-shrink: 0;

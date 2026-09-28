@@ -192,9 +192,12 @@
   // directo (antes había una página intermedia con un botón "Abrir"). Lo que
   // mostraba esa página — pulso, tableros por categoría, recientes, lecciones —
   // vive ahora en la pestaña Resumen del panel.
+  // Memoria no es una página de ⚙: abre el panel de Memoria y, al cerrarlo,
+  // se vuelve a Configuración en la sección donde estaba el usuario.
   function _irAMemoria() {
+    const volverA = _seccion && _seccion !== 'memoria' ? _seccion : null;
     close();
-    window.JarvisMemory?.abrir?.();
+    window.JarvisMemory?.abrir?.({ alCerrar: () => open(volverA) });
   }
 
   function setSeccion(sec) {
@@ -346,7 +349,7 @@
 
   /* ── Abrir / cerrar ── */
   function open(seccion) {
-    if (seccion === 'memoria') { window.JarvisMemory?.abrir?.(); return; }
+    if (seccion === 'memoria') { _irAMemoria(); return; }
     if (seccion) _seccion = seccion;
     _prevFocus = document.activeElement;
     _abierta = true;
