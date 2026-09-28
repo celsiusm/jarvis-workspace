@@ -12,8 +12,7 @@ router = APIRouter(prefix="/api/workspace", tags=["workspace"])
 
 @router.post("/mantenimiento")
 async def mantenimiento():
-    """Limpieza del estado local: purga task_events, marca workflows zombie
-    como 'error', mata sesiones tmux huérfanas y hace VACUUM. Corre en un
+    """Limpieza del estado local: purga task_events, mata sesiones tmux huérfanas y hace VACUUM. Corre en un
     thread (el VACUUM puede tardar). Devuelve un resumen de lo limpiado."""
     from plotspace.core.mantenimiento import ejecutar_mantenimiento
     resumen = await asyncio.to_thread(ejecutar_mantenimiento)

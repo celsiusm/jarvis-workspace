@@ -59,7 +59,7 @@ def senales_nuevas(project_id: int, desde_id: int = 0) -> tuple:
     conn = get_db()
     try:
         filas = conn.execute(
-            "SELECT id, event, terminal_id, workflow_id, motivo FROM task_events "
+            "SELECT id, event, terminal_id, motivo FROM task_events "
             "WHERE project_id = ? AND id > ? AND motivo IS NOT NULL AND motivo != '' "
             "AND event IN ('TASK_BLOCKED', 'TASK_ERROR', 'TASK_DONE') ORDER BY id",
             (project_id, desde_id)).fetchall()
@@ -67,8 +67,7 @@ def senales_nuevas(project_id: int, desde_id: int = 0) -> tuple:
         conn.close()
     senales, max_id = [], desde_id
     for f in filas:
-        wf = f" wf {f['workflow_id']}" if f['workflow_id'] else ''
-        senales.append(f"{f['event']} (terminal {f['terminal_id']}{wf}): {f['motivo'][:400]}")
+        senales.append(f"{f['event']} (terminal {f['terminal_id']}): {f['motivo'][:400]}")
         max_id = max(max_id, f['id'])
     return senales, max_id
 
@@ -321,7 +320,7 @@ _CAMPO_LECC_RE = {k: re.compile(rf'^{k}:\s*(.+)$', re.MULTILINE)
 def lecciones_de_memorias(project_path: str, k: int = 12) -> list:
     """Una línea por memoria [leccion] VIGENTE (resumen: del frontmatter, o la
     primera línea del cuerpo) + puntero al archivo. Es la mitad del bloque
-    siempre-cargado que NO depende de la API ni de workflows: task_events puede
+    siempre-cargado que NO depende de la API: task_events puede
     estar vacía (el enjambre trabaja en terminales directas), pero los agentes
     sí escriben lecciones como memorias — antes esas reglas eran opt-in.
     Las más frescas primero, cap `k` (el bloque vive en CADA sesión: corto)."""

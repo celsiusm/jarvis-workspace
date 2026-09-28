@@ -411,8 +411,8 @@ def _snapshot_git(ttl: float = None):
 # _estado_git): se actualiza lo terminado aunque haya agentes a mitad de tarea.
 # Este flag queda como dato (¿hay laburo en curso en Jarvis?) por si lo quiere
 # el modal/tooltip; se calcula SOLO sobre el proyecto de Jarvis (este repo):
-# terminales trabajando o frenadas en un prompt (agent_watch) + workflows
-# 'running'/'paused' de ese proyecto en la DB. Agentes de otros proyectos no cuentan.
+# terminales trabajando o frenadas en un prompt (agent_watch). Agentes de otros
+# proyectos no cuentan.
 
 def _jarvis_project_id():
     """project_id del proyecto cuyo ruta es ESTE repo (donde corre el server). El
@@ -452,23 +452,6 @@ def _terminales_activas_de(project_id) -> set:
         return set()
 
 
-def _hay_workflows_activos(project_id=None) -> bool:
-    try:
-        conn = get_db()
-        try:
-            cur = conn.cursor()
-            if project_id is None:
-                cur.execute("SELECT 1 FROM workflows WHERE estado IN ('running', 'paused') LIMIT 1")
-            else:
-                cur.execute("SELECT 1 FROM workflows WHERE estado IN ('running', 'paused') "
-                            "AND project_id = ? LIMIT 1", (project_id,))
-            return cur.fetchone() is not None
-        finally:
-            conn.close()
-    except Exception:
-        return False   # DB inaccesible: no dejar el banner rehén de eso
-
-
 def _agentes_trabajando() -> bool:
     # SOLO el proyecto de Jarvis (este repo): un agente trabajando en OTRO
     # proyecto no toca este código → no bloquea el "Actualizar ahora". Si no
@@ -476,11 +459,9 @@ def _agentes_trabajando() -> bool:
     pid = _jarvis_project_id()
     tids = _terminales_activas_de(pid) if pid is not None else None
     try:
-        if agent_watch.hay_agentes_ocupados(terminal_ids=tids):
-            return True
+        return bool(agent_watch.hay_agentes_ocupados(terminal_ids=tids))
     except Exception:
-        pass
-    return _hay_workflows_activos(pid)
+        return False
 
 
 # ─── Discord Rich Presence ("Jugando Jarvis") ────────────────────────────────
@@ -578,7 +559,7 @@ def _set_presence(payload: dict) -> None:
     _PRESENCE['locale'] = 'en' if payload.get('locale') == 'en' else 'es'
     if payload.get('locale') in ('en', 'es'):
         # El idioma también lo usan los textos que nacen en el server (avisos
-        # del orquestador, cierre de workflow): core/idioma_ui.
+        # del orquestador, avisos del enjambre): core/idioma_ui.
         from plotspace.core import idioma_ui
         idioma_ui.fijar(payload['locale'])
     pid = payload.get('project_id')
@@ -760,7 +741,7 @@ def reiniciar_servidor(retraso: float = 1.0):
 def metrics():
     """Snapshot de runtime del swarm para observabilidad/diagnóstico (read-only).
     `def` (no async) → FastAPI lo threadpolea: la DB sync no bloquea el event loop.
-    Devuelve: uptime, terminales activas, workflows en curso, últimos task_events,
+    Devuelve: uptime, terminales activas, últimos task_events,
     uso acumulado del orquestador, y los eventos estructurados recientes del log."""
     from plotspace.core import logs as _logs
     snap = {'uptime_s': round(time.time() - _ARRANQUE, 1)}
@@ -770,10 +751,6 @@ def metrics():
             cur = conn.cursor()
             cur.execute("SELECT COUNT(*) AS n FROM terminals WHERE activa = 1")
             snap['terminales_activas'] = cur.fetchone()['n']
-            cur.execute("SELECT estado, COUNT(*) AS n FROM workflows "
-                        "WHERE estado IN ('running', 'paused') GROUP BY estado")
-            wf = {r['estado']: r['n'] for r in cur.fetchall()}
-            snap['workflows'] = {'running': wf.get('running', 0), 'paused': wf.get('paused', 0)}
             cur.execute("SELECT terminal_id, project_id, event, timestamp "
                         "FROM task_events ORDER BY id DESC LIMIT 10")
             snap['task_events_recientes'] = [dict(r) for r in cur.fetchall()]

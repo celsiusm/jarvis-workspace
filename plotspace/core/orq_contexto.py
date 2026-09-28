@@ -4,10 +4,10 @@ enjambre que recibe `claude -p` en cada turno.
 
 El gap que cierra: Jarvis ya sabía casi todo (fase y pregunta pendiente de
 cada agente, si su CLI se cayó, qué archivos tocó, qué muestra su pane, qué
-se le pidió, qué eventos cerró, git, kanban, dev servers, conflictos) pero el
+se le pidió, qué eventos cerró, git, dev servers, conflictos) pero el
 orquestador recibía una línea por terminal. Orquestaba a ciegas: mandaba
 trabajo a una terminal con una pregunta en pantalla o con el CLI muerto,
-repetía trabajo ya commiteado y no veía por qué un paso se había bloqueado.
+repetía trabajo ya commiteado y no veía por qué un agente se había bloqueado.
 
 Diseño:
   · Lógica PURA de formato (testeable sin tmux, git ni DB) + recolección
@@ -16,11 +16,10 @@ Diseño:
   · Presupuesto por bloque (caracteres): el contexto crece con el enjambre y
     el prompt viaja entero en cada turno. Lo más accionable va primero.
   · `es_libre` es la definición ÚNICA de "terminal libre": la usan el
-    contexto y las guardas de enviar_prompt/reuso (antes era solo texto en
+    contexto y la guarda de enviar_prompt (antes era solo texto en
     el prompt y el código miraba otra cosa).
 """
 import asyncio
-import json
 import os
 import re
 import subprocess
@@ -34,8 +33,6 @@ ANCHO_LINEA = 150
 TOPE_GIT = 1800
 TOPE_GUIA = 1800
 TOPE_EVENTOS = 1500
-TOPE_WORKFLOWS = 2500
-TOPE_TAREAS = 1200
 TOPE_COORD = 1200
 TOPE_DEV = 600
 
@@ -44,7 +41,7 @@ _ANSI_RE = re.compile(r'\x1b\[[0-9;?]*[ -/]*[@-~]|\x1b\][^\x07]*\x07|\x1b[@-Z\\-
 _SOLO_MARCO_RE = re.compile(r'^[\s─━│┃╭╮╰╯┌┐└┘├┤┬┴┼═║╔╗╚╝\-_|>~·•.*]*$')
 
 # ─── Qué se le mandó a cada terminal ──────────────────────────────────────────
-# tid → (epoch, texto). Lo alimenta send_to_agent (workflows, reasignaciones,
+# tid → (epoch, texto). Lo alimenta send_to_agent (tareas de spawn_terminal y
 # enviar_prompt): sin esto una terminal con una tarea directa figuraba "libre".
 _envios: dict = {}
 
@@ -96,15 +93,13 @@ def cola_pane(texto: str, lineas: int = LINEAS_COLA, ancho: int = ANCHO_LINEA) -
 
 
 def es_libre(info: dict) -> bool:
-    """Una terminal a la que se le puede dar trabajo nuevo: viva, quieta, sin
-    una pregunta en pantalla y sin paso de workflow en curso o por arrancar."""
+    """Una terminal a la que se le puede dar trabajo nuevo: viva, quieta y sin
+    una pregunta en pantalla."""
     if info.get('estado') in ('caido', 'sin_sesion'):
         return False
     if info.get('fase') in ('trabajando', 'arrancando'):
         return False
-    if info.get('esperando'):
-        return False
-    return not info.get('paso_activo')
+    return not info.get('esperando')
 
 
 def motivo_no_libre(info: dict) -> str:
@@ -117,8 +112,6 @@ def motivo_no_libre(info: dict) -> str:
         return 'todavía está arrancando'
     if info.get('esperando'):
         return 'tiene una pregunta en pantalla esperando respuesta'
-    if info.get('paso_activo'):
-        return f"tiene un paso de workflow {info['paso_activo'].get('estado', 'activo')}"
     return ''
 
 
@@ -141,10 +134,9 @@ def formatear_terminal(t: dict, info: dict) -> str:
     cab.append('LIBRE' if es_libre(info) else 'ocupada')
     lineas = ['- ' + ' — '.join(cab)]
 
-    rol = info.get('rol')
-    if rol:
-        lineas.append(f"    rol: '{rol['agente']}' del workflow '{rol['workflow']}' "
-                      f"(paso {rol['estado']})")
+    origen = info.get('origen')
+    if origen and origen.get('orquestacion'):
+        lineas.append(f"    lanzada por Jarvis para: {una_linea(origen['orquestacion'], 140)}")
     tarea = info.get('tarea')
     if tarea:
         lineas.append(f"    tarea: {una_linea(tarea['texto'], 220)}"
@@ -255,38 +247,6 @@ def formatear_eventos(eventos: list) -> str:
     return recortar('\n'.join(lineas), TOPE_EVENTOS)
 
 
-def formatear_workflows_activos(wfs: list) -> str:
-    bloques = []
-    for wf in wfs:
-        pasos = wf.get('pasos') or []
-        hechos = sum(1 for p in pasos if p.get('estado') == 'done')
-        cab = f"'{wf['nombre']}' ({wf['estado']}, {hechos}/{len(pasos)} done)"
-        if wf.get('objetivo'):
-            cab += f" — {una_linea(wf['objetivo'], 140)}"
-        lineas = [cab]
-        for i, p in enumerate(pasos):
-            seg = f"  paso_{i} [{p.get('estado', '?')}] {p.get('agente') or p.get('rol') or '?'}"
-            if p.get('terminal_id'):
-                seg += f" (terminal #{p['terminal_id']})"
-            if p.get('depende_de'):
-                seg += f" ← {p['depende_de']}"
-            if p.get('archivos'):
-                seg += ' · ' + ', '.join(str(a) for a in p['archivos'][:4])
-            if p.get('motivo'):
-                seg += f" · motivo: {una_linea(p['motivo'], 120)}"
-            lineas.append(seg)
-        bloques.append('\n'.join(lineas))
-    return recortar('\n'.join(bloques), TOPE_WORKFLOWS)
-
-
-def formatear_tareas(tareas: list) -> str:
-    lineas = []
-    for t in tareas:
-        quien = f" → terminal #{t['terminal_id']}" if t.get('terminal_id') else ''
-        lineas.append(f"- [{t['estado']}] {una_linea(t['titulo'], 120)}{quien}")
-    return recortar('\n'.join(lineas), TOPE_TAREAS)
-
-
 def formatear_coordinacion(permisos: list, reservas: list, actividad: list) -> str:
     lineas = []
     for p in permisos:
@@ -376,38 +336,6 @@ def eventos_recientes(project_id: int, limite: int = 10) -> list:
     return out
 
 
-def workflows_del_proyecto(project_id: int, limite: int = 20) -> list:
-    conn = _db()
-    try:
-        filas = conn.execute(
-            'SELECT id, nombre, objetivo, estado, pasos, created_at FROM workflows '
-            'WHERE project_id = ? ORDER BY created_at DESC LIMIT ?',
-            (project_id, limite)).fetchall()
-    finally:
-        conn.close()
-    out = []
-    for f in filas:
-        d = dict(f)
-        try:
-            d['pasos'] = json.loads(d.get('pasos') or '[]')
-        except (ValueError, TypeError):
-            d['pasos'] = []
-        out.append(d)
-    return out
-
-
-def tareas_abiertas(project_id: int, limite: int = 12) -> list:
-    conn = _db()
-    try:
-        filas = conn.execute(
-            "SELECT titulo, estado, terminal_id FROM tasks WHERE project_id = ? "
-            "AND estado != 'done' ORDER BY orden, id LIMIT ?",
-            (project_id, limite)).fetchall()
-    finally:
-        conn.close()
-    return [dict(f) for f in filas]
-
-
 def _estado_agent_watch(tid: int) -> dict:
     try:
         from plotspace.core import agent_watch
@@ -432,30 +360,14 @@ async def _colas(tids: list) -> dict:
     return {tid: cola_pane(texto) for tid, texto in res}
 
 
-def _mapa_roles(workflows: list) -> tuple:
-    """(rol por terminal, paso activo por terminal). Rol = el paso más
-    reciente de esa terminal; activo = running/pending de un workflow vivo."""
-    roles, activos = {}, {}
-    for wf in workflows:
-        for p in wf['pasos']:
-            tid = p.get('terminal_id')
-            if not tid:
-                continue
-            if tid not in roles:
-                roles[tid] = {'workflow': wf['nombre'], 'agente': p.get('agente') or p.get('rol') or '?',
-                              'estado': p.get('estado', '?')}
-            if (wf['estado'] in ('running', 'paused')
-                    and p.get('estado') in ('running', 'pending') and tid not in activos):
-                activos[tid] = {'workflow': wf['nombre'], 'estado': p.get('estado'),
-                                'tarea': p.get('tarea') or ''}
-    return roles, activos
-
-
-def infos_terminales(project_id: int, terminales: list, workflows: list = None,
+def infos_terminales(project_id: int, terminales: list,
                      eventos: list = None, con_live: bool = True) -> dict:
-    """Todo lo que se sabe de cada terminal, SIN la cola del pane (async)."""
-    workflows = workflows if workflows is not None else workflows_del_proyecto(project_id)
-    roles, activos = _mapa_roles(workflows)
+    """Todo lo que se sabe de cada terminal, SIN la cola del pane (async).
+
+    `terminales` son filas de la tabla terminals (dicts con id, nombre,
+    tipo_ia y —si vienen— las columnas de origen: origen/tarea/orquestacion/
+    orquestacion_ts). Claves por terminal: fase, esperando, fase_hace_s,
+    estado, archivos, tarea, ultimo_evento, dev_servers (+ origen)."""
     ultimo_ev = {}
     for e in (eventos if eventos is not None else eventos_recientes(project_id, 40)):
         ultimo_ev.setdefault(e['terminal_id'], e)
@@ -488,13 +400,18 @@ def infos_terminales(project_id: int, terminales: list, workflows: list = None,
         a = live.get(tid) or {}
         info['estado'] = a.get('estado') or ''
         info['archivos'] = [f for f in (a.get('archivos') or []) if f.get('writes')]
-        info['rol'] = roles.get(tid)
-        info['paso_activo'] = activos.get(tid)
         env = ultimo_envio(tid)
-        if activos.get(tid) and activos[tid]['tarea']:
-            info['tarea'] = {'texto': activos[tid]['tarea'], 'hace_s': None}
-        elif env:
+        if env:
             info['tarea'] = {'texto': env[1], 'hace_s': ahora - env[0]}
+        elif t.get('tarea'):
+            # Tras un reinicio el registro en memoria se pierde: la tarea que
+            # Jarvis le entregó sigue persistida en la fila de la terminal.
+            info['tarea'] = {'texto': t['tarea'],
+                             'hace_s': _segundos_desde_iso(t.get('orquestacion_ts'))}
+        if t.get('origen'):
+            info['origen'] = {'origen': t['origen'],
+                              'orquestacion': t.get('orquestacion') or '',
+                              'ts': t.get('orquestacion_ts')}
         info['ultimo_evento'] = ultimo_ev.get(tid)
         info['dev_servers'] = devs.get(tid, [])
         infos[tid] = info
@@ -502,7 +419,7 @@ def infos_terminales(project_id: int, terminales: list, workflows: list = None,
 
 
 def info_terminal(project_id: int, terminal: dict) -> dict:
-    """Info de UNA terminal (para las guardas de enviar_prompt / reuso)."""
+    """Info de UNA terminal (para la guarda de enviar_prompt)."""
     return infos_terminales(project_id, [terminal]).get(terminal['id']) or {}
 
 
@@ -513,22 +430,16 @@ async def construir_bloques(project: dict, terminales: list) -> list:
     ruta = project.get('ruta') or ''
 
     def _recolectar():
-        wfs = []
         evs = []
-        try:
-            wfs = workflows_del_proyecto(pid)
-        except Exception as e:
-            print(f'[orq-contexto] workflows: {e}')
         try:
             evs = eventos_recientes(pid, 40)
         except Exception as e:
             print(f'[orq-contexto] eventos: {e}')
-        infos = infos_terminales(pid, terminales, wfs, evs)
-        datos = {'wfs': wfs, 'evs': evs, 'infos': infos}
+        infos = infos_terminales(pid, terminales, evs)
+        datos = {'evs': evs, 'infos': infos}
         for clave, fn in (('git', lambda: info_git(ruta)),
                           ('guia', lambda: guia_proyecto(ruta)),
-                          ('raiz', lambda: archivos_raiz(ruta)),
-                          ('tareas', lambda: tareas_abiertas(pid))):
+                          ('raiz', lambda: archivos_raiz(ruta))):
             try:
                 datos[clave] = fn()
             except Exception as e:
@@ -560,15 +471,8 @@ async def construir_bloques(project: dict, terminales: list) -> list:
     if datos.get('guia'):
         bloques.append(f"[Guía del proyecto]\n{datos['guia']}")
 
-    activos = [w for w in datos['wfs'] if w['estado'] in ('running', 'paused')]
-    if activos:
-        bloques.append(f"[Workflows activos]\n{formatear_workflows_activos(activos[:3])}")
-
     if datos['evs']:
         bloques.append(f"[Eventos]\n{formatear_eventos(datos['evs'][:10])}")
-
-    if datos.get('tareas'):
-        bloques.append(f"[Tablero de tareas]\n{formatear_tareas(datos['tareas'])}")
 
     try:
         from plotspace.core import agent_live

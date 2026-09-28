@@ -419,10 +419,8 @@ async def eliminar_proyecto(
         cursor = conn.cursor()
         cursor.execute('DELETE FROM terminals WHERE project_id = ?', (project_id,))
         cursor.execute('DELETE FROM project_skills WHERE project_id = ?', (project_id,))
-        cursor.execute('DELETE FROM workflows WHERE project_id = ?', (project_id,))
         cursor.execute('DELETE FROM orquestador_historial WHERE project_id = ?', (project_id,))
         cursor.execute('DELETE FROM task_events WHERE project_id = ?', (project_id,))
-        cursor.execute('DELETE FROM tasks WHERE project_id = ?', (project_id,))
         cursor.execute('DELETE FROM projects WHERE id = ?', (project_id,))
         conn.commit()
     finally:

@@ -1,5 +1,5 @@
 """core/idioma_ui: el idioma de la interfaz que usan los textos que nacen en el
-server (avisos del orquestador al chat, cierre de workflow, respuesta del LLM)."""
+server (avisos del orquestador al chat, respuesta del LLM)."""
 from plotspace.core import idioma_ui
 
 
@@ -42,8 +42,8 @@ def test_bloque_idioma_del_orquestador_sigue_a_la_ui():
 
 def test_motivos_del_chat_salen_en_el_idioma_de_la_ui():
     from plotspace.routers.orchestrator import _validar_enviar_prompt
-    _, m = _validar_enviar_prompt({'terminal_id': 7, 'prompt': 'x'}, set(), set())
+    _, m = _validar_enviar_prompt({'terminal_id': 7, 'prompt': 'x'}, set())
     assert 'no está activa' in m
     idioma_ui.fijar('en')
-    _, m = _validar_enviar_prompt({'terminal_id': 7, 'prompt': 'x'}, set(), set())
+    _, m = _validar_enviar_prompt({'terminal_id': 7, 'prompt': 'x'}, set())
     assert m == 'terminal #7 is not active in this project'

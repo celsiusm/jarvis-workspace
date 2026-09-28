@@ -1,9 +1,8 @@
 """Idioma de la interfaz (es/en) visto desde el backend.
 
 El frontend traduce su propio chrome (shared/i18n.js), pero hay texto que NACE
-en el server y se muestra tal cual: los avisos del orquestador al chat, el
-cierre de un workflow (que además se lee en voz alta) y la respuesta misma del
-orquestador (un LLM). Para esos, el server necesita saber qué idioma eligió el
+en el server y se muestra tal cual: los avisos del orquestador al chat y la
+respuesta misma del orquestador (un LLM). Para esos, el server necesita saber qué idioma eligió el
 usuario: lo reporta el frontend (presence + cada pedido al chat) y queda acá,
 persistido en data/ui-lang para que un reinicio no vuelva al default.
 

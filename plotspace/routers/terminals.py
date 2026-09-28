@@ -285,8 +285,9 @@ def _arranque_visible(tipo_ia: Optional[str], comando_cli: Optional[str],
     """¿El pane nace como shell a la vista + CLI tipeado corto? (PURO).
 
     Programa del pane (invisible, el de siempre) cuando:
-    - comando_cli explícito (workflows: lleva flags que no queremos tipeados y
-      el engine manda la tarea por send-keys — no puede caer en un bash),
+    - comando_cli explícito (agentes que Jarvis spawnea con tarea: lleva flags
+      que no queremos tipeados y la tarea se pega por tmux — no puede caer en
+      un bash),
     - es_reanudacion (reconciliar/attach post-reboot: el --resume manda),
     - el tipo no está en _CLIS_ARRANQUE_VISIBLE (qwen/manual/desconocidos),
     - TERMINALES_ARRANQUE=limpio (vía de escape al comportamiento previo)."""
@@ -900,7 +901,7 @@ def _crear_sesion_tmux_sync(terminal_id: int, cwd: str, comando_cli: Optional[st
     #   --session-id — el SessionStart hook postea el uuid vivo a la DB igual).
     #   Camino intermedio que pidió el usuario (2026-07-10): ver nacer el shell
     #   sin la plomería de flags tipeándose.
-    # · PROGRAMA del pane (SIN eco): workflows (comando_cli explícito con
+    # · PROGRAMA del pane (SIN eco): agentes de Jarvis (comando_cli explícito con
     #   --dangerously-skip-permissions), reanudaciones (--resume manda), qwen
     #   (flags obligatorios en la línea) y TERMINALES_ARRANQUE=limpio. Tras salir
     #   el CLI queda un shell (`exec bash -l`). Es la MISMA vía que el reattach
@@ -2978,45 +2979,13 @@ async def _monitor_keywords(terminal_id: int, project_id: int):
             _monitor_wakeups.pop(terminal_id, None)
 
 
-def _workflow_de_terminal(cursor, project_id: int, terminal_id: int):
-    """ID del workflow activo (running/paused) cuyos pasos incluyen la terminal,
-    o None. Pobla task_events.workflow_id (antes siempre NULL) para poder
-    correlacionar cada fallo con su workflow — insumo de las lecciones."""
-    import json as _json
-    cursor.execute(
-        "SELECT id, pasos FROM workflows WHERE project_id = ? "
-        "AND estado IN ('running', 'paused') ORDER BY created_at DESC",
-        (project_id,)
-    )
-    for row in cursor.fetchall():
-        try:
-            pasos = _json.loads(row['pasos'] or '[]')
-        except (ValueError, TypeError):
-            continue
-        if any(p.get('terminal_id') == terminal_id for p in pasos):
-            return row['id']
-    return None
-
-
 async def _procesar_keyword_evento(terminal_id: int, project_id: int, keyword: str,
                                    motivo: Optional[str] = None):
-    """Registra el evento en DB (con motivo y workflow si los hay) y llama al
-    orquestador. El motivo viene del sentinel-file ({estado, motivo}); el
-    monitor de pane y el watchdog no lo conocen y pasan None."""
-    ahora = datetime.now().isoformat()
-    def _insert_evento():
-        conn = get_db()
-        try:
-            wf_id = _workflow_de_terminal(conn.cursor(), project_id, terminal_id)
-            conn.execute(
-                'INSERT INTO task_events (terminal_id, project_id, event, timestamp, workflow_id, motivo) VALUES (?, ?, ?, ?, ?, ?)',
-                (terminal_id, project_id, keyword, ahora, wf_id, (motivo or None))
-            )
-            conn.commit()
-        finally:
-            conn.close()
-    await asyncio.to_thread(_insert_evento)   # write sync fuera del loop (corre en el ciclo del monitor)
-
+    """Un cierre (TASK_DONE/BLOCKED/ERROR) visto en el pane o en el sentinel-file:
+    audit trail + supresión del sonido heurístico, y el orquestador lo PERSISTE
+    en task_events (con motivo) y lo broadcastea (procesar_task_event_interno).
+    El motivo viene del sentinel-file ({estado, motivo}); el monitor de pane no
+    lo conoce y pasa None."""
     from plotspace.core import logs
     extra = {'motivo': motivo[:300]} if motivo else {}
     logs.evento('task_event', terminal_id=terminal_id, project_id=project_id, keyword=keyword,
@@ -3060,7 +3029,7 @@ def solicitar_chequeo_inmediato(terminal_id: int):
     ventana entre cancel y recreación) es no-op → el monitor avanza igual por su timeout de 2s.
     NO procesa el evento ni toca DB/orquestador: SOLO adelanta el próximo tick del MISMO loop
     del monitor, que sigue siendo el único que decide (capture + diff + _linea_es_keyword) y
-    escribe. Ningún modo de fallo de este fast-path puede colgar un workflow."""
+    escribe. Ningún modo de fallo de este fast-path puede perder un cierre."""
     ev = _monitor_wakeups.get(terminal_id)
     if ev is not None:
         ev.set()

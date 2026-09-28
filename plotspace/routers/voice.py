@@ -582,9 +582,8 @@ async def hablar(req: SpeakRequest):
     """Genera audio con edge-tts y lo devuelve como base64.
 
     `lang` (es|en): en 'en' TRADUCE el texto es→en (rápido, Google) y usa voz
-    inglesa, así TODA la voz de Jarvis sigue el idioma de la UI — el "de acuerdo
-    señor" al aceptar un workflow y el aviso al terminarlo (que llega dinámico del
-    orquestador en español). La bienvenida va por /welcome (texto ya explícito).
+    inglesa, así TODA la voz de Jarvis sigue el idioma de la UI (los avisos que
+    llegan dinámicos del orquestador en español). La bienvenida va por /welcome (texto ya explícito).
     """
     texto = req.text.strip()
     if not texto:

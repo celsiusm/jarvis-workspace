@@ -452,7 +452,7 @@ def test_endpoint_proxima_sin_update_es_la_corriente(monkeypatch):
 
 def test_agentes_trabajando_combina_fuentes(monkeypatch):
     # Scopeado al proyecto de Jarvis. agent_watch ocupado (en sus terminales) →
-    # True; libre + workflow del proyecto activo → True; todo libre → False.
+    # True; todo libre → False.
     monkeypatch.setattr(system, '_jarvis_project_id', lambda: 17)
     monkeypatch.setattr(system, '_terminales_activas_de', lambda pid: {1, 2})
     monkeypatch.setattr(system.agent_watch, 'hay_agentes_ocupados',
@@ -460,9 +460,6 @@ def test_agentes_trabajando_combina_fuentes(monkeypatch):
     assert system._agentes_trabajando() is True
     monkeypatch.setattr(system.agent_watch, 'hay_agentes_ocupados',
                         lambda estados=None, terminal_ids=None: False)
-    monkeypatch.setattr(system, '_hay_workflows_activos', lambda project_id=None: True)
-    assert system._agentes_trabajando() is True
-    monkeypatch.setattr(system, '_hay_workflows_activos', lambda project_id=None: False)
     assert system._agentes_trabajando() is False
 
 
@@ -471,7 +468,6 @@ def test_agentes_trabajando_ignora_otros_proyectos(monkeypatch):
     # scopeado a Jarvis = libre (el otro proyecto NO bloquea el update).
     monkeypatch.setattr(system, '_jarvis_project_id', lambda: 17)
     monkeypatch.setattr(system, '_terminales_activas_de', lambda pid: {1, 2})
-    monkeypatch.setattr(system, '_hay_workflows_activos', lambda project_id=None: False)
     monkeypatch.setattr(system.agent_watch, '_estados',
                         {1: {'fase': 'idle'}, 2: {'fase': 'idle'}, 99: {'fase': 'trabajando'}},
                         raising=False)
@@ -480,38 +476,6 @@ def test_agentes_trabajando_ignora_otros_proyectos(monkeypatch):
                         {1: {'fase': 'idle'}, 2: {'fase': 'trabajando'}, 99: {'fase': 'idle'}},
                         raising=False)
     assert system._agentes_trabajando() is True     # una terminal de Jarvis trabaja
-
-
-def test_hay_workflows_activos_lee_la_db():
-    from plotspace.tests._harness import fresh_db
-    fresh_db()
-    assert system._hay_workflows_activos() is False
-    from plotspace.core.database import get_db
-    conn = get_db()
-    try:
-        conn.execute(
-            "INSERT INTO workflows (id, project_id, nombre, objetivo, estado, pasos, paso_actual, created_at) "
-            "VALUES ('wf1', 1, 'n', 'o', 'running', '[]', 0, 'hoy')"
-        )
-        conn.commit()
-    finally:
-        conn.close()
-    assert system._hay_workflows_activos() is True
-    conn = get_db()
-    try:
-        conn.execute("UPDATE workflows SET estado = 'paused' WHERE id = 'wf1'")
-        conn.commit()
-    finally:
-        conn.close()
-    # paused = TASK_BLOCKED esperando al usuario: la tarea sigue a medias
-    assert system._hay_workflows_activos() is True
-    conn = get_db()
-    try:
-        conn.execute("UPDATE workflows SET estado = 'done' WHERE id = 'wf1'")
-        conn.commit()
-    finally:
-        conn.close()
-    assert system._hay_workflows_activos() is False
 
 
 def test_endpoint_expone_agentes_trabajando(monkeypatch):

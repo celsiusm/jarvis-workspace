@@ -15,7 +15,7 @@ def get_db():
     keywords + el REST escriben concurrentemente. Sin WAL, un writer bloquea
     a los lectores y dos writers chocan al instante → `database is locked` y
     TASK_DONE/updates perdidos en silencio (el síntoma "el agente terminó pero
-    el workflow no avanzó"). WAL permite lectores concurrentes con un writer;
+    nadie se enteró"). WAL permite lectores concurrentes con un writer;
     busy_timeout hace que un writer espere hasta 5s en vez de fallar."""
     conn = sqlite3.connect(DB_PATH, timeout=5.0)
     conn.row_factory = sqlite3.Row
@@ -73,6 +73,14 @@ def init_db():
     cols_t = {row['name'] for row in cursor.fetchall()}
     if 'session_uuid' not in cols_t:
         cursor.execute("ALTER TABLE terminals ADD COLUMN session_uuid TEXT")
+    # Migración: ORIGEN de la terminal — Jarvis la spawneó con una tarea (o le
+    # mandó un prompt con enviar_prompt). `origen` = 'jarvis' (NULL = la abrió
+    # el usuario), `tarea` = el texto que se le entregó, `orquestacion` = el
+    # objetivo corto (la orden del chat recortada) y `orquestacion_ts` (ISO).
+    # Los lee el monitor en vivo de Tasks.
+    for col in ('origen', 'tarea', 'orquestacion', 'orquestacion_ts'):
+        if col not in cols_t:
+            cursor.execute(f"ALTER TABLE terminals ADD COLUMN {col} TEXT")
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS task_events (
@@ -93,34 +101,9 @@ def init_db():
     if 'motivo' not in cols_te:
         cursor.execute("ALTER TABLE task_events ADD COLUMN motivo TEXT")
 
-    # Task board kanban: tareas manuales del usuario (los pasos de workflows
-    # del orquestador NO viven acá — se proyectan en vivo desde `workflows`).
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS tasks (
-            id          INTEGER PRIMARY KEY AUTOINCREMENT,
-            project_id  INTEGER NOT NULL,
-            titulo      TEXT    NOT NULL,
-            descripcion TEXT    DEFAULT '',
-            estado      TEXT    DEFAULT 'backlog',  -- backlog|running|blocked|done
-            terminal_id INTEGER,                    -- agente asignado (si running)
-            orden       INTEGER DEFAULT 0,
-            created_at  TEXT,
-            updated_at  TEXT
-        )
-    ''')
-
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS workflows (
-            id          TEXT    PRIMARY KEY,
-            project_id  INTEGER NOT NULL,
-            nombre      TEXT    NOT NULL,
-            objetivo    TEXT    NOT NULL DEFAULT '',
-            estado      TEXT    NOT NULL DEFAULT 'pending',
-            pasos       TEXT    NOT NULL DEFAULT '[]',
-            paso_actual INTEGER NOT NULL DEFAULT 0,
-            created_at  TEXT    NOT NULL
-        )
-    ''')
+    # (Las tablas `tasks` —kanban manual— y `workflows` —motor de workflows
+    #  del orquestador— se eliminaron 2026-09-28 junto con sus features. Una DB
+    #  vieja las conserva huérfanas y sin uso — no las dropeamos.)
 
     cursor.execute('''
         CREATE TABLE IF NOT EXISTS project_skills (

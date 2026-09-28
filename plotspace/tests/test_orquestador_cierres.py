@@ -2,14 +2,11 @@
 
 El JSON de acciones viene de un modelo chico (haiku) SIN confirmación:
   - close_terminal con un id alucinado podía matar una terminal de OTRO proyecto;
-  - close_all mataba agentes a mitad de tarea sin preguntar;
-  - la reasignación por TASK_ERROR podía caer en la terminal claude PERSONAL
-    del usuario (le tipeaba la tarea + un Enter ciego encima).
+  - close_all mataba agentes a mitad de tarea sin preguntar.
 
 Reglas nuevas: validación de proyecto; cierre negado si la víctima está
 'trabajando' (con INSISTENCIA: repetir el pedido dentro de la ventana ejecuta
-igual — el guard es contra el accidente, no contra el usuario); `permitidas`
-acota la reasignación a las terminales del propio workflow.
+igual — el guard es contra el accidente, no contra el usuario).
 """
 import asyncio
 import os
@@ -27,7 +24,7 @@ from plotspace.core import agent_watch
 # ─── Fakes mínimos de DB ──────────────────────────────────────────────────────
 
 class _Cur:
-    """Cursor scripteado por contenido del SQL: workflows → pasos, terminals → rows."""
+    """Cursor scripteado por contenido del SQL."""
     def __init__(self, term_rows=None, wf_rows=None):
         self.term_rows = term_rows or []
         self.wf_rows = wf_rows or []
@@ -179,25 +176,6 @@ def test_cerrar_todas_idle_cierra_directo():
         rows, {1: {'fase': 'idle'}},   # 2 sin estado (recién nacida) = cerrable
         lambda r: asyncio.run(orch._cerrar_todas(8)))
     assert saltadas == [] and sorted(rec.calls) == [1, 2]
-
-
-# ─── TASK_ERROR: reasignación acotada al workflow ─────────────────────────────
-
-def test_buscar_agente_respeta_permitidas():
-    async def caso(permitidas):
-        conn = _Conn(term_rows=[{'id': 10}, {'id': 11}], wf_rows=[])
-        orig = orch.get_db
-        orch.get_db = lambda: conn
-        try:
-            return await orch._buscar_agente_disponible(8, 99, 'claude',
-                                                        permitidas=permitidas)
-        finally:
-            orch.get_db = orig
-
-    # Solo la terminal del workflow es candidata (10 es la personal del usuario).
-    assert asyncio.run(caso({11})) == 11
-    assert asyncio.run(caso({99})) is None      # nada del workflow libre → pausa
-    assert asyncio.run(caso(None)) == 10        # compat sin restricción
 
 
 if __name__ == '__main__':

@@ -687,9 +687,9 @@ async def _ciclo():
         tid = row['tid']
         if not texto:
             continue  # tmux caído / sesión inexistente: saltear sin romper
-        # Fast-path workflow: si la cola del pane ya muestra un TASK_* real y el
+        # Fast-path de cierre: si la cola del pane ya muestra un TASK_* real y el
         # monitor de keywords todavía no lo procesó (no suprimido), despertarlo
-        # para que avance el workflow en ~1s en vez de esperar su sleep de 2s.
+        # para que registre el cierre en ~1s en vez de esperar su sleep de 2s.
         # SOLO una pista barata: agent_watch NO inserta el evento ni llama al
         # orquestador (eso es exclusivo del monitor de terminals.py, único
         # escritor). Best-effort: si falla, el monitor detecta igual a <=2s.
@@ -747,7 +747,7 @@ async def _ciclo():
                 or hay_keyword_protocolo(texto)):
             # hay_keyword_protocolo: el final con TASK_* lo suena el monitor
             # de keywords (terminals.py), no el heurístico — sin esto, al
-            # acelerar el poller sonaban las dos campanas en los workflows.
+            # acelerar el poller sonaban las dos campanas.
             continue
         if hay_pregunta(texto):
             # Prompt interactivo a la vista = está esperando AHORA: inmediato, sin
