@@ -1497,7 +1497,7 @@
         <li class="mem-tl-ev k-${esc(e.clase || 'normal')}" style="--i:${Math.min(i, 12)}">
           <i class="mem-tl-node" aria-hidden="true"></i>
           <div class="mem-tl-body">
-            <span class="mem-tl-tx" data-i18n-skip>${esc(e.texto)}</span>
+            <span class="mem-tl-tx" data-i18n-skip>${esc(_t(e.texto))}</span>
             <span class="mem-tl-meta">${esc(e.hora)}</span>
           </div>
         </li>`).join('')}</ol>`
