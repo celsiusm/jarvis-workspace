@@ -41,6 +41,7 @@ from datetime import datetime
 from plotspace.core.database import get_db
 from plotspace.core.events import broadcaster
 from plotspace.core import pane_capture
+from plotspace.core.idioma_ui import L
 from plotspace import protocolos
 
 INTERVALO_S = 2
@@ -803,10 +804,14 @@ def _revisar_permisos(ahora: float) -> set:
                 # colgado sin que nadie se enterara.
                 _escalaciones.append({
                     'pid': pid,
-                    'texto': (f"⏳ Permiso trabado: {p['pide']} espera a {p['dueno']} "
-                              f"por `{p['archivo']}` hace {PROPIEDAD_TTL_S // 60}+ min "
-                              "sin respuesta — destrabalo vos o pedile que conteste "
-                              "por el MAILBOX."),
+                    'texto': L(f"⏳ Permiso trabado: {p['pide']} espera a {p['dueno']} "
+                               f"por `{p['archivo']}` hace {PROPIEDAD_TTL_S // 60}+ min "
+                               "sin respuesta — destrabalo vos o pedile que conteste "
+                               "por el MAILBOX.",
+                               f"⏳ Stuck permission: {p['pide']} has been waiting on {p['dueno']} "
+                               f"for `{p['archivo']}` for {PROPIEDAD_TTL_S // 60}+ min "
+                               "with no answer — unblock it yourself or ask them to reply "
+                               "through the MAILBOX."),
                 })
             cambios.add(pid)
     return cambios

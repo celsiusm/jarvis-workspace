@@ -56,7 +56,10 @@
     const permiso = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';
     if (debeOsNotif({ permiso, osOptIn: _osOptIn() })) {
       try {
-        const cuerpo = `${nombre || 'Un agente'} ${tipo === 'espera' ? 'espera respuesta' : 'terminó'}`;
+        // Fuera del DOM (notificación del SO): el observer de i18n no la ve → t().
+        const tr = (s) => (global.JarvisI18n && global.JarvisI18n.t) ? global.JarvisI18n.t(s) : s;
+        const cuerpo = tr(tipo === 'espera' ? '{n} espera respuesta' : '{n} terminó')
+          .replace('{n}', nombre || tr('Un agente'));
         const n = new Notification('Jarvis', { body: cuerpo, tag: 'jarvis-agente' });
         n.onclick = () => { window.focus(); n.close(); };
       } catch (_) { /* el SO puede negar; el flash de título ya avisó */ }

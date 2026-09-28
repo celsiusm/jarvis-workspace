@@ -87,3 +87,13 @@ def motor_tmux():
     _tb.set_backend(_tb.TmuxBackend())
     yield
     _tb.set_backend(None)
+
+
+@pytest.fixture(autouse=True)
+def _idioma_ui_aislado(tmp_path, monkeypatch):
+    """Los textos del server que dependen del idioma de la UI (core/idioma_ui)
+    salen en español en los tests — los asserts históricos están en español —
+    y ningún test escribe el data/ui-lang real del workspace vivo."""
+    from plotspace.core import idioma_ui
+    monkeypatch.setattr(idioma_ui, '_archivo', lambda: str(tmp_path / 'ui-lang'))
+    monkeypatch.setattr(idioma_ui, '_actual', 'es')

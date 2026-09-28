@@ -3446,6 +3446,8 @@ async function enviarMensaje(texto, imagenBase64 = null, mediaType = null) {
 
     const body = { project_id: parseInt(pid), message: textoFinal };
     if (historial.length) body.historial = historial;
+    // Idioma de la interfaz: Jarvis responde (y avisa) en el mismo idioma.
+    body.lang = window.JarvisI18n?.lang?.() === 'es' ? 'es' : 'en';
     if (imagenBase64) {
       body.image_base64 = imagenBase64;
       body.media_type   = mediaType || 'image/jpeg';

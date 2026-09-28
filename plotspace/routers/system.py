@@ -576,6 +576,11 @@ def _set_presence(payload: dict) -> None:
     seccion = payload.get('seccion')
     _PRESENCE['seccion'] = str(seccion) if seccion else None
     _PRESENCE['locale'] = 'en' if payload.get('locale') == 'en' else 'es'
+    if payload.get('locale') in ('en', 'es'):
+        # El idioma también lo usan los textos que nacen en el server (avisos
+        # del orquestador, cierre de workflow): core/idioma_ui.
+        from plotspace.core import idioma_ui
+        idioma_ui.fijar(payload['locale'])
     pid = payload.get('project_id')
     if isinstance(pid, bool):            # True==1: no dejar que un bool se cuele
         pid = None

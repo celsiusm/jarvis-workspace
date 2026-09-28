@@ -46,3 +46,49 @@ assert.strictEqual(origenAtributo('Enviar', 'Enviar', 'en', D2), 'Enviar');
 assert.strictEqual(origenAtributo('Enviar', 'Detener', 'en', D2), 'Detener', 'la app lo cambió: manda el nuevo');
 assert.strictEqual(origenAtributo('Enviar', 'Stop', 'en', D2), 'Stop', 'cambiado ya traducido: no se pisa');
 console.log('origenAtributo ok');
+
+// ── Plantillas: claves con {marcadores} traducen textos con valores adentro ──
+{
+  const { compilarPlantillas } = _pure;
+  const D = {
+    'hace {t}': '{t} ago',
+    'Error creando: {msg}': 'Error creating: {msg}',
+    '⚠️ {a} está bloqueado en el paso {n}{d}. ¿Cómo continuamos?': '⚠️ {a} is blocked at step {n}{d}. How do we proceed?',
+    'Crear con {n} terminales': 'Create with {n} terminals',
+    'Crear con {n} terminal': 'Create with {n} terminal',
+    'trabajando': 'working',
+    'Estado: {e}': 'Status: {e}',
+    '{a} {b}': 'nunca',          // sin ancla literal → no se compila
+    'Guardar': 'Save',
+  };
+  const P = compilarPlantillas(D);
+  assert.ok(P.every(p => p.clave !== '{a} {b}'), 'plantilla sin texto fijo no se compila');
+  assert.ok(P.every(p => p.clave !== 'Guardar'), 'solo las claves con marcadores');
+  const tr = (s) => traducir(s, 'en', D, P);
+  assert.strictEqual(tr('hace 5 min'), '5 min ago');
+  assert.strictEqual(tr('Error creando: permiso denegado'), 'Error creating: permiso denegado', 'el valor se conserva');
+  assert.strictEqual(tr('⚠️ Backend está bloqueado en el paso 2: falta la key. ¿Cómo continuamos?'),
+    '⚠️ Backend is blocked at step 2: falta la key. How do we proceed?');
+  assert.strictEqual(tr('⚠️ Backend está bloqueado en el paso 2. ¿Cómo continuamos?'),
+    '⚠️ Backend is blocked at step 2. How do we proceed?', 'marcador vacío');
+  assert.strictEqual(tr('Crear con 3 terminales'), 'Create with 3 terminals');
+  assert.strictEqual(tr('Crear con 1 terminal'), 'Create with 1 terminal');
+  assert.strictEqual(tr('Estado: trabajando'), 'Status: working', 'el valor capturado también se traduce si es frase conocida');
+  assert.strictEqual(tr('Guardar'), 'Save', 'lo exacto sigue ganando');
+  assert.strictEqual(tr('nada que ver'), null);
+  assert.strictEqual(traducir('hace 5 min', 'es', D, P), null, 'en español no toca nada');
+  assert.strictEqual(traducir('hace 5 min', 'en', D), null, 'sin plantillas compiladas = solo exacto (compat)');
+  // Regex-safe: los literales con símbolos no rompen la compilación
+  const D3 = { '({n}) archivos [x] * + ?': '({n}) files [x] * + ?' };
+  assert.strictEqual(traducir('(4) archivos [x] * + ?', 'en', D3, compilarPlantillas(D3)), '(4) files [x] * + ?');
+  // Espacios colapsados como el resto del motor
+  assert.strictEqual(tr('hace   5   min'), '5 min ago');
+  console.log('plantillas ok');
+}
+{
+  const { compilarPlantillas } = _pure;
+  const D = { 'Copiar [[{s}]]': 'Copy [[{s}]]' };
+  const P = compilarPlantillas(D);
+  assert.strictEqual(origenAtributo('Copiar [[a-b]]', 'Copy [[a-b]]', 'en', D, P), 'Copiar [[a-b]]', 'traducido por plantilla: sigue el guardado');
+  console.log('origenAtributo + plantillas ok');
+}
