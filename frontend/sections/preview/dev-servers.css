@@ -18,7 +18,7 @@
 }
 #jw-localhosts-btn.jw-ds-vacio .jw-ds-count {
   background: var(--ob-bg-3);
-  color: var(--ob-fg-4);
+  color: var(--ob-fg-3);
 }
 #jw-localhosts-btn.activo .jw-ds-count {
   background: var(--ob-accent-24);
@@ -171,7 +171,7 @@
   flex-shrink: 0;
   width: 26px; height: 26px;
   display: inline-flex; align-items: center; justify-content: center;
-  color: var(--ob-fg-4);
+  color: var(--ob-fg-3);
   background: transparent;
   border: none;
   border-radius: var(--radius-sm);
