@@ -40,7 +40,8 @@ document.querySelectorAll('.tea-card').forEach((el) => {
   const label = (id, fallback) => {
     try {
       const b = JSON.parse(localStorage.getItem(`jarvis.control.${id}`) || 'null');
-      if (b?.type === 'key' && b.value) return _prettyKeyLabel(b.value);
+      // #tea-ptt-key/#tea-kbd-term son zona i18n-skip → t() acá ('Espacio', 'Alt der'…)
+      if (b?.type === 'key' && b.value) return window.JarvisI18n?.t?.(_prettyKeyLabel(b.value)) ?? _prettyKeyLabel(b.value);
       if (b?.type === 'mouse') return `Mouse ${b.value}`;
     } catch { /* binding corrupto → fábrica */ }
     return fallback;
@@ -4955,7 +4956,7 @@ function exportarConversacion() {
 
   const lineas = [`${_sbT('# Conversación JARVIS —')} ${proyectoNombre} — ${fechaHumana}`, ''];
   for (const m of mensajes) {
-    const autor = m.role === 'jarvis' ? 'JARVIS' : 'Usuario';
+    const autor = m.role === 'jarvis' ? 'JARVIS' : _sbT('Usuario');   // archivo descargado: fuera del DOM → t()
     lineas.push(`**${autor}:** ${m.content || ''}`, '');
   }
   const md = lineas.join('\n');
@@ -5067,9 +5068,12 @@ function _prettyMouseLabel(button) {
   return map[button] ?? `Mouse · botón ${button}`;
 }
 
+// Traducida en origen: la etiqueta se interpola en textos compuestos (hint del
+// dictado fijado, "X para hablar") que el observer de i18n no puede partir.
 function _renderBindingLabel(b) {
-  if (!b) return 'Sin asignar';
-  return b.type === 'mouse' ? _prettyMouseLabel(b.value) : _prettyKeyLabel(b.value);
+  const tr = (s) => window.JarvisI18n?.t?.(s) ?? s;
+  if (!b) return tr('Sin asignar');
+  return tr(b.type === 'mouse' ? _prettyMouseLabel(b.value) : _prettyKeyLabel(b.value));
 }
 
 function _esTargetEditable(target) {
