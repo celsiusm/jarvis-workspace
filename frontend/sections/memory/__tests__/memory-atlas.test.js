@@ -132,4 +132,32 @@ assert.strictEqual(M.markdown(null), '', 'memoria vacía no rompe');
 h = M.markdown('línea 1\nlínea 2');
 assert.strictEqual(h, '<p>línea 1<br>línea 2</p>');
 
+// ── Resumen (pestaña 4, ex-página de Configuración → Memoria) ──
+{
+  const mems = [
+    { slug: 'a', categoria: 'ui', actualizado: '2026-09-01' },
+    { slug: 'b', categoria: 'ui', actualizado: '2026-09-20' },
+    { slug: 'c', categoria: 'terminales', actualizado: '2026-09-10' },
+    { slug: 'd', categoria: 'rara', actualizado: '' },
+  ];
+  const salud = { por_categoria: {
+    ui: { nombre: 'UI · Workspace', total: 2, rotos: 1, huerfanas: 1 },
+    terminales: { nombre: 'Terminales & tmux', total: 1 },
+  } };
+  const filas = M.resumenCategorias(mems, salud);
+  // ordenadas por cantidad (la más poblada arriba), con matiz y problemas
+  assert.deepStrictEqual(filas.map(f => f.id), ['ui', 'terminales', 'rara']);
+  assert.strictEqual(filas[0].total, 2);
+  assert.strictEqual(filas[0].problemas, 2);
+  assert.strictEqual(filas[0].hue, 290);
+  assert.strictEqual(filas[1].problemas, 0);
+  assert.strictEqual(filas[2].neutra, true);          // categoría desconocida → neutra
+  assert.deepStrictEqual(M.resumenCategorias([], null), []);
+
+  // recientes: por fecha de actualización desc, sin fecha al final, tope n
+  assert.deepStrictEqual(M.recientes(mems, 3).map(m => m.slug), ['b', 'c', 'a']);
+  assert.deepStrictEqual(M.recientes(mems, 10).map(m => m.slug), ['b', 'c', 'a', 'd']);
+  assert.deepStrictEqual(M.recientes(null, 5), []);
+}
+
 console.log('memory-atlas.test.js OK');

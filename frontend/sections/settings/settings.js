@@ -56,9 +56,6 @@
   const _root = () => document.getElementById('jw-settings');
   const $ = (s) => _root()?.querySelector(s);
   const _itemDe = (id) => SECCIONES.flatMap(g => g.items).find(i => i.id === id);
-  // Los resúmenes de memoria vienen en markdown crudo: se leen como texto.
-  const limpio = (s) => String(s || '')
-    .replace(/^[>\s]*\[[^\]]*\]\s*/, '').replace(/[*_`#>]+/g, '').replace(/\s+/g, ' ').trim();
 
   /* ═══════════════════════════════════════════════════════════
      ARMAZÓN
@@ -191,7 +188,17 @@
     if (_abierta) _pintarValores();
   }
 
+  // "Memoria" no es una página de Configuración: abre el panel de Memoria
+  // directo (antes había una página intermedia con un botón "Abrir"). Lo que
+  // mostraba esa página — pulso, tableros por categoría, recientes, lecciones —
+  // vive ahora en la pestaña Resumen del panel.
+  function _irAMemoria() {
+    close();
+    window.JarvisMemory?.abrir?.();
+  }
+
   function setSeccion(sec) {
+    if (sec === 'memoria') { _irAMemoria(); return; }
     if (!sec || sec === _seccion) return;
     _seccion = sec;
     _root()?.querySelectorAll('.sx-item').forEach(b => {
@@ -213,7 +220,7 @@
     sheet.innerHTML = '';
     ({
       voz: _renderVoz, atajos: _renderAtajos, apariencia: _renderApariencia,
-      cuentas: _renderCuentas, skills: _renderSkills, memoria: _renderMemoria,
+      cuentas: _renderCuentas, skills: _renderSkills,
       workflows: _renderWorkflows,
     }[_seccion] || (() => {}))(sheet);
     sheet.classList.remove('sx-in'); void sheet.offsetWidth; sheet.classList.add('sx-in');
@@ -337,6 +344,7 @@
 
   /* ── Abrir / cerrar ── */
   function open(seccion) {
+    if (seccion === 'memoria') { window.JarvisMemory?.abrir?.(); return; }
     if (seccion) _seccion = seccion;
     _prevFocus = document.activeElement;
     _abierta = true;
@@ -1251,108 +1259,6 @@
   /* ═══════════════════════════════════════════════════════════
      6 · MEMORIA — consola (antes: una fila con un botón «Abrir»)
      ═══════════════════════════════════════════════════════════ */
-  function _renderMemoria(b) {
-    b.innerHTML = blk('pulso', 'de un vistazo',
-      `<div class="cta-cargando">${icon('loader', 15)} ${esc(_t('Leyendo la memoria del proyecto…'))}</div>`,
-      { wide: true, key: 'Explorar memoria' });
-    if (!_projectId) { b.innerHTML = blk('memoria', '', `<div class="sx-empty"><b>${esc(_t('Sin proyecto abierto'))}</b></div>`, { wide: true }); return; }
-
-    const pid = _projectId;
-    Promise.allSettled([
-      fetch(`/api/projects/${pid}/memory/salud`).then(r => r.json()),
-      fetch(`/api/projects/${pid}/memory`).then(r => r.json()),
-    ]).then(([s, m]) => {
-      if (!_abierta || _seccion !== 'memoria' || _projectId !== pid) return;
-      const sal = s.status === 'fulfilled' ? (s.value || {}) : {};
-      const mem = (m.status === 'fulfilled' ? (m.value?.memorias || []) : []);
-      _pintarMemoria(b, sal, mem);
-    });
-  }
-
-  function _pintarMemoria(b, sal, mem) {
-    const alt = sal.altimetro || {};
-    const lec = sal.lecciones || {};
-    const hayTel = (alt.inyecciones || 0) > 0;
-    const tasa = hayTel ? Math.round((alt.tasa_lectura || 0) * ((alt.tasa_lectura || 0) > 1 ? 1 : 100)) : null;
-
-    const problemas = [
-      ['enlaces rotos', (sal.rotos || []).length, 'er'],
-      ['citas muertas', (sal.citas_muertas || []).length, 'er'],
-      ['contrato incompleto', (sal.contrato || []).length, 'wk'],
-      ['huérfanas', (sal.huerfanas || []).length, 'wk'],
-      ['en cuarentena', (sal.cuarentena || []).length, 'wk'],
-      ['choques lápida/vigente', (sal.choques || []).length, 'er'],
-      ['duplicados', (sal.duplicados || []).length, 'wk'],
-    ].filter(p => p[1] > 0);
-
-    const pulso = `
-      <div class="mm-pulso">
-        <div class="mm-big"><b>${num(sal.total ?? mem.length)}</b><span>${esc(_t('memorias vigentes'))}</span></div>
-        <div class="mm-alt">
-          <div class="mm-alt-h">
-            <span>${esc(_t('de lo inyectado, cuánto se leyó'))} · ${num(alt.dias || 7)} ${esc(_t('días'))}</span>
-            ${hayTel ? `<b class="sx-mono">${tasa}%</b>` : `<b class="sx-mono sx-dim">${esc(_t('sin datos'))}</b>`}
-          </div>
-          ${hayTel ? `<div class="mm-bar"><i style="width:${Math.min(100, tasa)}%"></i></div>` : ''}
-          <div class="mm-alt-f sx-mono sx-dim">${hayTel
-            ? `${num(alt.inyecciones)} ${esc(_t('inyectadas'))} · ${num(alt.lecturas)} ${esc(_t('leídas'))} · ${num(alt.lecturas_en_done)} ${esc(_t('en tareas cerradas'))}`
-            : esc(_t('todavía no se registraron inyecciones en esta ventana'))}</div>
-        </div>
-        <div class="mm-sig">${problemas.length
-          ? problemas.map(([n, v, k]) => `<span class="sx-pill ${k}">${esc(_t(n))} ${v}</span>`).join('')
-          : `<span class="sx-pill ok">${esc(_t('sin problemas de salud'))}</span>`}</div>
-      </div>`;
-
-    const cats = Object.entries(sal.por_categoria || {});
-    const maxCat = Math.max(1, ...cats.map(([, c]) => c.total || 0));
-    const cuadros = cats.length ? `<div class="mm-cats">${cats.map(([id, c]) => {
-      const mal = (c.rotos || 0) + (c.citas_muertas || 0) + (c.huerfanas || 0) + (c.contrato || 0);
-      return `<div class="mm-cat"${mal ? ` title="${mal} ${esc(_t('con problemas de salud'))}"` : ''}>
-        <span class="mm-cat-n">${esc(c.nombre || id)}</span>
-        <span class="mm-cat-b"><i style="width:${Math.round((c.total || 0) / maxCat * 100)}%"></i></span>
-        <span class="mm-cat-v sx-mono">${mal ? `<em>${mal}</em>` : ''}${num(c.total)}</span>
-      </div>`;
-    }).join('')}</div>` : '';
-
-    const recientes = mem.slice()
-      .sort((a, b2) => String(b2.actualizado || '').localeCompare(String(a.actualizado || '')))
-      .slice(0, 7);
-    const lista = recientes.length ? `<div class="mm-list">${recientes.map(m => `
-      <button class="mm-i" type="button" data-slug="${esc(m.slug)}">
-        <span class="mm-i-t"><b>${esc(limpio(m.titulo) || m.slug)}</b><span>${esc(limpio(m.resumen))}</span></span>
-        <span class="mm-i-m">
-          ${m.estado && m.estado !== 'vigente' ? `<span class="sx-pill ${m.estado === 'lapida' ? 'er' : 'wk'}">${esc(m.estado)}</span>` : ''}
-          <span class="sx-mono sx-dim">${esc(m.actualizado || '')}</span>
-        </span>
-      </button>`).join('')}</div>`
-      : `<div class="sx-empty"><b>${esc(_t('Todavía no hay memorias'))}</b>
-          <p>${esc(_t('Cuando un agente descubre algo que el resto debería saber, lo deja acá y el recall se lo inyecta al siguiente. Se guardan en .jarvis/memory/.'))}</p></div>`;
-
-    b.innerHTML =
-      blk('pulso', 'de un vistazo', pulso, { wide: true, key: 'Explorar memoria' }) +
-      (cuadros ? blk('cuadros', 'por categoría', cuadros, { wide: true }) : '') +
-      blk('recientes', 'últimas tocadas', lista, { wide: true }) +
-      blk('lecciones', 'lo aprendido', `
-        <div class="sx-set">
-          <div class="sx-set-t"><b>${esc(_t('Destilador de lecciones'))}</b>
-            <span>${esc(_t('Junta los motivos de los pasos trabados y los convierte en reglas cortas que se inyectan a TODOS los agentes.'))}</span></div>
-          <span class="sx-pill ${lec.activo ? 'ok' : 'mute'}">${lec.activo ? esc(_t('activo')) : esc(_t('apagado'))}</span>
-        </div>
-        <div class="mm-lec-n sx-mono sx-dim">${num(lec.lecciones_memoria)} ${esc(_t('lecciones'))} ·
-          ${num(lec.senales_pendientes)} ${esc(_t('señales pendientes'))} (${esc(_t('destila a las'))} ${num(lec.umbral || 6)})</div>`,
-        { key: 'Lecciones' }) +
-      blk('archivo', 'la carpeta', `
-        <div class="sx-set">
-          <div class="sx-set-t"><b>${esc(_t('Explorador de memoria'))}</b>
-            <span>${esc(_t('Lista, grafo de [[wikilinks]] y panel Live de quién toca qué.'))}</span></div>
-          <button class="sx-btn" id="sx-abrir-memoria" type="button">${icon('external-link', 13)} ${esc(_t('Abrir'))}</button>
-        </div>`);
-
-    const abrir = () => window.JarvisMemory?.abrir?.();
-    b.querySelector('#sx-abrir-memoria')?.addEventListener('click', abrir);
-    b.querySelectorAll('.mm-i').forEach(x => x.addEventListener('click', abrir));
-  }
-
   /* ═══════════════════════════════════════════════════════════
      7 · WORKFLOWS — línea de tiempo con el track de pasos
      ═══════════════════════════════════════════════════════════ */

@@ -1999,5 +1999,20 @@
     "Producto & Roadmap": "Product & Roadmap",
     "Memorias": "Memories",
     "Las escriben tus agentes al descubrir cosas del proyecto (el protocolo ya está en el CLAUDE.md) — o creá la primera vos.": "Your agents write them when they discover things about the project (the protocol is already in CLAUDE.md) — or create the first one yourself.",
+    // ── Memoria: pestaña Resumen ──
+    "Resumen": "Summary",
+    "Resumen (4)": "Summary (4)",
+    "{e} enlaces · {c} constelaciones": "{e} links · {c} constellations",
+    "Salud": "Health",
+    "Recall · {d} días": "Recall · {d} days",
+    "{i} inyectadas · {l} leídas · {d} en pasos OK": "{i} injected · {l} read · {d} in OK steps",
+    "lo que el linter encontró": "what the linter found",
+    "memorias por categoría": "memories by category",
+    "lo último que se tocó": "the latest touched",
+    "lo que el enjambre aprendió": "what the swarm learned",
+    "{n} lecciones · {s} señales pendientes (destila a las {u})": "{n} lessons · {s} pending signals (distills at {u})",
+    "apagado": "off",
+    "sin datos": "no data",
+    "hoy": "today",
   });
 })();

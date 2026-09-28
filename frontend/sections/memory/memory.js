@@ -27,7 +27,8 @@
   let _cargando  = false;
   let _error     = false;
 
-  let _tab       = 'lista';       // 'lista' | 'grafo' | 'live'
+  let _tab       = 'lista';       // 'lista' | 'grafo' | 'live' | 'resumen'
+  const TABS = ['lista', 'grafo', 'live', 'resumen'];
   let _slugAbierta = null;
   let _modo      = 'ver';         // lector: 'ver' | 'editar' | 'nueva'
   let _leyendo   = false;         // ancho angosto: el lector tapa al riel
@@ -151,7 +152,7 @@
       if (s) { e.preventDefault(); s.focus(); s.select(); }
       return;
     }
-    if (e.key === '1' || e.key === '2' || e.key === '3') { _setTab(['lista', 'grafo', 'live'][+e.key - 1]); return; }
+    if (e.key >= '1' && e.key <= '4' && e.key.length === 1) { _setTab(TABS[+e.key - 1]); return; }
     if (_tab === 'lista' && _modo === 'ver') {
       if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); _mover(1); }
       else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); _mover(-1); }
@@ -188,12 +189,13 @@
     setTimeout(() => ov.remove(), 160);
   }
 
-  async function abrir() {
+  // opts.tab: abrir directo en una vista ('resumen' desde ⚙ → Memoria, etc.).
+  async function abrir(opts) {
     document.querySelector('.mem-overlay')?.remove();
     _pararGrafo(); _pararLive();
     document.removeEventListener('keydown', _onKey);
-    _tab = _ls.get('jarvis.mem.tab', 'lista');
-    if (!['lista', 'grafo', 'live'].includes(_tab)) _tab = 'lista';
+    _tab = (opts && TABS.includes(opts.tab)) ? opts.tab : _ls.get('jarvis.mem.tab', 'lista');
+    if (!TABS.includes(_tab)) _tab = 'lista';
     _liveRail = _ls.get('jarvis.mem.rail', 'recall') === 'actividad' ? 'actividad' : 'recall';
     _modo = 'ver'; _leyendo = false; _saludFiltro = null;
 
@@ -215,6 +217,7 @@
             <button class="mem-tab" data-tab="lista" role="tab" type="button" title="Lista (1)">${icon('list-checks', 13)}<span>Lista</span></button>
             <button class="mem-tab" data-tab="grafo" role="tab" type="button" title="Grafo (2)">${icon('brain', 13)}<span>Grafo</span></button>
             <button class="mem-tab" data-tab="live" role="tab" type="button" title="Live (3)"><span class="mem-live-dot" aria-hidden="true"></span><span>Live</span></button>
+            <button class="mem-tab" data-tab="resumen" role="tab" type="button" title="Resumen (4)">${icon('chart', 13)}<span>Resumen</span></button>
           </nav>
           <div class="mem-top-acc">
             <button class="mem-nueva" id="mem-nueva" type="button" title="Nueva memoria (N)">${icon('plus', 12)}<span>Nueva</span></button>
@@ -248,7 +251,7 @@
   }
 
   function _marcarTabs() {
-    const i = ['lista', 'grafo', 'live'].indexOf(_tab);
+    const i = TABS.indexOf(_tab);
     const nav = document.querySelector('.mem-tabs');
     if (!nav) return;
     nav.style.setProperty('--i', i);
@@ -287,7 +290,7 @@
   function _renderConstel() {
     const bar = document.getElementById('mem-constel');
     if (!bar) return;
-    if (_tab === 'live' || !_memorias.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    if (_tab === 'live' || _tab === 'resumen' || !_memorias.length) { bar.hidden = true; bar.innerHTML = ''; return; }
     bar.hidden = false;
     const M = Meta();
     const probCat = {};
@@ -322,7 +325,7 @@
     const body = document.getElementById('mem-body');
     if (!body) return;
     body.dataset.vista = _tab;
-    if (_error && !_memorias.length && _tab !== 'live') {
+    if (_error && !_memorias.length && _tab !== 'live' && _tab !== 'resumen') {
       body.innerHTML = `<div class="mem-estado-vacio mem-error">
           <span class="mem-vacio-icono">${icon('alert', 22)}</span>
           <b>No pude leer la memoria del proyecto.</b>
@@ -337,7 +340,125 @@
     }
     if (_tab === 'grafo') { _renderGrafo(body); return; }
     if (_tab === 'live')  { _renderLive(body);  return; }
+    if (_tab === 'resumen') { _renderResumen(body); return; }
     _renderLista(body);
+  }
+
+  /* ══ RESUMEN ═════════════════════════════════════════════════════
+     Lo que antes vivía en ⚙ → Memoria (y obligaba a tocar "Abrir" para
+     llegar al panel): el pulso de un vistazo, la salud, los tableros por
+     constelación, lo último tocado y el destilador de lecciones. Todo es
+     navegable: una constelación filtra la Lista, una memoria se abre, un
+     problema de salud filtra la Lista por esas memorias. */
+  function _renderResumen(body) {
+    const M = Meta();
+    const total = _memorias.length;
+    const punt = M.puntajeSalud(_salud, total);
+    const probs = M.problemasSalud(_salud);
+    const alt = (_salud && _salud.altimetro) || {};
+    const hayTel = (alt.inyecciones || 0) > 0;
+    const tasa = hayTel && alt.tasa_lectura != null ? Math.round(alt.tasa_lectura * 100) : null;
+    const lec = (_salud && _salud.lecciones) || null;
+    const cats = M.resumenCategorias(_memorias, _salud);
+    const maxCat = Math.max(1, ...cats.map(c => c.total));
+    const rec = M.recientes(_memorias, 7);
+    const C = 2 * Math.PI * 22;
+    const nivel = !punt ? 'medio' : punt.pct >= 90 ? 'ok' : punt.pct >= 60 ? 'medio' : 'bajo';
+
+    const tiles = `
+      <div class="mem-res-tiles">
+        <div class="mem-res-tile">
+          <span class="mem-res-k">Memorias</span>
+          <b class="mem-res-num">${total}</b>
+          <span class="mem-res-sub">${_t('{e} enlaces · {c} constelaciones').replace('{e}', _edges.length).replace('{c}', cats.length)}</span>
+        </div>
+        <div class="mem-res-tile nivel-${nivel}">
+          <span class="mem-res-k">Salud</span>
+          <div class="mem-res-anillo">
+            <svg viewBox="0 0 50 50" width="54" height="54" aria-hidden="true">
+              <circle class="pista" cx="25" cy="25" r="22"/>
+              <circle class="valor" cx="25" cy="25" r="22" style="stroke-dasharray:${(C * (punt ? punt.pct : 0) / 100).toFixed(1)} ${C.toFixed(1)}"/>
+            </svg>
+            <b>${punt ? punt.pct : '—'}<small>${punt ? '%' : ''}</small></b>
+          </div>
+          <span class="mem-res-sub">${punt ? _t('{s} de {n} sin problemas').replace('{s}', punt.sanas).replace('{n}', total) : _t('sin datos')}</span>
+        </div>
+        <div class="mem-res-tile">
+          <span class="mem-res-k" title="De las memorias que el recall inyectó a los prompts, cuántas leyeron de verdad los agentes">${_t('Recall · {d} días').replace('{d}', alt.dias || 7)}</span>
+          <b class="mem-res-num">${tasa != null ? tasa + '<small>%</small>' : '—'}</b>
+          ${tasa != null ? `<span class="mem-res-bar"><i style="width:${Math.min(100, tasa)}%"></i></span>` : ''}
+          <span class="mem-res-sub">${hayTel
+            ? _t('{i} inyectadas · {l} leídas · {d} en pasos OK').replace('{i}', alt.inyecciones || 0).replace('{l}', alt.lecturas || 0).replace('{d}', alt.lecturas_en_done || 0)
+            : _t('todavía no se registraron inyecciones en esta ventana')}</span>
+        </div>
+      </div>`;
+
+    const salud = `
+      <section class="mem-res-sec">
+        <h3 class="mem-res-h">Salud <span>lo que el linter encontró</span></h3>
+        <div class="mem-res-probs">${probs.length
+          ? probs.map(p => FILTRABLES.has(p.k)
+              ? `<button type="button" class="mem-prob" data-k="${p.k}"><b>${p.n}</b><span>${NOMBRES_SALUD[p.k] || p.k}</span></button>`
+              : `<span class="mem-prob estatico"><b>${p.n}</b><span>${NOMBRES_SALUD[p.k] || p.k}</span></span>`).join('')
+          : `<span class="mem-res-ok">${icon('check', 12)} Sin links rotos, huérfanas ni choques.</span>`}</div>
+      </section>`;
+
+    const tableros = cats.length ? `
+      <section class="mem-res-sec">
+        <h3 class="mem-res-h">Constelaciones <span>memorias por categoría</span></h3>
+        <div class="mem-res-cats">${cats.map(c => `
+          <button type="button" class="mem-res-cat mc" data-cat="${esc(c.id)}" style="--h:${c.hue}"${c.neutra ? ' data-neutra' : ''}>
+            <i class="mem-cat-dot" aria-hidden="true"></i>
+            <span class="mem-res-cat-n">${esc(c.nombre)}</span>
+            <span class="mem-res-cat-b"><i style="width:${Math.round(c.total / maxCat * 100)}%"></i></span>
+            ${c.problemas ? `<em class="mem-cat-warn" title="${esc(_t('{n} problemas de salud').replace('{n}', c.problemas))}">${c.problemas}</em>` : ''}
+            <b>${c.total}</b>
+          </button>`).join('')}</div>
+      </section>` : '';
+
+    const recientes = `
+      <section class="mem-res-sec">
+        <h3 class="mem-res-h">Recientes <span>lo último que se tocó</span></h3>
+        ${rec.length ? `<div class="mem-res-rec">${rec.map(m => `
+          <button type="button" class="mem-res-mem mc" data-slug="${esc(m.slug)}" ${_catAttr(m.categoria)}>
+            <i class="mem-cat-dot" aria-hidden="true"></i>
+            <span class="mem-res-mem-t"><b data-i18n-skip>${esc(M.textoPlano(m.titulo) || m.slug)}</b>
+              <span data-i18n-skip>${esc(M.textoPlano(m.resumen || ''))}</span></span>
+            <span class="mem-res-fecha">${esc(M.fechaRelativa(m.actualizado))}</span>
+          </button>`).join('')}</div>`
+          : `<div class="mem-res-vacio">Todavía no hay memorias.</div>`}
+      </section>`;
+
+    const lecciones = `
+      <section class="mem-res-sec">
+        <h3 class="mem-res-h">Lecciones <span>lo que el enjambre aprendió</span></h3>
+        <div class="mem-res-lec${lec && lec.activo ? '' : ' off'}">
+          <span class="mem-res-lec-ico">${icon('sparkle', 16)}</span>
+          <span class="mem-res-lec-tx">
+            <b>Destilador de lecciones</b>
+            <span>Junta los motivos de los pasos trabados y los convierte en reglas cortas que se inyectan a TODOS los agentes.</span>
+            ${lec ? `<span class="mem-res-lec-n">${_t('{n} lecciones · {s} señales pendientes (destila a las {u})')
+              .replace('{n}', lec.lecciones_memoria || 0).replace('{s}', lec.senales_pendientes || 0).replace('{u}', lec.umbral || 6)}</span>` : ''}
+          </span>
+          <span class="mem-res-pill ${lec && lec.activo ? 'on' : ''}">${lec && lec.activo ? 'activo' : 'apagado'}</span>
+        </div>
+      </section>`;
+
+    body.innerHTML = `<div class="mem-resumen">${tiles}<div class="mem-res-grid">
+        <div class="mem-res-col">${tableros}${salud}</div>
+        <div class="mem-res-col">${recientes}${lecciones}</div>
+      </div></div>`;
+
+    body.querySelectorAll('.mem-res-cat').forEach(b => b.addEventListener('click', () => {
+      _cats = [b.dataset.cat]; _query = ''; _estado = 'todas'; _saludFiltro = null;
+      _setTab('lista');
+    }));
+    body.querySelectorAll('.mem-res-mem').forEach(b => b.addEventListener('click', () => _abrirSlug(b.dataset.slug)));
+    body.querySelectorAll('.mem-res-probs .mem-prob[data-k]').forEach(b => b.addEventListener('click', () => {
+      _cats = []; _query = ''; _estado = 'todas';
+      _saludFiltro = { k: b.dataset.k, slugs: Meta().slugsDe(_salud, b.dataset.k) };
+      _setTab('lista');
+    }));
   }
 
   /* ══ LISTA ═══════════════════════════════════════════════════════ */

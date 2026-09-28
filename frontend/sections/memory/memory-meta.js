@@ -147,6 +147,29 @@
       .map(id => Object.assign({}, categoria(id), { n: n[id] }));
   }
 
+  // ── Resumen (pestaña 4) ──
+  // Tableros por constelación: cuántas memorias tiene cada una y cuántos
+  // problemas del linter carga (por_categoria de /memory/salud). Ordenadas por
+  // tamaño: lo más poblado arriba.
+  function resumenCategorias(memorias, salud) {
+    const por = (salud && salud.por_categoria) || {};
+    return contarCategorias(memorias)
+      .map(c => {
+        const s = por[c.id] || {};
+        const problemas = (s.rotos || 0) + (s.citas_muertas || 0) + (s.huerfanas || 0) + (s.contrato || 0);
+        return { id: c.id, nombre: c.nombre, hue: c.hue, neutra: !!c.neutra, total: c.n, problemas: problemas };
+      })
+      // desempate: las conocidas en orden canónico (sort estable), las neutras al final
+      .sort((a, b) => b.total - a.total || (a.neutra ? 1 : 0) - (b.neutra ? 1 : 0));
+  }
+
+  // Las últimas tocadas (por `actualizado` desc; sin fecha, al final).
+  function recientes(memorias, n) {
+    return (memorias || []).slice()
+      .sort((a, b) => String((b && b.actualizado) || '').localeCompare(String((a && a.actualizado) || '')))
+      .slice(0, n || 7);
+  }
+
   // Estado normalizado (lápida con tilde también vale).
   function estadoDe(m) {
     const e = String((m && m.estado) || 'vigente').toLowerCase().replace('á', 'a');
@@ -375,7 +398,7 @@
   const api = { badges, subLinea, problemasSalud, categoriasSalud, estadoLecciones, altimetro,
     slugDeLink, textoPlano, CATEGORIAS, categoria, contarCategorias, estadoDe, esLeccion, filtrar, contarEstados,
     conexiones, grados, marcasSalud, slugsDe, puntajeSalud, fechaRelativa, haceCorto,
-    resultadoUso, escHTML, markdown };
+    resultadoUso, escHTML, markdown, resumenCategorias, recientes };
   if (typeof module === 'object' && module.exports) module.exports = api;
   else root.JarvisMemoryMeta = api;
 
