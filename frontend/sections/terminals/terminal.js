@@ -1020,7 +1020,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
         const path = await _subirImagenTerminal(media, terminalId, media.name);
         enviar(path);
       } catch (err) {
-        term.write(`\r\n\x1b[31mError subiendo ${esVid ? 'el video' : 'la imagen'}: ${err.message}\x1b[0m\r\n`);
+        term.write(`\r\n\x1b[31m${_termT(esVid ? 'Error subiendo el video: {e}' : 'Error subiendo la imagen: {e}').replace('{e}', () => _termT(err.message))}\x1b[0m\r\n`);
       }
       term.focus();
       term.scrollToBottom();
@@ -1094,7 +1094,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
         ws.send(JSON.stringify({ type: 'input', data: fb }));
         term.scrollToBottom();
       } else {
-        term.write(`\r\n\x1b[31mError pegando imagen: ${err.message}\x1b[0m\r\n`);
+        term.write(`\r\n\x1b[31m${_termT('Error pegando imagen: {e}').replace('{e}', () => _termT(err.message))}\x1b[0m\r\n`);
       }
     }
   }, true);

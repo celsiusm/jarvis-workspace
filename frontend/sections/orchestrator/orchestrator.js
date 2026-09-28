@@ -682,7 +682,9 @@ class OrchestratorPanel {
     if (!btn) return;
     if (this._unreadCount > 0) {
       const lbl = btn.querySelector('.orch-scroll-down-count');
-      if (lbl) lbl.textContent = `${this._unreadCount} ${this._unreadCount === 1 ? 'nuevo' : 'nuevos'}`;
+      // La palabra pasa por i18n (un template "{n} nuevo" calzaría con cualquier «X nuevo»).
+      const _t = (s) => (window.JarvisI18n?.t ? window.JarvisI18n.t(s) : s);
+      if (lbl) lbl.textContent = `${this._unreadCount} ${_t(this._unreadCount === 1 ? 'nuevo' : 'nuevos')}`;
       btn.hidden = false;
     } else {
       btn.hidden = true;

@@ -394,6 +394,8 @@ function agregarMensajeChat(rol, texto, extras) {
   _renderMensaje(rol, texto, extras);
 }
 
+const _chatT = (s) => (typeof s === 'string' && s && window.JarvisI18n?.t) ? window.JarvisI18n.t(s) : s;
+
 function _renderMensaje(rol, texto, extras) {
   _panel()?.addMessage({
     id:        crypto.randomUUID?.() ?? String(Date.now() + Math.random()),
@@ -401,7 +403,9 @@ function _renderMensaje(rol, texto, extras) {
     author:    rol === 'jarvis' ? 'Jarvis' : 'Tú',
     badge:     rol === 'jarvis' ? 'orchestrator' : undefined,
     timestamp: new Date(),
-    content:   texto,
+    // .orch-msg-body es zona i18n-skip: los textos de Jarvis (avisos propios y
+    // del backend) se traducen acá con t() (exacto/plantilla; lo demás queda igual).
+    content:   rol === 'jarvis' ? _chatT(texto) : texto,
     ...(extras || {}),
   });
 }
@@ -964,14 +968,14 @@ function _restaurarChat() {
       author:    m.rol === 'jarvis' ? 'Jarvis' : 'Tú',
       badge:     m.rol === 'jarvis' ? 'orchestrator' : undefined,
       timestamp: new Date(),
-      content:   m.texto,
+      content:   m.rol === 'jarvis' ? _chatT(m.texto) : m.texto,
     })));
   } else {
     p.setMessages([{
       id: `welcome-${projectId}`,
       role: 'jarvis', author: 'Jarvis', badge: 'orchestrator',
       timestamp: new Date(),
-      content: '¿Qué hacemos, señor?',
+      content: _chatT('¿Qué hacemos, señor?'),
       quickReplies: ['Ver estado', 'Lanzar Claude Code', 'Nueva terminal'],
     }]);
   }
@@ -1827,7 +1831,7 @@ function _sbRowHTML(p, idx) {
       ${trabajando ? '<span class="sb-glow" aria-hidden="true"></span>' : ''}<span class="sb-icon"></span>${trabajando ? _sbSnakeSVG() : ''}
       <span class="sb-row-name">${esc(nombre)}</span>
       ${countHtml}
-      <button class="sb-row-x" data-id="${esc(p.id)}" title="Quitar de la lista" aria-label="Quitar de la lista" tabindex="-1">
+      <button class="sb-row-x" data-id="${esc(p.id)}" title="${_sbT('Quitar de la lista')}" aria-label="${_sbT('Quitar de la lista')}" tabindex="-1">
         <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>
       </button>
     </div>`;
@@ -3426,7 +3430,7 @@ async function enviarMensaje(texto, imagenBase64 = null, mediaType = null) {
     content: String(m.texto || '').slice(0, 4000),
   }));
 
-  const textoMostrar = texto + (imagenBase64 ? (texto ? ' [imagen adjunta]' : '[imagen adjunta]') : '');
+  const textoMostrar = texto + (imagenBase64 ? (texto ? ' ' : '') + _chatT('[imagen adjunta]') : '');
   agregarMensajeChat('user', textoMostrar);
   setEstado('processing');
   const abort = new AbortController();
@@ -3581,7 +3585,7 @@ async function _chatStream(body, pid, signal) {
       } else if (ev.type === 'done') {
         done = ev;
       } else if (ev.type === 'error') {
-        done = { response: acumulado || ('⚠ ' + (ev.detail || 'Error')), actions: [],
+        done = { response: acumulado || ('⚠ ' + _chatT(ev.detail || 'Error')), actions: [],
                  created_terminals: [], closed_all: false, workflow_card: null };
       }
     }
