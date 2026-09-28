@@ -45,7 +45,7 @@
     atajos:     { t: 'Teclado',     sub: 'Todo el workspace en un teclado. Tocá una tecla para reasignarla.' },
     apariencia: { t: 'Apariencia',  sub: '24 temas, tonalidad fina e idioma. Se aplica al instante.' },
     cuentas:    { t: 'Cuentas',     sub: 'Varias cuentas por CLI, cambio sin re-loguear.' },
-    skills:     { t: 'Extensiones', sub: 'Plugins activos en este proyecto y skills del repo.' },
+    skills:     { t: 'Extensiones', sub: 'Plugins de Claude Code y las skills y reglas que lee cada IA.' },
     memoria:    { t: 'Memoria',     sub: 'El conocimiento que comparten los agentes: estado y salud.' },
     workflows:  { t: 'Workflows',   sub: 'Historial de orquestaciones multi-agente.' },
   };
@@ -209,6 +209,7 @@
     if (!sheet) return;
     t.textContent = _t(meta.t || '');
     sub.textContent = _t(meta.sub || '');
+    window.JarvisExtensiones?.desmontar?.();
     sheet.innerHTML = '';
     ({
       voz: _renderVoz, atajos: _renderAtajos, apariencia: _renderApariencia,
@@ -278,7 +279,8 @@
     push('apariencia', 'Liquid Glass', 'vidrio translúcido transparencia material glass blur');
     push('apariencia', 'Auto-iniciar el preview móvil', 'expo metro mobile');
     push('cuentas', 'Conectar cuenta nueva', 'login oauth vincular cli', null);
-    push('skills', 'Plugins instalados', 'marketplace extensiones', null);
+    push('skills', 'Plugins instalados', 'marketplace extensiones claude', null);
+    push('skills', 'Skills e instrucciones', 'skill regla agents.md gemini codex cursor copilot qwen opencode windsurf', null);
     push('memoria', 'Explorar memoria', 'wikilinks grafo notas salud');
     push('workflows', 'Historial de workflows', 'orquestación pasos agentes', null);
     return idx;
@@ -348,6 +350,7 @@
 
   function close() {
     _abierta = false;
+    window.JarvisExtensiones?.desmontar?.();
     const root = _root();
     if (root) { root.hidden = true; root.innerHTML = ''; }
     // El DOM de Voz/Atajos se detacha: soltar el callback para no pintar sobre
@@ -364,6 +367,7 @@
     // confirm/prompt). El buscador con texto también se queda su Esc.
     if (e.key === 'Escape'
         && !document.querySelector('#modal-skill-md[style*="flex"]')
+        && !document.querySelector('#jw-settings .ex-drawer.open')
         && !document.querySelector('.cta-alta-overlay')
         && !document.querySelector('.ob-confirm-overlay')) {
       e.preventDefault(); e.stopPropagation(); close();
@@ -1201,100 +1205,47 @@
   }
 
   /* ═══════════════════════════════════════════════════════════
-     5 · EXTENSIONES — el markup .ps-* lo cablea JarvisSkills.montar()
-     (workspace.js): se re-viste, no se reescribe.
+     5 · EXTENSIONES — "Estudio de extensiones" (extensions.js/.css)
+     Plugins y marketplace de Claude Code + las skills/reglas que lee CADA IA
+     (Claude, Codex, Gemini, Cursor, Copilot…). Todo el cuerpo lo pinta
+     window.JarvisExtensiones; acá sólo se monta y se le pasan los ganchos.
      ═══════════════════════════════════════════════════════════ */
-  function _renderSkills(b) {
-    b.innerHTML = blk('rack', 'plugins del proyecto y skills del repo', `
-      <div class="ps-toolbar">
-        <div class="ps-tabs">
-          <button class="ps-tab activo" data-tab="instalados">${esc(_t('Mis Plugins'))}</button>
-          <button class="ps-tab" data-tab="marketplace">${esc(_t('Marketplace'))}</button>
-        </div>
-        <label class="ps-buscar">
-          ${icon('search', 13)}
-          <input id="ps-buscar" type="text" placeholder="${esc(_t('Buscar plugin o skill…'))}" autocomplete="off" spellcheck="false" aria-label="${esc(_t('Buscar plugin o skill'))}">
-        </label>
-      </div>
-      <div class="modal-body-ps">
-        <div class="ps-panel activo" data-panel="instalados">
-          <section class="ps-section">
-            <header class="ps-section-head">
-              <span class="ps-section-icon ps-icon-plugin tone-cyan">${icon('plug', 14)}</span>
-              <h3>${esc(_t('Plugins instalados'))}</h3>
-              <span class="ps-section-sub" id="ps-plugins-count">0</span>
-            </header>
-            <div class="ps-list" id="ps-plugins-instalados"><div class="ps-empty">${esc(_t('Cargando…'))}</div></div>
-          </section>
-          <section class="ps-section">
-            <header class="ps-section-head">
-              <span class="ps-section-icon ps-icon-skill tone-violet">${icon('file', 14)}</span>
-              <h3>${esc(_t('Skills del proyecto'))}</h3>
-              <span class="ps-section-sub" id="ps-skills-count">0</span>
-              <span class="ps-spacer"></span>
-              <button class="sx-btn sm ps-mini-btn" id="ps-btn-new-skill">+ ${esc(_t('Nueva'))}</button>
-            </header>
-            <div class="ps-skill-path" id="ps-skill-path">.claude/skills/</div>
-            <div class="ps-list" id="ps-skills-md"><div class="ps-empty">${esc(_t('Cargando…'))}</div></div>
-          </section>
-        </div>
-        <div class="ps-panel" data-panel="marketplace">
-          <section class="ps-section">
-            <header class="ps-section-head">
-              <span class="ps-section-icon ps-icon-plugin tone-cyan">${icon('plug', 14)}</span>
-              <h3>${esc(_t('Plugins disponibles'))}</h3>
-              <span class="ps-section-sub" id="ps-marketplace-count">0</span>
-            </header>
-            <div class="ps-grid" id="ps-marketplace"><div class="ps-empty">${esc(_t('Cargando marketplace…'))}</div></div>
-          </section>
-        </div>
-      </div>`, { wide: true, key: 'Plugins instalados' });
-    window.JarvisSkills?.montar?.();   // bridge expuesto desde workspace.js
-    _wireSkillsBuscar(b);
+  const _EXT_V = 1;   // subir junto con los ?v= de workspace.html
+  let _extCarga = null;
+  // Si workspace.html todavía no trae los tags de extensions.*, se cargan acá
+  // (idempotente: con los tags presentes no hace nada).
+  function _cargarExtensiones() {
+    if (window.JarvisExtensiones) return Promise.resolve();
+    if (_extCarga) return _extCarga;
+    if (!document.querySelector('link[href*="/settings/extensions.css"]')) {
+      const l = document.createElement('link');
+      l.rel = 'stylesheet';
+      l.href = `/static/sections/settings/extensions.css?v=${_EXT_V}`;
+      document.head.appendChild(l);
+    }
+    _extCarga = new Promise((ok, mal) => {
+      const s = document.createElement('script');
+      s.src = `/static/sections/settings/extensions.js?v=${_EXT_V}`;
+      s.onload = () => ok();
+      s.onerror = () => { _extCarga = null; mal(new Error('extensions.js')); };
+      document.head.appendChild(s);
+    });
+    return _extCarga;
   }
 
-  // Filtra por texto las TRES listas. Las renderiza workspace.js DESPUÉS y las
-  // re-renderiza al togglear/instalar, así que un observer re-aplica el filtro.
-  function _wireSkillsBuscar(b) {
-    const input = b.querySelector('#ps-buscar');
-    if (!input) return;
-    const zonas = [
-      { cont: b.querySelector('#ps-plugins-instalados'), sel: '.ps-item' },
-      { cont: b.querySelector('#ps-skills-md'),          sel: '.ps-item' },
-      { cont: b.querySelector('#ps-marketplace'),        sel: '.ps-card' },
-    ].filter(z => z.cont);
-    const aplicar = () => {
-      const q = input.value.trim().toLowerCase();
-      for (const z of zonas) {
-        const items = z.cont.querySelectorAll(z.sel);
-        let visibles = 0;
-        items.forEach(el => {
-          const hit = !q || el.textContent.toLowerCase().includes(q);
-          el.classList.toggle('ps-filtrado', !hit);
-          if (hit) visibles++;
-        });
-        let aviso = z.cont.querySelector('.ps-filtro-vacio');
-        if (q && items.length && !visibles) {
-          if (!aviso) {
-            aviso = document.createElement('div');
-            aviso.className = 'ps-filtro-vacio';
-            z.cont.appendChild(aviso);
-          }
-          aviso.innerHTML = `<span>${esc(_t('Sin resultados para'))}</span> <b>«${esc(input.value.trim())}»</b>`;
-        } else { aviso?.remove(); }
-      }
+  function _renderSkills(b) {
+    const montar = () => {
+      if (!_abierta || _seccion !== 'skills' || !b.isConnected) return;
+      window.JarvisExtensiones.montar(b, {
+        projectId: _projectId,
+        onActivos: (n) => { _res.activos = n; _pintarValores(); },
+      });
     };
-    input.addEventListener('input', aplicar);
-    input.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape' && input.value) { e.preventDefault(); e.stopPropagation(); input.value = ''; aplicar(); }
+    if (window.JarvisExtensiones) { montar(); return; }
+    b.innerHTML = `<div class="cta-cargando">${icon('loader', 15)} ${esc(_t('Cargando…'))}</div>`;
+    _cargarExtensiones().then(montar, () => {
+      b.innerHTML = `<div class="sx-empty"><b>${esc(_t('No se pudo cargar'))}</b></div>`;
     });
-    const mo = new MutationObserver((muts) => {
-      if (!input.value.trim()) return;
-      const ajeno = muts.some(m =>
-        [...m.addedNodes, ...m.removedNodes].some(n => !(n.nodeType === 1 && n.classList?.contains('ps-filtro-vacio'))));
-      if (ajeno) aplicar();
-    });
-    zonas.forEach(z => mo.observe(z.cont, { childList: true }));
   }
 
   /* ═══════════════════════════════════════════════════════════

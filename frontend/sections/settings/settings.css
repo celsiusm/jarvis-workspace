@@ -1281,9 +1281,8 @@
 
 /* ═══════════════════════════════════════════════════════════════════════════
    MARKUP HEREDADO QUE SE MANTIENE
-   Extensiones reusa el markup .ps-* que cablea window.JarvisSkills.montar()
-   (workspace.js) y el modal de alta de cuenta conserva su DOM: se re-visten,
-   no se reescriben.
+   El modal de alta de cuenta conserva su DOM: se re-viste, no se reescribe.
+   (Extensiones ya no usa el markup .ps-*: vive en extensions.js/.css.)
    ═══════════════════════════════════════════════════════════════════════════ */
 @keyframes cta-spin { to { transform: rotate(360deg); } }
 .cta-cargando, .cta-err {
@@ -1293,53 +1292,6 @@
 .cta-err { color: var(--ob-err); }
 .cta-cargando svg { animation: cta-spin .9s linear infinite; }
 
-/* ── Skills: pestañas re-vestidas (markup .ps-* de base.css) + buscador ── */
-.ps-toolbar {
-  display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; flex-wrap: wrap; margin: 0 0 4px;
-}
-#jw-settings .ps-tabs {
-  display: inline-flex; padding: 3px; gap: 2px; margin: 0;
-  border-radius: 12px; background: color-mix(in oklch, var(--ob-bg-void) 85%, transparent);
-  border: 1px solid var(--ob-line-1);
-}
-/* buscador de plugins/skills (misma familia que el buscador del nav) */
-.ps-buscar {
-  display: flex; align-items: center; gap: 8px; flex: 1;
-  max-width: 300px; min-width: 180px; height: 34px; padding: 0 11px;
-  border-radius: var(--radius-lg); background: color-mix(in oklch, var(--ob-bg-void) 85%, transparent);
-  border: 1px solid var(--ob-line-1); color: var(--ob-fg-4);
-  transition: border-color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
-}
-.ps-buscar:focus-within { border-color: var(--ob-accent-24); box-shadow: 0 0 0 3px var(--ob-accent-08); color: var(--ob-fg-3); }
-.ps-buscar svg { flex-shrink: 0; }
-.ps-buscar input {
-  flex: 1; min-width: 0; border: none; background: none; outline: none;
-  color: var(--ob-fg-1); font: 500 12.5px var(--font-ui);
-}
-.ps-buscar input::placeholder { color: var(--ob-fg-4); }
-/* ítems/cards filtrados por el buscador */
-#jw-settings .ps-filtrado { display: none !important; }
-.ps-filtro-vacio {
-  padding: 14px 12px; font: 500 12px var(--font-ui); color: var(--ob-fg-3);
-}
-.ps-filtro-vacio b { color: var(--ob-fg-2); font-weight: 600; }
-#jw-settings .ps-grid .ps-filtro-vacio { grid-column: 1 / -1; }
-#jw-settings .ps-tab {
-  height: 28px; padding: 0 14px; border-radius: var(--radius); border: 1px solid transparent;
-  background: transparent; color: var(--ob-fg-2); font: 550 12px var(--font-ui); cursor: pointer;
-  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
-}
-#jw-settings .ps-tab:hover { color: var(--ob-fg-0); }
-#jw-settings .ps-tab.activo {
-  color: var(--ob-fg-0);
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--ob-accent) 22%, transparent),
-    color-mix(in oklch, var(--ob-accent) 11%, transparent));
-  border-color: var(--ob-accent-24);
-}
-#jw-settings .modal-body-ps { max-height: none; overflow: visible; }
-#jw-settings .ps-panel { padding: 16px 0 0; }
 
 
 .cta-alta-overlay {
@@ -1477,140 +1429,6 @@
 .ct-copy:hover { color: var(--ob-accent-fg); border-bottom-color: var(--ob-accent-24); }
 .ct-chip.guardar { color: var(--ob-work); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-work) 35%, transparent); background: var(--ob-work-08); }
 .ct-chip.guardar svg { color: var(--ob-work); }
-
-/* Extensiones: el rack heredado adentro de la ficha técnica */
-#jw-settings .ps-toolbar { margin-bottom: 4px; }
-#jw-settings .ps-section + .ps-section { margin-top: 22px; }
-#jw-settings .ps-mini-btn { margin-left: auto; }
-
-/* ── Extensiones: el markup .ps-* heredado, re-vestido como RACK ────────────
-   (lo renderiza workspace.js; acá solo cambia la piel: filas densas a dos
-   columnas, sin la caja gorda por ítem ni la insignia de bloque). ── */
-#jw-settings .ps-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(330px, 1fr));
-  gap: 0 22px;
-}
-#jw-settings .ps-item {
-  display: flex; align-items: center; gap: 12px;
-  padding: 10px 10px;
-  border: 0; border-radius: var(--radius);
-  background: none; box-shadow: none;
-  transition: background var(--dur-1) var(--ease-out);
-}
-#jw-settings .ps-item:hover { background: color-mix(in oklch, var(--ob-fg-0) 5%, transparent); }
-
-/* ── Los iconos del rack ───────────────────────────────────────────────────
-   Bug reportado (2026-07-22): al pasar el mouse por CUALQUIER icono de acá
-   salía el cursor de ayuda (`?`) que heredaban de base.css. El de la cabecera
-   ni `title` tiene — prometía una explicación que no existe —, y sobre una
-   fila entera clickeable (las skills) el `?` encima del icono contradecía al
-   puntero del resto de la fila. Son MARCADORES, no una ayuda: el cursor lo
-   hereda de su fila (default arriba, pointer en las clickeables).
-   Además el glifo era ilegible: 13px de trazo 1.5 sobre 24 de viewBox da
-   0.8px de línea en un gris apagado (--ob-fg-3). Sube a 15px con el trazo
-   compensado, y el chip a 26px para que respire. El glifo de cada plugin lo
-   elige sections/settings/plugin-icons.js (antes: 10 enchufes idénticos). ── */
-#jw-settings .ps-section-icon,
-#jw-settings .ps-item-badge { cursor: inherit; }
-
-/* Chip de FAMILIA: bisel de vidrio tintado por .tone-* (--ic-bg/--ic-fg/--ic-edge,
-   los mismos que ya colorean las cards de proyecto y el riel). El glifo pasa a
-   --ic-fg: vivo, no gris, así el rack se lee por color además de por forma. */
-#jw-settings .ps-item-badge {
-  flex: none; width: 30px; height: 30px; padding: 0;
-  /* flex (una sola línea), no grid: el chip tiene DOS hijos (el <svg> y el
-     texto oculto « SKILL»/« PLUGIN» de font-size:0). En grid eso son DOS filas
-     y el glifo quedaba pegado al borde de arriba; en una línea, centrado. */
-  display: flex; align-items: center; justify-content: center;
-  border-radius: 9px; font-size: 0;
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--ic-bg, var(--ob-bg-3)) 86%, white),
-    var(--ic-bg, var(--ob-bg-3)));
-  color: var(--ic-fg, var(--ob-fg-2));
-  box-shadow: inset 0 1px 0 var(--ob-glass-hi),
-              inset 0 0 0 1px var(--ic-edge, var(--sx-hair)),
-              0 3px 8px -3px color-mix(in oklch, var(--ic-fg, transparent) 55%, transparent);
-  transition: transform var(--dur-1) var(--ease-out),
-              box-shadow var(--dur-1) var(--ease-out);
-}
-#jw-settings .ps-item-badge svg {
-  width: 16px; height: 16px;
-  stroke-width: 1.7;   /* compensa la reducción 24→16 del viewBox */
-}
-/* Al recorrer la lista, el chip se enciende y da un paso al frente. */
-#jw-settings .ps-item:hover .ps-item-badge,
-#jw-settings .ps-card:hover .ps-item-badge {
-  transform: scale(1.07);
-  box-shadow: inset 0 1px 0 var(--ob-glass-hi),
-              inset 0 0 0 1px color-mix(in oklch, var(--ic-fg, var(--ob-fg-2)) 45%, transparent),
-              0 5px 14px -3px color-mix(in oklch, var(--ic-fg, var(--ob-fg-2)) 70%, transparent);
-}
-@media (prefers-reduced-motion: reduce) {
-  #jw-settings .ps-item:hover .ps-item-badge,
-  #jw-settings .ps-card:hover .ps-item-badge { transform: none; }
-}
-#jw-settings .ps-item-body { flex: 1; min-width: 0; }
-#jw-settings .ps-item-name { font: 500 12.5px var(--font-ui); color: var(--ob-fg-1); }
-#jw-settings .ps-item.activo .ps-item-name, #jw-settings .ps-item-name:only-child { color: var(--ob-fg-0); }
-#jw-settings .ps-item-version { font: 500 10.5px var(--font-mono); color: var(--ob-fg-3); }
-#jw-settings .ps-item-desc {
-  display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden;
-  margin-top: 2px; font: 400 11px/1.45 var(--font-ui); color: var(--ob-fg-3);
-}
-#jw-settings .ps-section-head { display: flex; align-items: center; gap: 9px; margin-bottom: 6px; }
-#jw-settings .ps-section-head h3 { font: 600 12.5px var(--font-ui); color: var(--ob-fg-1); margin: 0; }
-/* Cabecera: chip tintado (mismo lenguaje que las filas) en vez del glifo gris
-   plano. Un tono por sección: cian = plugins, violeta = skills. */
-#jw-settings .ps-section-icon {
-  display: grid; place-items: center;
-  width: 24px; height: 24px;
-  border: 0;
-  border-radius: 7px;
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--ic-bg, var(--ob-bg-3)) 86%, white),
-    var(--ic-bg, var(--ob-bg-3)));
-  color: var(--ic-fg, var(--ob-info));
-  box-shadow: inset 0 1px 0 var(--ob-glass-hi),
-              inset 0 0 0 1px var(--ic-edge, var(--sx-hair)),
-              0 2px 6px -3px color-mix(in oklch, var(--ic-fg, transparent) 55%, transparent);
-}
-#jw-settings .ps-section-icon svg { width: 14px; height: 14px; stroke-width: 1.7; }
-#jw-settings .ps-section-sub {
-  padding: 1px 7px; border-radius: 99px;
-  font: 500 10.5px var(--font-mono); color: var(--ob-fg-3);
-  background: color-mix(in oklch, var(--ob-fg-4) 14%, transparent);
-}
-#jw-settings .ps-skill-path { font: 500 10.5px var(--font-mono); color: var(--ob-fg-3); margin: 0 0 8px 2px; }
-#jw-settings .ps-empty { padding: 14px 10px; font: 400 12px var(--font-ui); color: var(--ob-fg-3); }
-#jw-settings .ps-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 10px; }
-#jw-settings .ps-card {
-  padding: 12px 14px; border-radius: 10px;
-  background: var(--sx-well); box-shadow: inset 0 0 0 1px var(--sx-hair);
-}
-/* El ✓/↗ de la fila «official · marketplace» venía a 16px al lado de un mono
-   de 9.5px: el glifo era casi el doble de alto que su propia etiqueta y
-   flotaba fuera de la línea base. Se achica y se centra con el texto. */
-#jw-settings .ps-card-meta { align-items: center; }
-#jw-settings .ps-card-meta > span { display: inline-flex; align-items: center; gap: 4px; }
-#jw-settings .ps-card-meta svg { flex: none; width: 12px; height: 12px; stroke-width: 1.9; }
-
-/* Lápiz de una skill: botón fantasma alineado con el rack (base.css lo dejaba
-   en una caja de 28px con borde que competía con el chip de la izquierda). */
-#jw-settings .ps-item-edit {
-  flex: none; display: grid; place-items: center;
-  width: 26px; height: 26px;
-  border: 0; border-radius: 8px;
-  background: none; color: var(--ob-fg-3);
-  transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
-}
-#jw-settings .ps-item-edit svg { width: 14px; height: 14px; stroke-width: 1.6; }
-#jw-settings .ps-item-edit:hover {
-  color: var(--ob-fg-0);
-  background: color-mix(in oklch, var(--ob-fg-0) 13%, transparent);
-  border: 0;
-}
-#jw-settings .ps-item-edit:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
 
 /* El correo de una cuenta arranca enmascarado; el ojo lo revela (y lo vuelve a
    tapar). El valor sigue siendo click-para-copiar, enmascarado o no. */

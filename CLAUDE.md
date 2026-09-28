@@ -123,6 +123,7 @@ Detalle visual completo: [[arquitectura-panel-unico]] · [[rediseno-violeta-2026
 
 ### Other backend modules
 - `core/pane_capture.py` — SHARED capture of tmux panes with 0.8s TTL cache (120 lines); dedupes the `tmux capture-pane` of agent_watch/agent_live/dev_detect. The keyword monitor of `terminals.py` stays APART on purpose (don't touch its capture).
+- `core/skills_ia.py` — read-only detector of the skills/commands/agents/rules EVERY AI tool reads in a project (Claude, Codex, Gemini, Antigravity, Cursor, Qwen, OpenCode, Copilot, Windsurf, Cline, Roo): feeds Settings → Extensions via `GET /api/projects/{id}/skills/detectadas`. Only a ≤160-char description leaves it; never home-file contents.
 - `core/logs.py` — swarm audit trail in JSON-lines (`data/jarvis.log`, rotates at 5MB). `core/mantenimiento.py` — janitor: purges `.workspace/logs` every 30 min + old `task_events` at boot.
 - Routers without their own frontend section: `voice.py` (STT via worker process `core/stt_proc.py` — serialized, one inference at a time — + TTS edge-tts + `/api/voice/translate`), `plugins.py` (plugins/skills per project, table `project_skills`), `live.py` (Agents Live snapshot), `projects_files.py` (Monaco editor backend).
 

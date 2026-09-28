@@ -30,7 +30,7 @@ new blocks.
 | Keyboard | `atajos` | **Real keyboard map**: lit = occupied, click to reassign |
 | Appearance | `apariencia` | Live test bench + the 24 themes as **spectrum** + tonality + language |
 | Accounts | `cuentas` | **Switchboard**: one CLI per row, its accounts as buttons of a selector |
-| Extensions | `skills` | Dense rack (inherited `.ps-*` markup, re-skinned) |
+| Extensions | `skills` | Extensions studio (`extensions.js` + `extensions.css`): readers map per AI, skills/rules of every AI, Claude plugins + marketplace, side drawer |
 | Memory | `memoria` | **Console**: pulse, altimeter, boxes per category, recent, lessons |
 | Workflows | `workflows` | Timeline with the step track |
 
@@ -63,11 +63,17 @@ The four server-dependent ones are fetched by `_cargarResumen()` on open.
   capture engine in `workspace.js` looks them up by that class and rewrites their
   `innerHTML` while capturing (`.settings-keybind-listening` / `-hint`). The value
   lives in `.settings-kbd`.
-- Extensions keeps the `.ps-*` markup wired by `window.JarvisSkills.montar()`;
-  re-skinned via CSS, not rewritten.
+- Extensions is its own module: `settings.js` calls
+  `window.JarvisExtensiones.montar(el, {projectId, onActivos})` and `desmontar()`
+  on section change/close. Data: `GET /api/projects/{id}/skills/detectadas`
+  (`plotspace/core/skills_ia.py` — skills, commands, agents and rules of Claude,
+  Codex, Gemini, Antigravity, Cursor, Qwen, OpenCode, Copilot, Windsurf, Cline,
+  Roo; only a ≤160-char description leaves the backend, never home-file
+  contents) + the existing plugins/marketplace endpoints. Only Claude project
+  skills are editable; other AIs' files are read-only (open in the editor).
 - The account-linking modal (`.cta-alta-*`) keeps its DOM and its **4 flows**
   (manual, device-code, paste code, callback) + abort on close.
-- Esc yields to sub-modals (`#modal-skill-md`, `.cta-alta-overlay`,
+- Esc yields to sub-modals (the Extensions drawer `.ex-drawer.open`, `.cta-alta-overlay`,
   `.ob-confirm-overlay`) and to the search box with text.
 
 ## i18n

@@ -376,6 +376,12 @@ async def guardar_skill_md(project_id: int, datos: SkillMdSave):
     skills_dir = _skills_md_dir(ruta)
     os.makedirs(skills_dir, exist_ok=True)
     path = os.path.join(skills_dir, f'{nombre}.md')
+    # Skill en formato carpeta ({nombre}/SKILL.md) sin flat homónimo: se edita
+    # EN SU LUGAR. Antes se escribía un {nombre}.md nuevo y la skill quedaba
+    # duplicada (la carpeta vieja + un flat con la edición).
+    carpeta_md = os.path.join(skills_dir, nombre, 'SKILL.md')
+    if not os.path.isfile(path) and os.path.isfile(carpeta_md) and not os.path.islink(carpeta_md):
+        path = carpeta_md
 
     try:
         with open(path, 'w', encoding='utf-8') as f:
@@ -414,3 +420,42 @@ async def eliminar_skill_md(project_id: int, nombre: str):
         asyncio.create_task(refrescar_skills_en_proyecto(project_id))
     except Exception:
         pass
+
+
+# ═══ ENDPOINTS: DETECCIÓN MULTI-IA (core/skills_ia.py) ════════════════════════
+
+@router.get("/api/projects/{project_id}/skills/detectadas")
+async def listar_skills_detectadas(project_id: int, usuario: bool = True):
+    """Lo que CADA IA de código va a leer en este proyecto: skills, comandos,
+    agentes, reglas e instrucciones de Claude Code, Codex, Gemini CLI,
+    Antigravity, Cursor, Qwen, OpenCode, Copilot, Windsurf, Cline y Roo.
+
+    `usuario=true` suma el alcance del home (~/.claude/skills, ~/.codex/prompts…)
+    en SOLO lectura. Nunca devuelve cuerpos: sólo descripción corta."""
+    import asyncio
+    from plotspace.core import skills_ia
+    ruta = _project_path(project_id)
+    home = os.path.expanduser('~') if usuario else None
+    items = await asyncio.to_thread(skills_ia.detectar, ruta, home)
+    return {
+        'herramientas': skills_ia.resumen(items),
+        'catalogo':     skills_ia.HERRAMIENTAS,
+        'items':        items,
+    }
+
+
+@router.get("/api/projects/{project_id}/skills/detectadas/contenido")
+async def leer_skill_detectada(project_id: int, path: str):
+    """Contenido (truncado a 64 KB) de un archivo DETECTADO del proyecto.
+    Rechaza cualquier ruta que el detector no liste (y todo el alcance ~/)."""
+    import asyncio
+    from plotspace.core import skills_ia
+    ruta = _project_path(project_id)
+    contenido = await asyncio.to_thread(skills_ia.leer_contenido, ruta, path)
+    if contenido is None:
+        raise HTTPException(status_code=404, detail="Archivo no detectado")
+    return {
+        'path':     path,
+        'content':  contenido,
+        'truncado': len(contenido) >= skills_ia.MAX_CONTENIDO,
+    }
