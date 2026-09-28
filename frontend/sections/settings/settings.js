@@ -273,23 +273,23 @@
     const push = (sec, label, extra, key) => idx.push({ sec, label, extra: extra || '', key: key === undefined ? label : key });
     SECCIONES.forEach(g => g.items.forEach(it => push(it.id, it.label, g.grupo, null)));
     (window.JarvisControls?.list?.() || []).forEach(c =>
-      push(c.mode === 'press' ? 'atajos' : 'voz', c.label, 'tecla atajo binding'));
+      push(c.mode === 'press' ? 'atajos' : 'voz', c.label, 'tecla atajo binding key shortcut'));
     _DICTADO_OPTS.forEach(o => push('voz', o.label, o.desc));
-    push('voz', 'Notificaciones del navegador', 'sistema permiso avisos push');
-    push('voz', 'Sonido al terminar tareas', 'acorde agente espera aviso');
-    push('atajos', 'Atajos del workspace', 'teclado ctrl esc mapa teclas');
-    push('apariencia', 'Tema de color', 'paleta oscuro claro acento espectro');
+    push('voz', 'Notificaciones del navegador', 'sistema permiso avisos push notifications alerts');
+    push('voz', 'Sonido al terminar tareas', 'acorde agente espera aviso sound chime');
+    push('atajos', 'Atajos del workspace', 'teclado ctrl esc mapa teclas keyboard shortcuts keys');
+    push('apariencia', 'Tema de color', 'paleta oscuro claro acento espectro theme palette dark light accent');
     Object.entries(TEMA_META).forEach(([id, [n]]) => push('apariencia', n, `tema ${id}`, 'Tema de color'));
-    push('apariencia', 'Tonalidad', 'matiz saturación profundidad tinte');
-    push('apariencia', 'Escala de la app', 'zoom tamaño agrandar achicar interfaz letra grande');
+    push('apariencia', 'Tonalidad', 'matiz saturación profundidad tinte hue saturation depth tint');
+    push('apariencia', 'Escala de la app', 'zoom tamaño agrandar achicar interfaz letra grande size scale font');
     push('apariencia', 'Idioma de la interfaz', 'español english lang');
-    push('apariencia', 'Liquid Glass', 'vidrio translúcido transparencia material glass blur');
+    push('apariencia', 'Liquid Glass', 'vidrio translúcido transparencia material glass blur translucent');
     push('apariencia', 'Auto-iniciar el preview móvil', 'expo metro mobile');
-    push('cuentas', 'Conectar cuenta nueva', 'login oauth vincular cli', null);
+    push('cuentas', 'Conectar cuenta nueva', 'login oauth vincular cli account link', null);
     push('skills', 'Plugins instalados', 'marketplace extensiones claude', null);
     push('skills', 'Skills e instrucciones', 'skill regla agents.md gemini codex cursor copilot qwen opencode windsurf', null);
-    push('memoria', 'Explorar memoria', 'wikilinks grafo notas salud');
-    push('workflows', 'Historial de workflows', 'orquestación pasos agentes', null);
+    push('memoria', 'Explorar memoria', 'wikilinks grafo notas salud memory graph notes health');
+    push('workflows', 'Historial de workflows', 'orquestación pasos agentes orchestration steps agents', null);
     return idx;
   }
 
@@ -299,8 +299,10 @@
     const pintar = () => {
       const q = input.value.trim().toLowerCase();
       if (!q) { res.hidden = true; res.innerHTML = ''; nav.hidden = false; _resSel = -1; _moverThumb(true); return; }
+      // También contra el label TRADUCIDO: con la interfaz en inglés se busca en inglés.
       const hits = idx.filter(a =>
-        a.label.toLowerCase().includes(q) || a.extra.toLowerCase().includes(q)).slice(0, 10);
+        a.label.toLowerCase().includes(q) || _t(a.label).toLowerCase().includes(q)
+        || a.extra.toLowerCase().includes(q)).slice(0, 10);
       nav.hidden = true; res.hidden = false;
       _resSel = hits.length ? 0 : -1;
       res.innerHTML = hits.length ? hits.map((h, i) => {
@@ -553,7 +555,9 @@
     KeyJ: { mod: 'Ctrl', que: 'Panel → Jarvis' },
     Escape: { mod: null, que: 'Cerrar / salir de pantalla completa' },
   };
-  for (let i = 1; i <= 9; i++) _ATAJOS_FIJOS[`Digit${i}`] = { mod: 'Ctrl', que: _t('Saltar al proyecto {i}').replace('{i}', i) };
+  // En español: se traduce al pintar (_t(a.que), plantilla del dict), así sigue
+  // al idioma aunque se cambie después de cargar el módulo.
+  for (let i = 1; i <= 9; i++) _ATAJOS_FIJOS[`Digit${i}`] = { mod: 'Ctrl', que: `Saltar al proyecto ${i}` };
 
   // El code de teclado del binding, o null si está en un botón del mouse
   // (entonces no hay tecla que iluminar en el mapa).
@@ -589,7 +593,7 @@
             const a = A[code];
             return `<button class="kb-k${a ? ' bound' : ''}${a && a.cfg ? ' cfg' : ''}" type="button"
                       style="grid-column: span ${w}" data-code="${code}"
-                      ${a ? `data-que="${esc((a.mod ? a.mod + ' + ' : '') + (cap || 'espacio'))} — ${esc(_t(a.que))}"` : 'tabindex="-1" aria-hidden="true"'}>
+                      ${a ? `data-que="${esc((a.mod ? a.mod + ' + ' : '') + (cap || _t('espacio')))} — ${esc(_t(a.que))}"` : 'tabindex="-1" aria-hidden="true"'}>
                       <span>${esc(cap)}</span>${a && a.mod ? '<i class="kb-mod" aria-hidden="true"></i>' : ''}
                     </button>`;
           }).join('')}</div>`).join('')}
@@ -609,7 +613,7 @@
         </div>`).join('');
 
       const mouseSolo = ctrls.filter(c => !_bindingCode(c.id))
-        .map(c => `<div><span class="kb-chip">${esc(window.JarvisControls.label(c.id))}</span> ${esc(c.label)} — ${esc(_t('es un botón del mouse, por eso no está en el mapa'))}</div>`).join('');
+        .map(c => `<div><span class="kb-chip">${esc(window.JarvisControls.label(c.id))}</span> ${esc(_t(c.label))} — ${esc(_t('es un botón del mouse, por eso no está en el mapa'))}</div>`).join('');
 
       b.innerHTML =
         blk('mapa', 'lo iluminado está ocupado', teclado, { wide: true, key: 'Atajos del workspace' }) +
