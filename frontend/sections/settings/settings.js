@@ -6,8 +6,8 @@
 // de etiqueta mono + contenido, líneas de pelo, cero tarjetas anidadas), valores
 // vivos en el rail y CADA DOMINIO CON LA FORMA DE SU DATO: la tecla de voz como
 // objeto físico, un mapa de teclado real, los 24 temas como espectro con vista
-// previa, un conmutador de cuentas, un rack de extensiones, una consola de
-// memoria y una línea de tiempo de workflows.
+// previa, un conmutador de cuentas, un rack de extensiones y una consola de
+// memoria.
 // El prototipo aprobado y las decisiones (qué NO reintroducir) viven en
 // frontend/preview-settings/AGENTS.md.
 // Expone window.JarvisSettings = { init, onProjectChanged, open, close, isOpen,
@@ -24,7 +24,7 @@
   let _resSel       = -1;     // índice seleccionado en los resultados de búsqueda
 
   // Resumen para los valores vivos del rail (se refresca al abrir).
-  const _res = { cuentas: null, activos: null, memorias: null, workflows: null };
+  const _res = { cuentas: null, activos: null, memorias: null };
 
   const SECCIONES = [
     { grupo: 'general', items: [
@@ -36,7 +36,6 @@
     { grupo: 'proyecto', items: [
       { id: 'skills',    label: 'Extensiones', icon: 'plug' },
       { id: 'memoria',   label: 'Memoria',     icon: 'brain' },
-      { id: 'workflows', label: 'Workflows',   icon: 'workflow' },
     ]},
   ];
 
@@ -47,7 +46,6 @@
     cuentas:    { t: 'Cuentas',     sub: 'Varias cuentas por CLI, cambio sin re-loguear.' },
     skills:     { t: 'Extensiones', sub: 'Plugins de Claude Code y las skills y reglas que lee cada IA.' },
     memoria:    { t: 'Memoria',     sub: 'El conocimiento que comparten los agentes: estado y salud.' },
-    workflows:  { t: 'Workflows',   sub: 'Historial de orquestaciones multi-agente.' },
   };
 
   const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
@@ -165,12 +163,11 @@
       cuentas: _res.cuentas == null ? '' : String(_res.cuentas),
       skills: _res.activos == null ? '' : String(_res.activos),
       memoria: _res.memorias == null ? '' : String(_res.memorias),
-      workflows: _res.workflows == null ? '' : String(_res.workflows),
     };
     _root()?.querySelectorAll('[data-v]').forEach(el => { el.textContent = v[el.dataset.v] ?? ''; });
   }
 
-  // Los cuatro números del rail que dependen del server. Livianos y en paralelo.
+  // Los números del rail que dependen del server. Livianos y en paralelo.
   async function _cargarResumen() {
     const j = async (url) => { const r = await fetch(url); if (!r.ok) throw 0; return r.json(); };
     const pid = _projectId;
@@ -181,7 +178,6 @@
       tareas.push(
         j(`/api/projects/${pid}/plugins/activos`).then(d => { _res.activos = (d.activos || []).length; }),
         j(`/api/projects/${pid}/memory/salud`).then(d => { _res.memorias = d.total || 0; }),
-        j(`/api/orchestrator/workflows/${pid}`).then(d => { _res.workflows = (d || []).length; }),
       );
     }
     await Promise.allSettled(tareas);
@@ -224,7 +220,6 @@
     ({
       voz: _renderVoz, atajos: _renderAtajos, apariencia: _renderApariencia,
       cuentas: _renderCuentas, skills: _renderSkills,
-      workflows: _renderWorkflows,
     }[_seccion] || (() => {}))(sheet);
     sheet.classList.remove('sx-in'); void sheet.offsetWidth; sheet.classList.add('sx-in');
     $('#sx-scroll').scrollTop = 0;
@@ -238,8 +233,8 @@
      Con IntersectionObserver no alcanzaba: un salto de scroll (el de la
      búsqueda, una rueda rápida) puede llevar la banda de "asomando abajo" a
      "pegada arriba" sin cruzar ningún umbral, y el estado se perdía.
-     El MutationObserver re-marca lo que llega tarde: cuentas, memoria,
-     extensiones y workflows pintan su cuerpo async. */
+     El MutationObserver re-marca lo que llega tarde: cuentas, memoria y
+     extensiones pintan su cuerpo async. */
   let _obsSheet = null, _obsSheetNodo = null, _bandaRaf = 0;
 
   function _marcarBandas() {
@@ -292,7 +287,6 @@
     push('skills', 'Plugins instalados', 'marketplace extensiones claude', null);
     push('skills', 'Skills e instrucciones', 'skill regla agents.md gemini codex cursor copilot qwen opencode windsurf', null);
     push('memoria', 'Explorar memoria', 'wikilinks grafo notas salud memory graph notes health');
-    push('workflows', 'Historial de workflows', 'orquestación pasos agentes orchestration steps agents', null);
     return idx;
   }
 
@@ -1266,83 +1260,12 @@
   /* ═══════════════════════════════════════════════════════════
      6 · MEMORIA — consola (antes: una fila con un botón «Abrir»)
      ═══════════════════════════════════════════════════════════ */
-  /* ═══════════════════════════════════════════════════════════
-     7 · WORKFLOWS — línea de tiempo con el track de pasos
-     ═══════════════════════════════════════════════════════════ */
-  const _WF_K = { running: 'wk', done: 'ok', failed: 'er', pending: 'mute' };
-
-  function _renderWorkflows(b) {
-    b.innerHTML = blk('historial', 'orquestaciones del proyecto',
-      `<div class="cta-cargando">${icon('loader', 15)} ${esc(_t('Cargando…'))}</div>`,
-      { wide: true, key: 'Historial de workflows' });
-    if (!_projectId) return;
-    const pid = _projectId;
-    fetch(`/api/orchestrator/workflows/${pid}`)
-      .then(r => r.json())
-      .then(wfs => {
-        if (!_abierta || _seccion !== 'workflows' || _projectId !== pid) return;
-        _res.workflows = (wfs || []).length;
-        _pintarValores();
-        _pintarWorkflows(b, wfs || []);
-      })
-      .catch(() => _pintarWorkflows(b, []));
-  }
-
-  function _pintarWorkflows(b, wfs) {
-    if (!wfs.length) {
-      b.innerHTML = blk('historial', 'orquestaciones del proyecto', `
-        <div class="sx-empty">
-          <b>${esc(_t('Todavía no corrió ningún workflow'))}</b>
-          <p>${esc(_t('Cuando le pedís algo grande al orquestador, arma un plan de pasos, levanta una terminal por agente y los coordina. Acá vas a ver cada corrida con su objetivo y en qué paso quedó.'))}</p>
-        </div>`, { wide: true, key: 'Historial de workflows' }) +
-        blk('así se ve', 'ejemplo de una corrida', `
-          <article class="wf-i wf-demo" aria-hidden="true">
-            <header class="wf-h">
-              <span class="sx-pill wk">running</span>
-              <b>${esc(_t('Ejemplo: rediseño de una sección'))}</b>
-            </header>
-            <div class="wf-track"><i class="ok"></i><i class="ok"></i><i class="now"></i><i></i><i></i>
-              <span class="wf-n sx-mono sx-dim">2/5</span></div>
-          </article>
-          <div class="wf-leg">
-            <span><i class="ok"></i> ${esc(_t('paso cerrado'))}</span>
-            <span><i class="now"></i> ${esc(_t('en curso'))}</span>
-            <span><i></i> ${esc(_t('pendiente'))}</span>
-            <span class="sx-dim">${esc(_t('el último paso siempre es el Reviewer'))}</span>
-          </div>`, { wide: true });
-      return;
-    }
-    const filas = wfs.map(w => {
-      const total = w.total_pasos || (w.pasos || []).length || 0;
-      const hecho = Math.max(0, w.paso_actual || 0);
-      const k = _WF_K[w.estado] || 'mute';
-      const f = w.created_at ? new Date(w.created_at) : null;
-      return `<article class="wf-i">
-        <header class="wf-h">
-          <span class="sx-pill ${k}">${esc(w.estado || '')}</span>
-          <b>${esc(w.nombre || _t('Sin nombre'))}</b>
-          <span class="wf-d sx-mono sx-dim">${f && !isNaN(f)
-            ? f.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) + ' ' + f.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-            : ''}</span>
-        </header>
-        ${w.objetivo ? `<p class="wf-o">${esc(w.objetivo)}</p>` : ''}
-        <div class="wf-track" aria-label="${hecho} / ${total}">
-          ${Array.from({ length: total }, (_, i) =>
-            `<i class="${i < hecho ? 'ok' : ''}${i === hecho && w.estado === 'running' ? ' now' : ''}"></i>`).join('')}
-          <span class="wf-n sx-mono sx-dim">${hecho}/${total}</span>
-        </div>
-      </article>`;
-    }).join('');
-    b.innerHTML = blk('historial', `${wfs.length} ${wfs.length === 1 ? _t('corrida') : _t('corridas')}`,
-      `<div class="wf">${filas}</div>`, { wide: true, key: 'Historial de workflows' });
-  }
-
   /* ═══════════════════════════════════════════════════════════ */
   window.JarvisSettings = {
     init(projectId) { _projectId = projectId; },
     onProjectChanged(projectId) {
       _projectId = projectId;
-      _res.activos = _res.memorias = _res.workflows = null;
+      _res.activos = _res.memorias = null;
       if (_abierta) { _renderSeccion(); _cargarResumen(); }
     },
     open, close,

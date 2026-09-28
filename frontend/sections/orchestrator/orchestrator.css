@@ -685,171 +685,6 @@
   color: var(--ob-fg-3);
 }
 
-/* Action card */
-.orch-action-card {
-  margin-left: var(--orch-gutter);
-  border: 1px solid transparent;
-  border-radius: 12px;
-  overflow: hidden;
-  /* borde en gradiente acento→línea (concepto d4 .wf) */
-  background:
-    linear-gradient(var(--ob-bg-2), var(--ob-bg-2)) padding-box,
-    linear-gradient(160deg, var(--ob-accent-24), var(--ob-line-1)) border-box;
-  position: relative;
-}
-
-/* F1: progress bar slim (2px) en la parte superior del card.
-   Se llena conforme se completan los steps. */
-.orch-action-progress {
-  height: 2px;
-  background: var(--ob-line-1);
-  position: relative;
-  overflow: hidden;
-}
-.orch-action-progress-fill {
-  height: 100%;
-  background: linear-gradient(to right, var(--ob-accent) 0%, var(--ob-info) 100%);
-  transition: width 600ms cubic-bezier(0.2, 0.8, 0.3, 1);
-  box-shadow: 0 0 8px color-mix(in oklch, var(--ob-accent) 45%, transparent);
-}
-/* Cuando el card está al 100%, el gradient se vuelve verde para señalar success */
-.orch-action-card[data-progress="100"] .orch-action-progress-fill {
-  background: linear-gradient(to right, var(--ob-run) 0%, color-mix(in oklch, var(--ob-run) 75%, white) 100%);
-  box-shadow: 0 0 10px color-mix(in oklch, var(--ob-run) 55%, transparent);
-}
-
-/* F3: icono contextual al inicio del header del action card */
-.orch-action-icon {
-  font-size: 11px;
-  color: var(--ob-accent);
-  background: var(--ob-accent-14);
-  width: 18px; height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 5px;
-  flex-shrink: 0;
-  line-height: 1;
-}
-.orch-action-head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 13px;
-  border-bottom: 1px solid var(--ob-line-1);
-}
-.orch-action-title {
-  font: 600 var(--text-2xs) var(--font-mono);
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--ob-fg-3);
-  flex: 1;
-  min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.orch-action-pill {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  letter-spacing: 0.06em;
-  color: var(--ob-accent);
-  background: var(--ob-accent-14);
-  border-radius: var(--radius-pill);
-  padding: 1px 8px;
-  white-space: nowrap;
-}
-
-.orch-action-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 13px;
-  border-bottom: 1px solid var(--ob-line-1);
-}
-.orch-action-row:last-child { border-bottom: none; }
-
-.orch-step-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.orch-step-done    { background: color-mix(in oklch, var(--ob-run) 14%, transparent); border: 1px solid color-mix(in oklch, var(--ob-run) 40%, transparent); }
-.orch-step-pending { border: 1.5px solid var(--ob-info); animation: orch-spinner 0.9s linear infinite; }
-/* running: anillo spinner cian con un arco violeta (workflow en curso) */
-.orch-step-running {
-  border: 1.5px solid var(--ob-accent-24);
-  border-top-color: var(--ob-info);
-  animation: orch-spinner 0.9s linear infinite;
-}
-.orch-step-blocked {
-  background: color-mix(in oklch, var(--ob-work) 12%, transparent);
-  border: 1px solid color-mix(in oklch, var(--ob-work) 40%, transparent);
-}
-.orch-step-error {
-  background: color-mix(in oklch, var(--ob-err) 12%, transparent);
-  border: 1px solid color-mix(in oklch, var(--ob-err) 40%, transparent);
-}
-.orch-step-idle    { border: 1px solid var(--ob-line-3); }
-
-/* Las filas atenúan/realzan según estado (color comunica, no solo motion) */
-.orch-action-row[data-status="idle"] .orch-step-label    { color: var(--ob-fg-3); }
-.orch-action-row[data-status="done"] .orch-step-label    { color: var(--ob-fg-2); }
-.orch-action-row[data-status="blocked"] .orch-step-label { color: var(--ob-work); }
-.orch-action-row[data-status="error"] .orch-step-label   { color: var(--ob-err); }
-
-/* Barra final de completado del workflow */
-.orch-action-done {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  padding: 8px 13px;
-  border-top: 1px solid color-mix(in oklch, var(--ob-run) 18%, transparent);
-  background: color-mix(in oklch, var(--ob-run) 7%, transparent);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  letter-spacing: 0.10em;
-  text-transform: uppercase;
-  color: var(--ob-run);
-}
-
-/* F2: el SVG check del step done usa stroke-draw para "dibujarse" cuando
-   aparece — recompensa visual de completitud. Se anima en el primer render
-   y al hacer el cambio de class. dasharray=14 (path length aprox), offset
-   empieza en 14 (invisible) y va a 0 (visible). */
-.orch-step-check { display: block; }
-.orch-step-check polyline {
-  stroke-dasharray: 14;
-  stroke-dashoffset: 14;
-  animation: orch-check-draw 380ms cubic-bezier(0.4, 0, 0.2, 1) 60ms forwards;
-}
-@keyframes orch-check-draw {
-  from { stroke-dashoffset: 14; }
-  to   { stroke-dashoffset: 0; }
-}
-
-.orch-step-label {
-  font-size: 12px;
-  color: var(--ob-fg-1);
-  flex: 1;
-  min-width: 0;
-}
-.orch-step-target {
-  font-family: var(--font-mono);
-  font-size: 10.5px;
-  color: var(--ob-fg-3);
-  white-space: nowrap;
-}
-.orch-step-target mark {
-  background: none;
-  color: var(--ob-info);
-}
-
 /* Quick replies — chips con micro-icono SVG contextual */
 .orch-quick-replies {
   display: flex;
@@ -1189,10 +1024,6 @@
   from { transform: scaleY(0.5); }
   to   { transform: scaleY(1.5); }
 }
-@keyframes orch-spinner {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
-}
 @keyframes orch-msg-in {
   from { opacity: 0; transform: translateY(4px); }
   to   { opacity: 1; transform: translateY(0); }
@@ -1244,27 +1075,6 @@
 }
 .orch-preview-remove:hover { color: var(--ob-err); background: color-mix(in oklch, var(--ob-err) 12%, transparent); }
 
-/* Pill de rol de swarm en las filas del action card */
-.orch-step-rol {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  flex-shrink: 0;
-}
-.orch-step-rol.scout {
-  color: var(--ob-info);
-  border: 1px solid color-mix(in oklch, var(--ob-info) 35%, transparent);
-  background: color-mix(in oklch, var(--ob-info) 8%, transparent);
-}
-.orch-step-rol.reviewer {
-  color: var(--ob-accent);
-  border: 1px solid var(--ob-accent-24);
-  background: var(--ob-accent-14);
-}
-
 /* ═══════════════════════════════════════════════════════════════
    prefers-reduced-motion: corta las animaciones del orbe y su aro.
    La constelación ya respeta reduced-motion internamente (JS) — queda
@@ -1299,11 +1109,10 @@
 /* ── Panel espacioso: la conversación se vuelve una columna legible ── */
 @container (min-width: 600px) {
   .orch-messages { padding: 20px clamp(24px, 6cqw, 80px); }
-  /* Cada turno / workflow card / divisor se centra en una columna de lectura
+  /* Cada turno / divisor se centra en una columna de lectura
      en lugar de estirarse a todo el ancho (bug "el chat no está tal cual"). */
   .orch-messages > .orch-msg,
-  .orch-messages > .orch-day-divider,
-  .orch-messages > .orch-action-card {
+  .orch-messages > .orch-day-divider {
     width: 100%;
     max-width: 660px;
     margin-inline: auto;
@@ -1330,8 +1139,7 @@
 /* ── Pantalla completa / muy ancho: editorial d4 pleno ────────────── */
 @container (min-width: 960px) {
   .orch-messages > .orch-msg,
-  .orch-messages > .orch-day-divider,
-  .orch-messages > .orch-action-card { max-width: 700px; }
+  .orch-messages > .orch-day-divider { max-width: 700px; }
   .orch-messages > .orch-empty { max-width: 980px; }
 
   .orch-empty     { gap: 22px; padding: 32px 18px; }

@@ -26,7 +26,7 @@ Jarvis is the **central node of a living neural network** that reacts to voice.
   respects `prefers-reduced-motion` and stops when the panel is hidden (`clientWidth===0`).
 - **Header**: the **Jarvis** brand (orb + serif italic) is centered and prominent on TOP. No idle
   status chip, no loose history/new-session buttons — those live in the `⋯` menu
-  (`onHeaderAction('new-thread'|'history'|'export'|'workflows'|'clear-history')`).
+  (`onHeaderAction('new-thread'|'history'|'export'|'clear-history')`).
   State is communicated by the constellation color + the `.orch-orb` (`data-state` on
   `.orch-panel`: idle/listening/processing/responding). The **`⋯` menu and its options** are
   **LIQUID GLASS**: OPAQUE `background-color` base (NOT gradient `background-image`:

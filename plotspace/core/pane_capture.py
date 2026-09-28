@@ -6,7 +6,7 @@ Acá se captura UNA sola vez las 120 líneas (el máximo que pide cualquier cons
 sirve a los tres dentro de una ventana TTL corta; cada poller toma después la cola de líneas que necesita
 (comportamiento idéntico al anterior). Menos overhead en el event loop → la detección/los sonidos llegan
 más rápido. La captura del MONITOR DE KEYWORDS (TASK_DONE, terminals.py) es APARTE y NO pasa por acá →
-la detección de workflow NO se toca.
+la detección de cierres NO se toca.
 
 De DÓNDE sale la pantalla lo decide el motor (`core/terminal_backend`):
 `tmux capture-pane`. Este módulo solo se ocupa de no pedirla tres veces.

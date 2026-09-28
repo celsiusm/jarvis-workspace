@@ -13,7 +13,6 @@
 //  · Click / Enter en un agente → enfoca su card de terminal en el workspace.
 //
 // Expone window.JarvisTasks = { init, show, onProjectChanged, onAgentEvent, _pure }
-// (+ alias onTasksUpdate / onWorkflowUpdate → onAgentEvent, por compatibilidad).
 
 (function (root) {
   'use strict';
@@ -477,8 +476,6 @@
       if (_visible()) { refrescar(); _arrancarPoll(); }
     },
     onAgentEvent,
-    onTasksUpdate: onAgentEvent,          // compat: workspace.js viejo
-    onWorkflowUpdate: onAgentEvent,       // compat: workspace.js viejo
     _pure,
   };
 

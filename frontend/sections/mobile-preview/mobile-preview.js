@@ -1665,20 +1665,11 @@
   }
   function sincronizar(d) { if (!d || !d.es_expo) return false; abrir(); return true; }
 
-  const _PASO_FIN = new Set(['done', 'blocked', 'error', 'pending']);
   function onActividad(data) {
     if (_cerrado || !data) return;
-    if (data.type === 'workflow_update') {
-      if (data.estado === 'done') { _log('ok', 'DONE', 'workflow completado'); _flashConn(); return; }
-      if (data.estado !== 'running') return;
-      const pasos = Array.isArray(data.pasos) ? data.pasos : [];
-      let act = pasos.filter((p) => p && !_PASO_FIN.has(p.estado)).map((p) => p.agente).filter(Boolean);
-      if (!act.length && pasos[data.paso_actual] && pasos[data.paso_actual].agente) act = [pasos[data.paso_actual].agente];
-      if (act.length) _log('info', 'WORK', `<b>${_esc(act.join(' · '))}</b> trabajando…`);
-    } else if (data.type === 'task_event' && data.event === 'TASK_DONE') {
-      _log('ok', 'STEP', `<b>${_esc(data.terminal_nombre || 'Agente')}</b> completó su paso`);
-    } else if (data.type === 'workflow_done') {
-      _log('ok', 'DONE', 'workflow completado'); _flashConn();
+    if (data.type === 'task_event' && data.event === 'TASK_DONE') {
+      _log('ok', 'DONE', `<b>${_esc(data.terminal_nombre || 'Agente')}</b> completó su tarea`);
+      _flashConn();
     }
   }
   function _flashConn() { const p = $('mobile-preview-panel'); if (p) { p.setAttribute('data-conn', 'ok'); } }

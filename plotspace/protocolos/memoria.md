@@ -43,9 +43,9 @@ AUTHORITY HIERARCHY (when two sources clash, resolve in this order):
 5. Still ambiguous? **Verify against the code — don't guess.**
 And if a memory **lied to you** (describes something that's no longer true), fixing it or marking it `estado: obsoleta` is PART of your task — the clash you skip, the next agent eats it.
 
-TASK CLOSURE (with or without workflow) — when finishing ANY task, signal closure; it's the telemetry this memory learns from (what worked, what failed). Run:
+TASK CLOSURE — when finishing ANY task, signal closure; it's the telemetry this memory learns from (what worked, what failed). Run:
 
     TID=${JARVIS_TERMINAL_ID:-$(tmux display-message -p '#S' 2>/dev/null | sed 's/^jarvis_//')} && mkdir -p .jarvis/signals && printf '%s' '{"estado":"done","motivo":"","memorias_usadas":[]}' > .jarvis/signals/terminal_${TID}.json
 
-In `memorias_usadas` list the slugs from `.jarvis/memory/` you read and used ([] if none). If you end up `blocked`/`error`, `motivo` is MANDATORY and concrete; in `done` it's optional (one line with the non-obvious approach that worked). In workflows the engine already gives you this instruction with your id — no need to figure it out then.
+In `memorias_usadas` list the slugs from `.jarvis/memory/` you read and used ([] if none). If you end up `blocked`/`error`, `motivo` is MANDATORY and concrete; in `done` it's optional (one line with the non-obvious approach that worked). When Jarvis launched you with a task, the instruction already carries your id — no need to figure it out then.
 <!-- JARVIS_MEMORY_END -->

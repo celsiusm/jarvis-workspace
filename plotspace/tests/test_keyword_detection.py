@@ -1,7 +1,7 @@
 """
 Test: detección de keywords de control (_linea_es_keyword en terminals.py).
 
-Es el mecanismo anti-falso-positivo central del coordinador de workflows: tiene
+Es el mecanismo anti-falso-positivo central del monitor de cierres: tiene
 que distinguir el TASK_DONE REAL que escribe el agente del TASK_DONE que aparece
 DENTRO de la instrucción ("Cuando termines escribí TASK_DONE"). Tres capas:
 limpieza ANSI + regex "solo no-letras alrededor" + (baseline, no testeable acá).

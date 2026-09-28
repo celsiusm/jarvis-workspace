@@ -1219,7 +1219,7 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 /* Brillo líquido que barre lento y sutil — SOLO cuando el agente TRABAJA (es la
    "señal de vida"; idle/terminado quedan con el vidrio estático). Pedido del
    usuario 2026-07-06. La clase .t-trabajando la togglea agent_watch en
-   workspace.js; :has(.t-status-thinking) cubre el mismo estado en workflows.
+   workspace.js; :has(.t-status-thinking) cubre el mismo estado vía el pip.
    Corre en el compositor y no repinta el canvas del xterm. */
 .terminal-chrome::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 0;
@@ -1388,7 +1388,7 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
   transition: background 200ms ease, box-shadow 200ms ease;
 }
 /* Semántica de estados (veredicto Obsidian Glass):
-   idle     = INVISIBLE (sin workflow no hay nada que señalar — un punto gris
+   idle     = INVISIBLE (sin actividad no hay nada que señalar — un punto gris
               permanente lee como elemento muerto; visibility preserva el ancho
               para que los botones del chrome no salten al aparecer)
    thinking = VIOLETA que respira (el agente trabaja — la "señal de vida")
@@ -2077,19 +2077,6 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
    eran todos placeholders dummy que nunca se actualizaban — el shell adentro
    ya muestra branch en su prompt). */
 
-/* ═══════════════════════════════════════════════════════════════
-   EXECUTION PLAN — wrapper de la workflow card en el chat.
-   El contenido real es la .orch-action-card premium (orchestrator.css);
-   la card legacy .ep-* fue eliminada (emojis + hex inline).
-═══════════════════════════════════════════════════════════════ */
-
-.execution-plan {
-  overflow-y: auto;
-  max-height: 280px;
-  margin:     2px 0;
-  animation:  ob-pop-in var(--dur-2) var(--ease-out);
-}
-
 /* ═══════════════════════════════════════════════════════════════════
    PANELES TOGGLEABLES (Editor / Orquestador)
 ═══════════════════════════════════════════════════════════════════ */
@@ -2160,7 +2147,7 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 .btn-danger:hover { background: var(--ob-err-08); }
 
 /* ═══════════════════════════════════════════════════════════════════
-   MODALES: historial / workflows / tmux
+   MODALES: historial / tmux
 ═══════════════════════════════════════════════════════════════════ */
 
 .hist-lista {

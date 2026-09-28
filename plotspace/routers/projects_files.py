@@ -23,7 +23,7 @@ router = APIRouter(prefix="/api/projects", tags=["files"])
 
 # Executor dedicado para búsqueda en contenido: corre os.walk/rg (síncrono, con
 # I/O bloqueante) FUERA del event loop para no congelar WS de terminales ni el
-# monitor de workflows (mismo patrón que voice.py::_whisper_executor).
+# monitor de keywords (mismo patrón que voice.py::_whisper_executor).
 _search_executor = ThreadPoolExecutor(max_workers=2)
 
 # Directorios a ignorar en el árbol de archivos

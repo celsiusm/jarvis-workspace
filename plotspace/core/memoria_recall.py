@@ -2,7 +2,7 @@
 memoria_recall — la memoria compartida va SOLA al prompt de cada paso.
 
 El eslabón que faltaba en la lectura: el protocolo del CLAUDE.md dice "leé el
-INDEX", pero eso es opt-in y los builders de un workflow no recibían NINGUNA
+INDEX", pero eso es opt-in y los agentes que lanza Jarvis no recibían NINGUNA
 instrucción de memoria en su tarea. Este módulo puntúa las memorias del
 proyecto contra los archivos y el texto de un paso — determinista, cero tokens
 de API — y arma el bloque "memorias relevantes" que el engine inyecta al
