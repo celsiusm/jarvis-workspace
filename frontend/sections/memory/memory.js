@@ -1462,7 +1462,7 @@
           <span class="mem-live-anillo" data-estado="${esc(a.estado)}">${window.cliLogo ? window.cliLogo(a.tipo_ia, 18) : ''}</span>
           <span class="mem-lane-nom">
             <b data-i18n-skip>${esc(a.nombre)}</b>
-            <span class="mem-lane-est">${a.estado === 'trabajando' ? 'trabajando' : 'idle'}${ult != null && ult < 1e9 ? ` · ${_t('hace {t}').replace('{t}', L.hace(ult))}` : ''}</span>
+            <span class="mem-lane-est">${a.estado === 'trabajando' ? _t('trabajando') : 'idle'}${ult != null && ult < 1e9 ? ` · ${_t('hace {t}').replace('{t}', L.hace(ult))}` : ''}</span>
           </span>
         </div>
         <div class="mem-lane-files">${arch.map(f => {
