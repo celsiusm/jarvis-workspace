@@ -1,463 +1,398 @@
 /* ═══════════════════════════════════════════════════════════════
-   JARVIS · Radio GLOBAL — mini-player en el header + popover (Órbita)
-   Obsidian Glass. Usa los tokens var(--ob-*) de shared/tokens.css.
-   Vive workspace-wide: la música suena en un iframe colgado de <body>.
+   JARVIS · Radio — "Vinilo Aurora"
+   Arriba el DECK (lo que suena): un disco de vinilo con la carátula que
+   gira mientras suena, un brazo de tocadiscos, y detrás de todo un AURA
+   hecha con la carátula desenfocada — cada tema pinta la Radio con sus
+   colores. Abajo la BIBLIOTECA: fuente, buscador, pestañas y listas.
+
+   Reglas: solo tokens (--ob-* / --lg-*), nunca hex. El popover es un
+   flotante transitorio → puede usar --lg-blur. Las animaciones continuas
+   son solo transform/opacity de piezas chicas (disco, ecualizadores) y se
+   apagan con prefers-reduced-motion. Los ids/clases que toca radio.js y
+   spotify.js son contrato: no renombrar.
 ═══════════════════════════════════════════════════════════════ */
 
 /* Audio persistente (1px fuera de vista; display:none NO reproduce) */
 .jr-audio{position:absolute;width:1px;height:1px;left:-9999px;top:0;border:0;opacity:0;pointer-events:none}
 
-/* ── Radio EN LA BARRA: solo un ícono (como el mockup), hermano de la tuerquita
-   /globo/dock. Click → abre el popover con todo. Sin cuadro ni título inline. ── */
+.jr-ico{width:16px;height:16px;flex:0 0 auto}
+
+/* ── Ícono en la barra superior ─────────────────────────────────── */
 .jr-mini{display:grid;place-items:center;width:30px;height:26px;padding:0;flex:0 0 auto;
-  border:0;border-radius:8px;background:transparent;color:var(--ob-fg-3);
+  border:0;border-radius:var(--radius-pill,999px);background:transparent;color:var(--ob-fg-3);
   cursor:pointer;user-select:none;
-  transition:background .14s cubic-bezier(.4,0,.2,1),color .14s cubic-bezier(.4,0,.2,1)}
-.jr-mini:hover{background:var(--ob-accent-08);color:var(--ob-fg-1)}
-.jr-mini.abierto{background:var(--ob-accent-14);color:var(--ob-accent-fg)}
-/* Arte: tile de vidrio con bisel + sheen; adentro un visualizer SIMÉTRICO */
-.jr-art{position:relative;width:26px;height:26px;border-radius:7px;flex:0 0 auto;overflow:hidden;
-  display:grid;place-items:center;background:var(--ob-bg-3);
-  box-shadow:inset 0 0 0 1px oklch(100% 0 0 / .12), 0 1px 3px oklch(0% 0 0 / .45)}
-.jr-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
-.jr-art::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
-  background:linear-gradient(158deg, oklch(100% 0 0 / .22), transparent 46%)}
-.jr-viz{position:relative;z-index:2;display:flex;align-items:center;gap:2px;height:12px;color:#fff}
-.jr-viz i{width:2.5px;height:100%;background:currentColor;border-radius:2px;transform:scaleY(.4)}
-.jr-viz.on i{animation:jr-viz .9s cubic-bezier(.65,.05,.36,1) infinite alternate}
-.jr-viz.on i:nth-child(1),.jr-viz.on i:nth-child(4){animation-delay:-.15s}
-.jr-viz.on i:nth-child(2),.jr-viz.on i:nth-child(3){animation-delay:-.55s}
-@keyframes jr-viz{from{transform:scaleY(.3)}to{transform:scaleY(1)}}
-/* Ícono de radio (ondas) en la barra. Al sonar, las ondas hacen fade escalonado
-   + el core "respira" (animación del mockup). */
+  transition:background var(--dur-1,.14s) var(--ease-out,ease),color var(--dur-1,.14s) var(--ease-out,ease),box-shadow var(--dur-1,.14s)}
+.jr-mini:hover{background:var(--lg-gloss),var(--lg-body);color:var(--ob-fg-1);box-shadow:var(--lg-ring),var(--lg-inset)}
+.jr-mini.abierto{background:var(--lg-gloss),linear-gradient(180deg,var(--ob-accent-24),var(--ob-accent-08));
+  color:var(--ob-accent-fg);box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--ob-accent) 40%,transparent),var(--lg-inset)}
+.jr-mini:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
 .jr-mini .jr-rd{width:17px;height:17px}
-.jr-mini .jr-rd-wv{opacity:.5;transform-origin:12px 12px}
+.jr-mini .jr-rd-wv{opacity:.5}
 .jr-mini.playing{color:var(--ob-accent-fg)}
 .jr-mini.playing .jr-rd-wv{animation:jr-rd-wave 2.2s cubic-bezier(.4,0,.2,1) infinite}
 .jr-mini.playing .jr-rd-w2{animation-delay:.55s}
 .jr-mini.playing .jr-rd-core{animation:jr-rd-breath 2.2s cubic-bezier(.4,0,.2,1) infinite}
+.jr-mini.twitch{opacity:.8}
+.jr-mini.twitch .jr-rd-core{fill:var(--ob-work)}
 @keyframes jr-rd-wave{0%,100%{opacity:.25}35%{opacity:1}}
-@keyframes jr-rd-breath{0%,100%{opacity:.9}50%{opacity:.3}}
-@media (prefers-reduced-motion: reduce){.jr-mini.playing .jr-rd-wv,.jr-mini.playing .jr-rd-core{animation:none}}
-.jr-mini-meta{min-width:0;display:flex;flex-direction:column;justify-content:center;gap:1px;line-height:1.14;max-width:118px}
-.jr-mini-meta b{font:600 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.jr-mini-meta span{font:400 var(--text-2xs,10px) var(--font-ui);color:var(--ob-fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-/* Play chico PREMIUM (orbe de vidrio) — igual que el del popover */
-.jr-mini-play{position:relative;width:26px;height:26px;border-radius:50%;border:0;flex:0 0 auto;cursor:pointer;
-  background:radial-gradient(120% 120% at 32% 24%, var(--ob-accent-fg), var(--ob-accent) 46%, var(--ob-accent-dim) 100%);
-  color:#fff;display:grid;place-items:center;
-  box-shadow:0 3px 10px -3px var(--ob-accent-glow), 0 1px 0 oklch(100% 0 0 / .42) inset,
-    0 -2px 6px -3px oklch(0% 0 0 / .5) inset, 0 0 0 1px var(--ob-accent-24);
-  transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .18s}
-.jr-mini-play::before{content:"";position:absolute;inset:1.5px;border-radius:50%;pointer-events:none;
-  background:linear-gradient(180deg, oklch(100% 0 0 / .34), transparent 48%)}
-.jr-mini-play:hover{transform:scale(1.08)}
-.jr-mini-play:active{transform:scale(.9)}
-.jr-mini-play svg{position:relative;z-index:1;width:12px;height:12px;filter:drop-shadow(0 1px 1px oklch(0% 0 0 / .4))}
-.jr-mini-chev{flex:0 0 auto;width:14px;height:14px;display:grid;place-items:center;color:var(--ob-fg-3);transition:color .18s}
-.jr-mini:hover .jr-mini-chev{color:var(--ob-fg-1)}
-.jr-mini-chev svg{width:14px;height:14px}
-/* estado "parada por Twitch": pip de aviso */
-.jr-mini.twitch{opacity:.85}
-.jr-mini.twitch .jr-viz{color:var(--ob-work)}
+@keyframes jr-rd-breath{0%,100%{opacity:.95}50%{opacity:.35}}
 
-/* ── Catcher para cerrar al clickear afuera ── */
+/* ── Catcher (click afuera cierra) + popover ────────────────────── */
 .jr-catch{position:fixed;inset:0;z-index:1998;display:none}
 .jr-catch.on{display:block}
-
-/* ── Popover: baja desde el mini-player del header ── */
-.jr-pop{position:fixed;top:52px;right:12px;z-index:1999;width:384px;max-width:calc(var(--jw-vw, 100vw) - 20px);display:none}
+.jr-pop{position:fixed;top:48px;right:12px;z-index:1999;width:408px;max-width:calc(var(--jw-vw, 100vw) - 20px);display:none}
 .jr-pop.on{display:block}
-.jr-card{display:flex;flex-direction:column;overflow:visible;
-  background:linear-gradient(var(--ob-glass),var(--ob-glass)),
-    radial-gradient(130% 85% at 88% -14%, var(--ob-accent-08), transparent 56%),
-    var(--ob-bg-1);
-  backdrop-filter:blur(28px) saturate(150%);-webkit-backdrop-filter:blur(28px) saturate(150%);
-  border:1px solid var(--ob-line-2);border-radius:var(--radius-xl,16px);
-  box-shadow:var(--shadow-3), 0 0 0 1px var(--ob-glass-hi) inset;
-  max-height:min(640px, calc(var(--jw-vh, 100vh) - 72px));
-  transform-origin:top right;animation:jr-in .3s cubic-bezier(.22,1,.36,1)}
-@keyframes jr-in{from{opacity:0;transform:translateY(-10px) scale(.97)}to{opacity:1;transform:none}}
-.jr-card::before{content:"";position:absolute;top:-6px;right:var(--jr-caret,34px);width:13px;height:13px;
-  background:var(--ob-bg-1);border-top:1px solid var(--ob-line-2);border-left:1px solid var(--ob-line-2);
-  transform:rotate(45deg);border-radius:3px 0 0 0}
-.jr-inner{position:relative;display:flex;flex-direction:column;overflow:hidden;border-radius:inherit;min-height:0}
-/* Brillo diagonal "liquid glass": luz especular arriba que muere rápido */
-.jr-inner::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;z-index:1;
-  background:linear-gradient(166deg, var(--ob-glass-hi), transparent 20%)}
 
-.jr-head{display:flex;align-items:center;gap:10px;padding:14px 14px 10px}
-.jr-mark{width:28px;height:28px;border-radius:9px;display:grid;place-items:center;color:#fff;flex:0 0 auto;
-  background:linear-gradient(135deg,var(--ob-accent),var(--ob-info));box-shadow:0 2px 10px var(--ob-accent-glow)}
-.jr-mark svg{width:16px;height:16px}
-.jr-title{flex:1;display:flex;align-items:center;gap:9px;font:italic 400 var(--text-xl,22px) var(--font-display);color:var(--ob-fg-0);line-height:1}
-.jr-livewrap{display:flex;align-items:center;gap:6px;font:600 var(--text-2xs,10px) var(--font-mono);letter-spacing:.05em;color:var(--ob-accent-fg);font-style:normal}
-.jr-livewrap .jr-eq{display:inline-flex;align-items:flex-end;gap:2px;height:11px;color:var(--ob-accent-fg)}
-.jr-livewrap .jr-eq i{width:2px;background:currentColor;border-radius:1px;height:40%}
-.jr-livewrap .jr-eq.on i{animation:jr-eqbar .82s cubic-bezier(.65,.05,.36,1) infinite alternate}
-.jr-livewrap .jr-eq.on i:nth-child(2){animation-delay:-.42s}
-.jr-livewrap .jr-eq.on i:nth-child(3){animation-delay:-.22s}
-@keyframes jr-eqbar{from{height:25%}to{height:100%}}
-.jr-ibtn{width:30px;height:30px;border-radius:var(--radius-btn,7px);border:0;background:transparent;color:var(--ob-fg-3);
-  display:grid;place-items:center;cursor:pointer;transition:all .18s cubic-bezier(.4,0,.2,1)}
-.jr-ibtn:hover{background:var(--ob-bg-3);color:var(--ob-fg-0)}
-.jr-ibtn svg{width:16px;height:16px}
+.jr-card{position:relative;display:flex;flex-direction:column;overflow:hidden;isolation:isolate;
+  max-height:min(740px, calc(var(--jw-vh, 100vh) - 64px));
+  border-radius:24px;
+  /* capa base más densa: debajo hay terminales con texto nítido que no
+     tiene que leerse a través del vidrio */
+  background:var(--lg-gloss),var(--lg-spec),var(--lg-body-float),color-mix(in oklch,var(--ob-bg-1) 72%,transparent);
+  -webkit-backdrop-filter:var(--lg-blur);backdrop-filter:var(--lg-blur);
+  box-shadow:var(--lg-ring),var(--lg-inset),var(--lg-drop-lg);
+  transform-origin:top right;animation:jr-in .34s cubic-bezier(.22,1,.36,1)}
+@keyframes jr-in{from{opacity:0;transform:translateY(-8px) scale(.965)}to{opacity:1;transform:none}}
 
-.jr-search{display:flex;align-items:center;gap:9px;height:40px;padding:0 14px;margin:0 14px 12px;
-  border:1px solid var(--ob-line-2);border-radius:var(--radius-pill,999px);background:var(--ob-bg-void);
-  box-shadow:inset 0 1.5px 4px var(--ob-glass-lo);
-  transition:border-color var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out)}
-.jr-search:focus-within{border-color:var(--ob-accent-24);   /* sutil: tinta el borde + halo suave, sin rectángulo */
-  box-shadow:inset 0 1.5px 4px var(--ob-glass-lo), 0 0 0 3px var(--ob-accent-08)}
-.jr-search svg{width:16px;height:16px;color:var(--ob-fg-3);flex:0 0 auto}
-.jr-search input{flex:1;min-width:0;border:0;background:transparent;color:var(--ob-fg-0);outline:none;font:400 var(--text-sm,12px) var(--font-ui)}
+/* AURA: la carátula, gigante, desenfocada y saturada, detrás de todo.
+   Un velo del color del tema la baja para que el texto siga legible. */
+.jr-amb{position:absolute;left:-15%;right:-15%;top:-120px;height:520px;z-index:-1;pointer-events:none;opacity:0;
+  -webkit-mask-image:linear-gradient(180deg,black 30%,transparent 92%);
+          mask-image:linear-gradient(180deg,black 30%,transparent 92%);
+  transition:opacity .8s var(--ease-out,ease)}
+.jr-amb.on{opacity:1}
+.jr-amb img{width:100%;height:100%;object-fit:cover;filter:blur(46px) saturate(1.7);transform:scale(1.15);opacity:.5}
+.jr-card::before{content:"";position:absolute;inset:0;z-index:-2;pointer-events:none;
+  background:radial-gradient(120% 60% at 20% -10%,var(--ob-accent-24),transparent 60%),
+             radial-gradient(90% 50% at 100% 0%,color-mix(in oklch,var(--ob-info) 16%,transparent),transparent 65%)}
+.jr-inner{position:relative;display:flex;flex-direction:column;min-height:0;flex:1;container:jr-radio / inline-size}
+
+/* ── Cabecera ───────────────────────────────────────────────────── */
+.jr-head{display:flex;align-items:center;gap:9px;padding:14px 12px 4px 16px}
+.jr-mark{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;flex:0 0 auto;
+  color:var(--ob-on-accent);background:var(--lg-gloss),var(--lg-accent-body);
+  box-shadow:inset 0 1px .5px oklch(100% 0 0 / .4),inset 0 -4px 8px -5px oklch(0% 0 0 / .4),0 4px 14px -6px var(--ob-accent-glow)}
+.jr-mark .jr-ico{width:15px;height:15px}
+.jr-title{flex:1;min-width:0;display:flex;align-items:center;gap:10px}
+.jr-title b{font:italic 400 21px/1 var(--font-display);color:var(--ob-fg-0);letter-spacing:-.01em}
+.jr-livewrap{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 8px;border-radius:var(--radius-pill,999px);
+  font:700 9.5px var(--font-mono);letter-spacing:.14em;color:var(--ob-run);
+  background:color-mix(in oklch,var(--ob-run) 12%,transparent);box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--ob-run) 32%,transparent)}
+.jr-livewrap[hidden]{display:none}
+.jr-eq{display:inline-flex;align-items:flex-end;gap:1.5px;height:9px}
+.jr-eq i{width:2px;height:100%;border-radius:1px;background:currentColor;transform-origin:bottom;transform:scaleY(.4)}
+.jr-eq.on i{animation:jr-eq .8s ease-in-out infinite alternate}
+.jr-eq.on i:nth-child(2){animation-delay:-.3s}.jr-eq.on i:nth-child(3){animation-delay:-.55s}
+@keyframes jr-eq{from{transform:scaleY(.3)}to{transform:scaleY(1)}}
+.jr-ibtn{width:30px;height:30px;border:0;border-radius:var(--radius-pill,999px);background:transparent;color:var(--ob-fg-3);
+  display:grid;place-items:center;cursor:pointer;transition:background var(--dur-1,.14s),color var(--dur-1,.14s),box-shadow var(--dur-1,.14s)}
+.jr-ibtn:hover{color:var(--ob-fg-0);background:var(--lg-body);box-shadow:var(--lg-ring)}
+.jr-ibtn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
+
+/* ═══════════════ DECK ═══════════════ */
+.jr-deck{padding:6px 16px 12px;display:flex;flex-direction:column;gap:10px}
+
+/* Now playing: disco + info */
+.jr-now{display:flex;align-items:center;gap:16px;min-height:118px}
+.jr-disc{position:relative;width:112px;height:112px;flex:0 0 auto}
+.jr-disc-vinyl{position:absolute;inset:0;border-radius:50%;overflow:hidden;
+  background:radial-gradient(circle at 50% 50%,var(--ob-bg-3) 0 30%,var(--ob-bg-void) 31% 100%);
+  box-shadow:0 14px 30px -12px oklch(0% 0 0 / .7),0 0 0 1px color-mix(in oklch,var(--ob-fg-0) 10%,transparent),
+             0 0 34px -10px var(--ob-accent-glow)}
+.jr-disc-vinyl img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;transform:scale(1.35)}
+/* surcos + reflejo del vinilo, encima de la carátula */
+.jr-disc-grooves{position:absolute;inset:0;border-radius:50%;pointer-events:none;
+  background:
+    radial-gradient(circle,transparent 0 27%,oklch(0% 0 0 / .55) 27.5% 29%,transparent 29.5%),
+    repeating-radial-gradient(circle,oklch(0% 0 0 / .16) 0 1px,transparent 1px 3px),
+    conic-gradient(from 210deg,transparent 0 12%,oklch(100% 0 0 / .20) 16%,transparent 22% 58%,oklch(100% 0 0 / .12) 62%,transparent 68%)}
+.jr-disc-label{position:absolute;left:50%;top:50%;width:30px;height:30px;margin:-15px 0 0 -15px;border-radius:50%;z-index:2;
+  display:grid;place-items:center;color:var(--ob-on-accent);
+  background:var(--lg-gloss),var(--lg-accent-body);
+  box-shadow:0 0 0 3px oklch(0% 0 0 / .35),inset 0 1px .5px oklch(100% 0 0 / .45)}
+.jr-disc-label::after{content:"";position:absolute;width:5px;height:5px;border-radius:50%;background:var(--ob-bg-void)}
+.jr-disc-label .jr-viz{position:absolute;opacity:0}
+.jr-now.playing .jr-disc-vinyl{animation:jr-spin 7s linear infinite}
+@keyframes jr-spin{to{transform:rotate(1turn)}}
+.jr-disc.ghost{opacity:.6}
+.jr-disc.ghost .jr-disc-label{background:var(--ob-bg-3);box-shadow:inset 0 0 0 1px var(--ob-line-2)}
+.jr-disc.ghost::before{content:"";position:absolute;inset:0;border-radius:50%;
+  background:repeating-radial-gradient(circle,color-mix(in oklch,var(--ob-fg-0) 6%,transparent) 0 1px,transparent 1px 4px),var(--ob-bg-2);
+  box-shadow:inset 0 0 0 1px var(--ob-line-2)}
+/* Brazo del tocadiscos: descansa afuera; al sonar baja sobre el disco */
+.jr-arm{position:absolute;top:-6px;right:-10px;width:14px;height:14px;border-radius:50%;z-index:3;
+  background:var(--lg-gloss),var(--ob-bg-4);box-shadow:var(--lg-ring),0 2px 6px oklch(0% 0 0 / .45);
+  transform-origin:7px 7px;transform:rotate(-18deg);transition:transform .9s cubic-bezier(.34,1.3,.5,1)}
+.jr-arm i{position:absolute;left:5.5px;top:9px;width:3px;height:62px;border-radius:2px;
+  background:linear-gradient(180deg,var(--ob-fg-2),var(--ob-fg-4));transform-origin:top center;transform:rotate(18deg)}
+.jr-arm i::after{content:"";position:absolute;bottom:-4px;left:-3px;width:9px;height:12px;border-radius:3px;background:var(--ob-fg-2)}
+.jr-now.playing .jr-arm{transform:rotate(6deg)}
+
+.jr-ninfo{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+.jr-eyebrow{font:700 9.5px var(--font-mono);letter-spacing:.16em;text-transform:uppercase;color:var(--ob-accent-fg)}
+.jr-ntitle{font:650 15px/1.28 var(--font-ui);color:var(--ob-fg-0);letter-spacing:-.005em;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.jr-nsub{font:400 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-3)}
+.jr-chanlink{align-self:flex-start;max-width:100%;display:inline-flex;align-items:center;gap:7px;padding:3px 10px 3px 4px;
+  border:0;border-radius:var(--radius-pill,999px);background:var(--lg-body);box-shadow:var(--lg-ring);
+  font:500 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-1);cursor:pointer;min-width:0}
+span.jr-chanlink{cursor:default}
+.jr-chanlink > span:nth-child(2){min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+button.jr-chanlink:hover{box-shadow:inset 0 0 0 1px var(--ob-accent-24),var(--lg-glow)}
+.jr-av{width:18px;height:18px;border-radius:50%;flex:0 0 auto;background:var(--lg-accent-body)}
+.jr-vercanal{flex:0 0 auto;font:600 10px var(--font-ui);color:var(--ob-accent-fg)}
+.jr-chips{display:flex;flex-wrap:wrap;gap:5px}
+.jr-chip{display:inline-flex;align-items:center;gap:5px;padding:2px 8px;border-radius:var(--radius-pill,999px);
+  font:500 10px var(--font-mono);color:var(--ob-fg-2);background:color-mix(in oklch,var(--ob-fg-0) 6%,transparent)}
+.jr-chip .jr-ico{width:12px;height:12px;opacity:.8}
+.jr-chip b{font-weight:600}
+
+/* Progreso: pista de luz con el gradiente del acento */
+.jr-seek{display:flex;flex-direction:column;gap:5px;padding-top:2px}
+.jr-seek-bar{position:relative;height:16px;cursor:pointer;touch-action:none;outline:none}
+.jr-seek-bar::before{content:"";position:absolute;left:0;right:0;top:50%;height:4px;margin-top:-2px;border-radius:4px;
+  background:color-mix(in oklch,var(--ob-fg-0) 12%,transparent)}
+.jr-seek-fill{position:absolute;left:0;top:50%;height:4px;margin-top:-2px;border-radius:4px;width:0;
+  background:linear-gradient(90deg,var(--ob-accent-dim),var(--ob-accent),var(--ob-accent-fg));
+  box-shadow:0 0 12px -2px var(--ob-accent-glow);transition:width .5s linear}
+.jr-seek-knob{position:absolute;top:50%;left:0;width:13px;height:13px;margin:-6.5px 0 0 -6.5px;border-radius:50%;
+  background:var(--ob-fg-0);box-shadow:0 0 0 4px var(--ob-accent-24),0 2px 8px oklch(0% 0 0 / .5);
+  transform:scale(0);transition:transform .18s cubic-bezier(.34,1.56,.64,1),left .5s linear}
+.jr-seek-bar:hover .jr-seek-knob,.jr-seek-bar.seeking .jr-seek-knob,.jr-seek-bar:focus-visible .jr-seek-knob{transform:scale(1)}
+.jr-seek-bar.seeking .jr-seek-fill,.jr-seek-bar.seeking .jr-seek-knob,.jr-seek-bar.snap .jr-seek-fill,.jr-seek-bar.snap .jr-seek-knob{transition:none}
+.jr-seek-bar.live{cursor:default}
+.jr-seek-bar.live .jr-seek-fill{background:linear-gradient(90deg,transparent,var(--ob-info) 30%,var(--ob-info));box-shadow:0 0 10px -2px var(--ob-info)}
+.jr-seek-bar.live .jr-seek-knob{display:none}
+.jr-seek-bub{position:absolute;bottom:18px;left:0;transform:translateX(-50%) translateY(4px);padding:3px 7px;border-radius:7px;
+  font:600 10px var(--font-mono);color:var(--ob-fg-0);background:var(--lg-body-float);box-shadow:var(--lg-ring),var(--lg-drop);
+  opacity:0;pointer-events:none;transition:opacity .14s,transform .14s;white-space:nowrap}
+.jr-seek-bub.on{opacity:1;transform:translateX(-50%)}
+.jr-seek-times{display:flex;justify-content:space-between}
+.jr-seek-t{font:500 10px var(--font-mono);color:var(--ob-fg-3);font-variant-numeric:tabular-nums}
+
+/* Transporte: el waveform es el "skyline" detrás de los botones */
+.jr-transport{position:relative;display:grid;place-items:center;min-height:62px}
+.jr-wave{position:absolute;inset:6px 0;display:flex;align-items:center;justify-content:space-between;gap:3px;pointer-events:none;
+  -webkit-mask-image:linear-gradient(90deg,transparent,black 18%,black 82%,transparent);
+          mask-image:linear-gradient(90deg,transparent,black 18%,black 82%,transparent);opacity:.35}
+.jr-wave i{flex:1;height:100%;border-radius:3px;background:linear-gradient(180deg,var(--ob-accent-fg),var(--ob-accent-dim));
+  transform:scaleY(.08);transform-origin:center;transition:transform .5s var(--ease-out,ease)}
+.jr-wave.on i{animation-name:jr-wave;animation-timing-function:ease-in-out;animation-iteration-count:infinite;animation-direction:alternate}
+@keyframes jr-wave{0%{transform:scaleY(.12)}50%{transform:scaleY(.62)}100%{transform:scaleY(.28)}}
+.jr-tp{position:relative;display:flex;align-items:center;gap:14px}
+.jr-tp-btn{width:38px;height:38px;border:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--ob-fg-1);
+  background:var(--lg-gloss),var(--lg-body);box-shadow:var(--lg-ring),var(--lg-inset);
+  transition:transform .16s cubic-bezier(.34,1.56,.64,1),color .14s,box-shadow .14s}
+.jr-tp-btn .jr-ico{width:17px;height:17px}
+.jr-tp-btn.sm{width:32px;height:32px;color:var(--ob-fg-3)}
+.jr-tp-btn.sm .jr-ico{width:15px;height:15px}
+.jr-tp-btn:hover{color:var(--ob-fg-0);transform:translateY(-1px)}
+.jr-tp-btn:active{transform:scale(.9)}
+.jr-tp-btn.on{color:var(--ob-accent-fg);box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--ob-accent) 45%,transparent),var(--lg-inset),var(--lg-glow)}
+.jr-tp-btn.pop{animation:jr-pop .45s cubic-bezier(.34,1.56,.64,1)}
+@keyframes jr-pop{0%{transform:scale(1)}40%{transform:scale(1.22) rotate(-8deg)}100%{transform:scale(1)}}
+.jr-tp-play{position:relative;width:60px;height:60px;border:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+  color:var(--ob-on-accent);background:var(--lg-gloss),var(--lg-accent-body);
+  box-shadow:inset 0 1px .5px oklch(100% 0 0 / .45),inset 0 -8px 14px -8px oklch(0% 0 0 / .45),
+             inset 0 0 0 1px color-mix(in oklch,var(--ob-accent) 55%,white 15%),
+             0 10px 28px -8px var(--ob-accent-glow),0 0 0 6px color-mix(in oklch,var(--ob-accent) 10%,transparent);
+  transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .2s}
+.jr-tp-play .jr-ico{width:24px;height:24px;filter:drop-shadow(0 1px 1px oklch(0% 0 0 / .35))}
+.jr-tp-play:hover{transform:scale(1.05)}
+.jr-tp-play:active{transform:scale(.93)}
+.jr-tp-btn:focus-visible,.jr-tp-play:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
+
+/* Volumen (slider elástico; el JS estira .jr-vol-stretch) */
+.jr-vol{display:flex;align-items:center;gap:10px;padding:0 2px}
+.jr-vol-l{display:flex}
+.jr-vol-btn{width:26px;height:26px;border:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;
+  background:transparent;color:var(--ob-fg-2);transition:color .14s}
+.jr-vol-btn:hover{color:var(--ob-fg-0)}
+.jr-vol-btn .jr-ico{width:16px;height:16px}
+.jr-vol-el{flex:1;height:18px;display:flex;align-items:center;cursor:pointer;touch-action:none;outline:none}
+.jr-vol-stretch{width:100%;will-change:transform}
+.jr-vol-track{position:relative;height:6px;border-radius:6px;overflow:hidden;background:color-mix(in oklch,var(--ob-fg-0) 12%,transparent);
+  transition:height .15s}
+.jr-vol-el:hover .jr-vol-track,.jr-vol-el.drag .jr-vol-track,.jr-vol-el:focus-visible .jr-vol-track{height:9px}
+.jr-vol-fill{height:100%;width:80%;border-radius:inherit;background:linear-gradient(90deg,color-mix(in oklch,var(--ob-fg-0) 55%,transparent),var(--ob-fg-0))}
+.jr-vol-el:focus-visible .jr-vol-track{box-shadow:0 0 0 3px var(--ob-accent-24)}
+.jr-vol-pct{min-width:24px;text-align:right;font:600 10px var(--font-mono);color:var(--ob-fg-3);font-variant-numeric:tabular-nums}
+
+/* ═══════════════ BIBLIOTECA ═══════════════ */
+.jr-lib{flex:1;min-height:0;display:flex;flex-direction:column;
+  border-radius:20px 20px 0 0;margin-top:2px;
+  background:linear-gradient(180deg,color-mix(in oklch,var(--ob-bg-1) 70%,transparent),color-mix(in oklch,var(--ob-bg-1) 92%,transparent));
+  box-shadow:inset 0 1px 0 color-mix(in oklch,var(--ob-fg-0) 9%,transparent)}
+.jr-lib-top{display:flex;flex-direction:column;gap:8px;padding:12px 14px 8px}
+
+/* Fuentes: cápsula segmentada con glifo */
+.jr-src{display:flex;gap:4px;padding:3px;border-radius:var(--radius-pill,999px);
+  background:color-mix(in oklch,var(--ob-bg-void) 55%,transparent);box-shadow:var(--lg-ring)}
+.jr-src-pill{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:6px 10px;border:0;
+  border-radius:var(--radius-pill,999px);background:transparent;color:var(--ob-fg-3);cursor:pointer;
+  font:600 11.5px var(--font-ui);transition:color .14s,background .2s,box-shadow .2s}
+.jr-src-pill:hover{color:var(--ob-fg-1)}
+.jr-src-pill.on,.jr-src-pill[aria-pressed="true"]{color:var(--ob-fg-0);
+  background:var(--lg-gloss),var(--lg-spec),linear-gradient(180deg,var(--ob-accent-24),var(--ob-accent-08));
+  box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--ob-accent) 38%,transparent),var(--lg-inset)}
+.jr-src-pill:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
+.jr-src-ico{display:inline-grid;width:15px;height:15px}
+.jr-src-ico svg{width:15px;height:15px}
+.jr-src-pill.on.jr-src-youtube .jr-src-ico{color:var(--ob-err)}
+.jr-src-pill.on.jr-src-spotify .jr-src-ico{color:var(--ob-run)}
+
+/* Buscador */
+.jr-search{display:flex;align-items:center;gap:9px;height:38px;padding:0 13px;border-radius:var(--radius-pill,999px);
+  background:var(--lg-body);box-shadow:var(--lg-ring),inset 0 1px 3px oklch(0% 0 0 / .22);cursor:text;
+  transition:box-shadow .16s}
+.jr-search:focus-within{box-shadow:inset 0 0 0 1px var(--ob-accent-24),inset 0 1px 3px oklch(0% 0 0 / .22),0 0 0 3px var(--ob-accent-08)}
+.jr-search > span{display:grid;color:var(--ob-fg-3)}
+.jr-search input{flex:1;min-width:0;border:0;outline:none;background:transparent;color:var(--ob-fg-0);font:400 12.5px var(--font-ui)}
 .jr-search input::placeholder{color:var(--ob-fg-4)}
-/* Mata el focus-ring global de tokens.css (:where(...input...):focus-visible) → sin rectángulo */
-.jr-search input:focus,.jr-search input:focus-visible{outline:none;box-shadow:none}
 
-/* ── Fuentes (fila de pills SOBRE el buscador): la seleccionada es la mesa
-   del buscador. Solo las 3 pills — la subida de música vive en su propia CARD
-   .jr-upload dentro del pane local. ── */
-.jr-src{display:flex;align-items:center;gap:6px;padding:0 14px 8px;flex-wrap:wrap}
-/* Pill-ghost: borde line-2 en reposo, sin relleno; activa = señal acento-14
-   + texto fg-0 (único momento en que la pill se tija de violeta). Altura y
-   tipografía de 11px a juego con .jr-seg button (ambas ~27px). */
-.jr-src-pill{padding:6px 11px;border:1px solid var(--ob-line-2);border-radius:var(--radius-pill,999px);
-  background:transparent;color:var(--ob-fg-3);font:600 var(--text-xs,11px) var(--font-ui);
-  cursor:pointer;transition:color var(--dur-1) var(--ease-out),background var(--dur-1) var(--ease-out),border-color var(--dur-1) var(--ease-out),transform var(--dur-1) var(--ease-out)}
-.jr-src-pill:hover{color:var(--ob-fg-1);border-color:var(--ob-line-3)}
-.jr-src-pill:active{transform:scale(.96)}
-.jr-src-pill.on,.jr-src-pill[aria-pressed="true"]{color:var(--ob-fg-0);border-color:var(--ob-accent-24);background:var(--ob-accent-14)}
-.jr-src-pill:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}   /* anillo de señal, sin rectángulo */
-
-/* ── Subir música (fuente local): card empty-state accionable. Solo se
-   renderiza cuando la fuente activa es local (JS) — acá nada más se pinta
-   el vidrio: tenue bg-2 + sheen glass-hi arriba, borde dashed line-3.
-   CTA discreto: accent-08/24, se enciende al hover sin robarle el foco al
-   buscador. Mientras sube, el botón queda disabled. ── */
-.jr-upload{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-  padding:14px;text-align:center;
-  border:1px dashed var(--ob-line-3);border-radius:var(--radius-lg,12px);
-  background:linear-gradient(180deg, var(--ob-glass-hi), transparent 55%), var(--ob-bg-2);
-  box-shadow:inset 0 1px 0 var(--ob-glass-hi)}
-.jr-upload[hidden]{display:none}   /* display:flex de arriba pisaría el [hidden] del UA */
-.jr-upload button{display:inline-flex;align-items:center;justify-content:center;gap:7px;
-  padding:7px 13px;border:1px solid var(--ob-accent-24);border-radius:var(--radius-btn,7px);
-  background:var(--ob-accent-08);color:var(--ob-accent-fg);
-  font:600 var(--text-sm,12px) var(--font-ui);white-space:nowrap;cursor:pointer;
-  transition:background var(--dur-1) var(--ease-out),color var(--dur-1) var(--ease-out),border-color var(--dur-1) var(--ease-out),transform var(--dur-1) var(--ease-out)}
-.jr-upload button:hover:not(:disabled){background:var(--ob-accent-14);color:var(--ob-fg-0)}
-.jr-upload button:active:not(:disabled){transform:scale(.97)}
-.jr-upload button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
-.jr-upload button:disabled{opacity:.55}   /* subiendo: la card queda; el input file lo maneja la JS */
-.jr-upload button svg{width:16px;height:16px}
-.jr-upload-note{font:400 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-3)}
-
-/* ── Hints de estado de fuente (Spotify → #jr-src-hints) — vidrio tenue, borde
-   line-2, radio lg. El dot de la izquierda es el COLOR del caso (señal, no
-   relleno): default acento ("sesión no iniciada"), cian si NO hay botón de
-   conectar ("necesita cuenta Premium" — la fuente no muestra el CTA ahí),
-   y se reservan .hint-ok (--ob-run) / .hint-err (--ob-err-08) para cuando la
-   fuente emita esos casos. Todo prefijado con #: lo inyectado por spotify.js
-   pega 0,1,0 en la cascada — acá no queda ninguno al descubierto. ── */
-#jr-src-hints{padding:10px 14px 0;display:flex;flex-direction:column;gap:8px}
-#jr-src-hints[hidden]{display:none}   /* display:flex de arriba pisa el [hidden] del UA */
-#jr-src-hints .jr-src-hint{--jr-hint-c:var(--ob-accent);position:relative;display:flex;align-items:center;gap:10px;
-  padding:9px 12px;border:1px solid var(--ob-line-2);border-radius:var(--radius-lg,12px);
-  background:linear-gradient(180deg, var(--ob-glass-hi), transparent 55%), var(--ob-bg-2);
-  box-shadow:inset 0 1px 0 var(--ob-glass-hi);
-  color:var(--ob-fg-2);font:400 var(--text-xs,11px) var(--font-ui)}
+/* Hints de fuente (Spotify) — spotify.js escribe acá */
+#jr-src-hints{padding:0 14px 8px;display:flex;flex-direction:column;gap:8px}
+#jr-src-hints[hidden]{display:none}
+#jr-src-hints .jr-src-hint{--jr-hint-c:var(--ob-accent);display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:14px;
+  background:var(--lg-body);box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--jr-hint-c) 30%,transparent);
+  color:var(--ob-fg-1);font:500 var(--text-xs,11px)/1.4 var(--font-ui)}
 #jr-src-hints .jr-src-hint:not(:has(.jr-src-hint-btn)){--jr-hint-c:var(--ob-info)}
 #jr-src-hints .jr-src-hint.hint-ok{--jr-hint-c:var(--ob-run)}
-#jr-src-hints .jr-src-hint.hint-err{--jr-hint-c:var(--ob-err-08)}
+#jr-src-hints .jr-src-hint.hint-err{--jr-hint-c:var(--ob-err)}
 #jr-src-hints .jr-src-hint::before{content:"";flex:0 0 auto;width:7px;height:7px;border-radius:50%;
-  background:var(--jr-hint-c);box-shadow:0 0 0 3px color-mix(in oklch, var(--jr-hint-c) 22%, transparent)}
+  background:var(--jr-hint-c);box-shadow:0 0 8px var(--jr-hint-c)}
 #jr-src-hints .jr-src-hint b{color:var(--ob-fg-0);font-weight:600}
-/* CTA "Conectá Spotify": pill de señal — bg accent-08 / borde accent-24 en
-   reposo, accent-14 al hover. Chica y elegante (12px, 5px 12px). */
-#jr-src-hints .jr-src-hint-btn{margin-left:auto;flex:0 0 auto;padding:5px 12px;
-  border:1px solid var(--ob-accent-24);border-radius:var(--radius-pill,999px);
-  background:var(--ob-accent-08);color:var(--ob-fg-0);font:600 var(--text-sm,12px) var(--font-ui);cursor:pointer;
-  transition:background var(--dur-1) var(--ease-out),border-color var(--dur-1) var(--ease-out),transform var(--dur-1) var(--ease-out)}
-#jr-src-hints .jr-src-hint-btn:hover{background:var(--ob-accent-14)}
-#jr-src-hints .jr-src-hint-btn:active{transform:scale(.97)}
-#jr-src-hints .jr-src-hint-btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
-/* El "botón" puede ser un LINK ("Abrir Spotify" del hint Premium): misma pill,
-   sin subrayado ni margen de button. */
+#jr-src-hints .jr-src-hint-btn{margin-left:auto;flex:0 0 auto;padding:5px 12px;border:0;border-radius:var(--radius-pill,999px);
+  color:var(--ob-on-accent);background:var(--lg-gloss),var(--lg-accent-body);font:600 var(--text-xs,11px) var(--font-ui);cursor:pointer;
+  box-shadow:inset 0 1px .5px oklch(100% 0 0 / .35)}
 #jr-src-hints a.jr-src-hint-btn{display:inline-flex;align-items:center;text-decoration:none}
-/* Guía inline de configuración de Spotify (pasos numerados, bajo el hint):
-   misma card visual que el hint, CTA "Cerrar" como pill. */
-#jr-src-hints .jr-setup{display:flex;flex-direction:column;gap:9px;padding:11px 12px;
-  border:1px solid var(--ob-accent-24);border-radius:var(--radius-lg,12px);
-  background:linear-gradient(180deg, var(--ob-glass-hi), transparent 55%), var(--ob-bg-2);
-  color:var(--ob-fg-2);font:400 var(--text-xs,11px) var(--font-ui)}
+#jr-src-hints .jr-src-hint-btn:hover{filter:brightness(1.07)}
+#jr-src-hints .jr-src-hint-btn:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
+#jr-src-hints .jr-setup{display:flex;flex-direction:column;gap:9px;padding:12px 13px;border-radius:14px;
+  background:var(--lg-body);box-shadow:var(--lg-ring);color:var(--ob-fg-1);font:500 var(--text-xs,11px)/1.45 var(--font-ui)}
 #jr-src-hints .jr-setup b{color:var(--ob-fg-0);font-weight:600}
 #jr-src-hints .jr-setup ol{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:5px}
-#jr-src-hints .jr-setup code{font:600 var(--text-xs,11px) var(--font-mono);color:var(--ob-accent);
-  background:var(--ob-bg-3);padding:1px 4px;border-radius:4px;word-break:break-all}
+#jr-src-hints .jr-setup code{font:600 var(--text-xs,11px) var(--font-mono);color:var(--ob-accent-fg);
+  background:color-mix(in oklch,var(--ob-fg-0) 7%,transparent);padding:1px 5px;border-radius:5px;word-break:break-all}
 #jr-src-hints .jr-setup .jr-src-hint-btn{margin-left:0;align-self:flex-start}
 
-.jr-now{display:flex;gap:14px;padding:0 16px 14px}
-.jr-now .jr-art{width:118px;height:118px;border-radius:var(--radius-xl,16px);
-  box-shadow:var(--shadow-2), 0 0 34px -8px var(--ob-accent-glow), inset 0 0 0 1px oklch(100% 0 0 / .08)}
-.jr-now .jr-art .jr-viz{height:22px}
-.jr-now .jr-art .jr-viz i{width:4px}
-.jr-ninfo{min-width:0;flex:1;display:flex;flex-direction:column;gap:7px}
-.jr-eyebrow{font:600 var(--text-2xs,10px) var(--font-mono);letter-spacing:var(--ls-caps,0.12em);text-transform:uppercase;color:var(--ob-fg-3)}
-.jr-ntitle{font:600 var(--text-md,15px)/1.25 var(--font-ui);color:var(--ob-fg-0);
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.jr-chanlink{display:flex;align-items:center;gap:7px;border:0;background:transparent;cursor:pointer;padding:2px 4px 2px 0;
-  border-radius:var(--radius-sm,6px);font:400 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-2);transition:color .18s}
-.jr-chanlink:hover{color:var(--ob-fg-0)}
-.jr-av{width:18px;height:18px;border-radius:50%;flex:0 0 auto;overflow:hidden;
-  background:linear-gradient(135deg,var(--ob-accent),var(--ob-info));box-shadow:0 0 0 1px var(--ob-line-2)}
-.jr-av img{width:100%;height:100%;object-fit:cover;display:block}
-.jr-vercanal{font:600 var(--text-2xs,10px) var(--font-mono);letter-spacing:.04em;color:var(--ob-accent-fg);
-  padding:2px 7px;border:1px solid var(--ob-accent-24);border-radius:var(--radius-pill,999px);opacity:.55;transition:opacity .18s,background .18s}
-.jr-chanlink:hover .jr-vercanal{opacity:1;background:var(--ob-accent-14)}
-.jr-chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:auto}
-.jr-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 8px;border-radius:var(--radius-pill,999px);
-  background:var(--ob-bg-2);border:1px solid var(--ob-line-1);color:var(--ob-fg-2);font:500 var(--text-2xs,10px) var(--font-ui);white-space:nowrap;transition:border-color var(--dur-1) var(--ease-out)}
-.jr-chip svg{width:11px;height:11px;color:var(--ob-fg-3)}
-.jr-chip b{color:var(--ob-fg-0);font-weight:600}
-/* Números de datos (duración, vistas): tabular para que no baile el ancho.
-   Mientras la fuente no emita clase de tipo (look; la lógica la arregla otro
-   agente), al menos las cifras no tiemblan si el chip dice "YouTube" de
-   defecto en fuentes no-YouTube. */
-.jr-now .jr-chip b{font-variant-numeric:tabular-nums}
+/* Subida (fuente local) */
+.jr-upload{display:flex;align-items:center;gap:10px;margin:0 14px 8px;padding:10px 12px;border-radius:16px;
+  background:repeating-linear-gradient(135deg,color-mix(in oklch,var(--ob-fg-0) 3%,transparent) 0 8px,transparent 8px 16px),var(--lg-body);
+  box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--ob-accent) 22%,transparent)}
+.jr-upload[hidden]{display:none}
+.jr-upload button{display:inline-flex;align-items:center;gap:7px;padding:7px 13px;border:0;border-radius:var(--radius-pill,999px);cursor:pointer;
+  color:var(--ob-on-accent);background:var(--lg-gloss),var(--lg-accent-body);font:600 var(--text-xs,11px) var(--font-ui);
+  box-shadow:inset 0 1px .5px oklch(100% 0 0 / .35),0 4px 12px -6px var(--ob-accent-glow);transition:transform .14s}
+.jr-upload button:hover:not(:disabled){transform:translateY(-1px)}
+.jr-upload button:disabled{opacity:.55;cursor:progress}
+.jr-upload button:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
+.jr-upload button svg{width:15px;height:15px}
+.jr-upload-note{font:400 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-3)}
 
-.jr-transport{padding:0 16px 12px;display:flex;flex-direction:column;gap:12px}
-
-/* ── Waveform de música: barras espejadas que bailan desde el centro ── */
-.jr-wave{display:flex;align-items:center;justify-content:center;gap:2px;height:26px;width:100%;overflow:hidden;
-  -webkit-mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent);
-  mask-image:linear-gradient(90deg,transparent,#000 12%,#000 88%,transparent)}
-.jr-wave i{flex:1 1 0;max-width:4px;min-width:2px;height:100%;border-radius:2px;transform:scaleY(.16);transform-origin:center;
-  background:linear-gradient(180deg,var(--ob-accent-fg),var(--ob-accent) 50%,var(--ob-accent-dim));
-  opacity:.45;transition:transform .35s cubic-bezier(.22,1,.36,1),opacity .35s ease}
-.jr-wave.on i{opacity:.92;animation-name:jr-wave;animation-timing-function:ease-in-out;animation-iteration-count:infinite;
-  box-shadow:0 0 6px -1px var(--ob-accent-glow)}
-@keyframes jr-wave{0%,100%{transform:scaleY(.16)}50%{transform:scaleY(1)}}
-
-/* Pulso sutil del glow de la carátula mientras suena */
-.jr-now.playing .jr-art{animation:jr-artpulse 3s cubic-bezier(.65,.05,.36,1) infinite}
-@keyframes jr-artpulse{
-  0%,100%{box-shadow:var(--shadow-2), 0 0 28px -10px var(--ob-accent-glow), inset 0 0 0 1px oklch(100% 0 0 / .08)}
-  50%{box-shadow:var(--shadow-2), 0 0 46px -4px var(--ob-accent-glow), inset 0 0 0 1px oklch(100% 0 0 / .14)}
-}
-.jr-tp{display:flex;align-items:center;justify-content:center;gap:14px}
-
-/* ── Barra de progreso (seek): tiempo transcurrido ─●─ total ──
-   Suave y tranquila: el fill se desliza linealmente entre updates del player
-   (sin saltos de a segundo), la pista respira en hover (5→8px) y una burbuja
-   de vidrio muestra el minuto exacto al que apunta el cursor. Sin elásticos. */
-.jr-seek{display:flex;align-items:center;gap:11px;padding:4px 16px 6px}
-.jr-seek-t{flex:0 0 54px;text-align:center;font:500 var(--text-2xs,10px) var(--font-mono);color:var(--ob-fg-3);letter-spacing:.02em;font-variant-numeric:tabular-nums}
-.jr-seek-bar{flex:1 1 auto;position:relative;height:18px;display:flex;align-items:center;cursor:pointer;touch-action:none;--h:5px}
-.jr-seek-bar::before{content:"";position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);height:var(--h);
-  border-radius:var(--radius-pill,999px);background:var(--ob-bg-4);
-  box-shadow:inset 0 1px 2px var(--ob-glass-lo);transition:height .25s var(--ease-out)}
-.jr-seek-fill{position:absolute;left:0;top:50%;transform:translateY(-50%);height:var(--h);border-radius:var(--radius-pill,999px);width:0;
-  background:linear-gradient(90deg,var(--ob-accent-dim),var(--ob-accent-fg));
-  box-shadow:0 0 10px -2px var(--ob-accent-glow);
-  transition:width .5s linear,height .25s var(--ease-out)}
-.jr-seek-bar:hover,.jr-seek-bar.seeking{--h:8px}
-.jr-seek-knob{position:absolute;top:50%;left:0;width:12px;height:12px;border-radius:50%;background:#fff;
-  transform:translate(-50%,-50%) scale(.6);
-  box-shadow:0 1px 4px oklch(0% 0 0/.5), 0 0 0 3px var(--ob-accent-24);opacity:0;
-  transition:opacity .25s var(--ease-out),transform .25s var(--ease-out),left .5s linear;pointer-events:none}
-.jr-seek-bar:hover .jr-seek-knob,.jr-seek-bar.seeking .jr-seek-knob{opacity:1;transform:translate(-50%,-50%) scale(1)}
-.jr-seek-bar.seeking .jr-seek-knob{transform:translate(-50%,-50%) scale(1.12)}
-/* Arrastrando (o snap de un salto atrás): el fill sigue al dedo sin lag */
-.jr-seek-bar.seeking .jr-seek-fill,.jr-seek-bar.snap .jr-seek-fill,
-.jr-seek-bar.seeking .jr-seek-knob,.jr-seek-bar.snap .jr-seek-knob{transition:opacity .25s var(--ease-out),transform .25s var(--ease-out),height .25s var(--ease-out)}
-/* Burbuja de tiempo (vidrio): aparece al pasar el cursor por la pista */
-.jr-seek-bub{position:absolute;bottom:calc(100% + 2px);transform:translate(-50%,2px);pointer-events:none;z-index:3;
-  font:600 var(--text-2xs,10px) var(--font-mono);color:var(--ob-fg-0);font-variant-numeric:tabular-nums;white-space:nowrap;
-  padding:3px 8px;border-radius:var(--radius-pill,999px);
-  background:linear-gradient(180deg, var(--ob-glass-hi), transparent 55%), var(--ob-bg-2);
-  border:1px solid var(--ob-line-2);box-shadow:var(--shadow-1), inset 0 1px 0 var(--ob-glass-hi);
-  backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);
-  opacity:0;transition:opacity .2s var(--ease-out),transform .2s var(--ease-out)}
-.jr-seek-bub.on{opacity:1;transform:translate(-50%,0)}
-.jr-seek-bar.live{cursor:default}
-.jr-seek-bar.live .jr-seek-knob,.jr-seek-bar.live .jr-seek-bub{display:none}
-.jr-seek-bar:focus-visible{outline:none}
-.jr-seek-bar:focus-visible::before{box-shadow:inset 0 1px 2px var(--ob-glass-lo), 0 0 0 2px var(--ob-accent-24)}
-
-/* ── Control de volumen (fila SEPARADA del seek): ícono ─slider─ % ──
-   Slots laterales de 54px = MISMO ancho que los tiempos del seek → las dos barras
-   quedan alineadas y todo simétrico.
-   Slider ELÁSTICO (port vanilla de ElasticSlider/React Bits): la pista crece al
-   entrar (5→9px), y si arrastrás más allá de un borde se ESTIRA como goma
-   (sigmoide) empujando el ícono/porcentaje de ese lado; al soltar vuelve con un
-   resorte. Los transforms los maneja radio.js sobre .jr-vol-stretch. */
-.jr-vol{display:flex;align-items:center;gap:11px;padding:0 16px 14px}
-.jr-vol-l{flex:0 0 54px;display:flex;align-items:center;justify-content:center}
-.jr-vol-pct{flex:0 0 54px;text-align:center;font:500 var(--text-2xs,10px) var(--font-mono);color:var(--ob-fg-3);
-  font-variant-numeric:tabular-nums;will-change:transform;transition:color .2s var(--ease-out)}
-.jr-vol-btn{flex:0 0 auto;width:30px;height:30px;border:0;background:transparent;color:var(--ob-fg-2);
-  display:grid;place-items:center;cursor:pointer;border-radius:var(--radius-btn,7px);will-change:transform;
-  transition:color var(--dur-2) var(--ease-out),background var(--dur-2) var(--ease-out)}
-.jr-vol-btn:hover{color:var(--ob-fg-0);background:var(--ob-bg-3)}
-.jr-vol-btn svg{width:18px;height:18px}
-.jr-vol-el{flex:1 1 auto;position:relative;height:22px;display:flex;align-items:center;
-  cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;--h:5px}
-.jr-vol-el.drag{cursor:grabbing}
-.jr-vol-el:hover,.jr-vol-el.drag,.jr-vol-el:focus-visible{--h:9px}
-.jr-vol-el:focus-visible{outline:none}
-.jr-vol-el:focus-visible .jr-vol-track{box-shadow:inset 0 1px 2px var(--ob-glass-lo), 0 0 0 2px var(--ob-accent-24)}
-.jr-vol-stretch{width:100%;will-change:transform}
-.jr-vol-track{height:var(--h);border-radius:var(--radius-pill,999px);background:var(--ob-bg-4);overflow:hidden;
-  box-shadow:inset 0 1px 2px var(--ob-glass-lo);transition:height .25s var(--ease-out)}
-.jr-vol-fill{height:100%;width:80%;border-radius:inherit;
-  background:linear-gradient(90deg,var(--ob-accent-dim),var(--ob-accent-fg));
-  box-shadow:0 0 10px -2px var(--ob-accent-glow);transition:width .2s var(--ease-out)}
-.jr-vol-el.drag .jr-vol-fill{transition:none}
-/* Cuando la goma empuja el ícono/% el color se enciende (feedback del tirón) */
-.jr-vol-el.drag~.jr-vol-pct{color:var(--ob-fg-1)}
-.jr-tp-btn{width:38px;height:38px;border-radius:50%;border:1px solid transparent;background:transparent;color:var(--ob-fg-2);
-  display:grid;place-items:center;cursor:pointer;
-  transition:color var(--dur-2) var(--ease-out),background var(--dur-2) var(--ease-out),
-    border-color var(--dur-2) var(--ease-out),box-shadow var(--dur-2) var(--ease-out),transform var(--dur-2) var(--ease-out)}
-.jr-tp-btn:hover{color:var(--ob-fg-0);background:linear-gradient(180deg, var(--ob-glass-hi), transparent 55%), var(--ob-bg-3);
-  border-color:var(--ob-line-1);box-shadow:inset 0 1px 0 var(--ob-glass-hi), 0 2px 8px -3px oklch(0% 0 0/.5)}
-.jr-tp-btn:active{transform:scale(.92)}
-.jr-tp-btn svg{width:20px;height:20px}
-.jr-tp-btn.sm{width:32px;height:32px}.jr-tp-btn.sm svg{width:17px;height:17px}
-/* Toggle activo (Repetir): chip de vidrio acentuado, no solo un cambio de color */
-.jr-tp-btn.on{color:var(--ob-accent-fg);border-color:var(--ob-accent-24);
-  background:linear-gradient(180deg, var(--ob-glass-hi), transparent 55%), var(--ob-accent-14);
-  box-shadow:inset 0 1px 0 var(--ob-glass-hi), 0 0 12px -4px var(--ob-accent-glow)}
-/* Pop al mezclar la cola (acción one-shot: el feedback es el gesto) */
-.jr-tp-btn.pop svg{animation:jr-btnpop .4s var(--ease-out)}
-@keyframes jr-btnpop{0%{transform:scale(1)}35%{transform:scale(1.25) rotate(-8deg)}100%{transform:scale(1)}}
-/* Play grande PREMIUM (orbe de vidrio) */
-.jr-tp-play{position:relative;width:52px;height:52px;border-radius:50%;border:0;cursor:pointer;flex:0 0 auto;
-  background:radial-gradient(120% 120% at 32% 24%, var(--ob-accent-fg), var(--ob-accent) 44%, var(--ob-accent-dim) 100%);
-  color:#fff;display:grid;place-items:center;
-  box-shadow:0 8px 22px -6px var(--ob-accent-glow), 0 1px 0 oklch(100% 0 0 / .42) inset,
-    0 -4px 10px -4px oklch(0% 0 0 / .5) inset, 0 0 0 1px var(--ob-accent-24);
-  transition:transform .18s cubic-bezier(.34,1.56,.64,1),box-shadow .32s cubic-bezier(.22,1,.36,1)}
-.jr-tp-play::before{content:"";position:absolute;inset:2px;border-radius:50%;pointer-events:none;
-  background:linear-gradient(180deg, oklch(100% 0 0 / .3), transparent 46%)}
-.jr-tp-play svg{position:relative;z-index:1;width:24px;height:24px;filter:drop-shadow(0 1px 1.5px oklch(0% 0 0 / .4))}
-.jr-tp-play:hover{transform:scale(1.06);
-  box-shadow:0 12px 30px -6px var(--ob-accent-glow), 0 1px 0 oklch(100% 0 0 / .48) inset, 0 -4px 10px -4px oklch(0% 0 0 / .5) inset, 0 0 0 1px var(--ob-accent-40)}
-.jr-tp-play:active{transform:scale(.94)}
-
-/* Segmented con THUMB deslizante: una pastilla de vidrio viaja hasta la pestaña
-   activa (radio.js setea --segx/--segw al cambiar de pane y al abrir). */
-.jr-seg{position:relative;display:flex;gap:3px;padding:2px;margin:0 14px 8px;border:1px solid var(--ob-line-1);
-  border-radius:var(--radius-lg,12px);background:var(--ob-bg-void);
-  box-shadow:inset 0 1.5px 4px var(--ob-glass-lo)}
-.jr-seg::before{content:"";position:absolute;top:2px;bottom:2px;left:0;width:var(--segw,0px);
-  transform:translateX(var(--segx,0px));border-radius:var(--radius,8px);opacity:0;
-  background:linear-gradient(180deg, var(--ob-glass-hi), transparent 55%), var(--ob-bg-3);
-  box-shadow:inset 0 1px 0 var(--ob-glass-hi), 0 1px 5px -1px oklch(0% 0 0/.45);
-  transition:transform .28s var(--ease-snap),width .28s var(--ease-snap),opacity .2s var(--ease-out)}
+/* Pestañas: gota de vidrio que se desliza (radio.js publica --segx/--segw) */
+#jr-browse{flex:1;min-height:0;display:flex;flex-direction:column}
+#jr-browse[hidden]{display:none}
+.jr-seg{position:relative;display:flex;gap:2px;margin:0 14px 6px;padding:3px;border-radius:var(--radius-pill,999px);
+  background:color-mix(in oklch,var(--ob-bg-void) 45%,transparent);box-shadow:var(--lg-ring)}
+.jr-seg::before{content:"";position:absolute;top:3px;bottom:3px;left:0;width:var(--segw,0px);transform:translateX(var(--segx,0px));
+  border-radius:var(--radius-pill,999px);opacity:0;background:var(--lg-gloss),var(--lg-body);box-shadow:var(--lg-ring),var(--lg-inset);
+  transition:transform .34s cubic-bezier(.32,1.18,.35,1),width .34s cubic-bezier(.32,1.18,.35,1),opacity .2s}
 .jr-seg.thumbed::before{opacity:1}
-.jr-seg button{position:relative;z-index:1;flex:1;padding:7px 4px;border:0;border-radius:var(--radius,8px);background:transparent;color:var(--ob-fg-3);
-  font:600 var(--text-xs,11px) var(--font-ui);cursor:pointer;transition:color .2s var(--ease-out)}
+.jr-seg button{position:relative;z-index:1;flex:1;padding:6px 4px;border:0;border-radius:var(--radius-pill,999px);background:transparent;
+  color:var(--ob-fg-3);font:600 11.5px var(--font-ui);cursor:pointer;transition:color .16s}
 .jr-seg button:hover{color:var(--ob-fg-1)}
 .jr-seg button.on{color:var(--ob-fg-0)}
-/* Fallback sin thumb medido todavía (primer render, popover cerrado) */
-.jr-seg:not(.thumbed) button.on{background:var(--ob-bg-3)}
-.jr-scroll{flex:1 1 auto;overflow-y:auto;padding:2px 10px 12px;min-height:120px}
-#jr-browse{display:flex;flex-direction:column;min-height:0;flex:1 1 auto}
-#jr-browse[hidden]{display:none}
+.jr-seg:not(.thumbed) button.on{background:var(--lg-body)}
+.jr-seg button:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ob-accent-24)}
+
+.jr-scroll{flex:1;min-height:120px;overflow-y:auto;overscroll-behavior:contain;padding:2px 8px 12px;scrollbar-width:thin}
 .jr-pane[hidden]{display:none}
-/* Cambio de vista: fade suave al entrar (ob-fade-in vive en shared/tokens.css) */
-.jr-pane:not([hidden]){animation:ob-fade-in var(--dur-1) var(--ease-out)}
-/* Carátula fantasma del "nada sonando": misma base .jr-art pero sin glow de acento */
-.jr-now .jr-art.ghost{box-shadow:var(--shadow-2), inset 0 0 0 1px oklch(100% 0 0 / .08)}
-.jr-stations{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:4px}
-.jr-hint{padding:24px 12px;text-align:center;color:var(--ob-fg-3);font:400 var(--text-sm,12px) var(--font-ui)}
+.jr-hint{padding:26px 16px;text-align:center;font:400 var(--text-xs,11px)/1.5 var(--font-ui);color:var(--ob-fg-3)}
 
-/* Filas (resultados / relacionados / canal) */
-.jr-row{display:flex;align-items:center;gap:11px;width:100%;padding:8px;border:1px solid transparent;background:transparent;
-  border-radius:var(--radius-lg,12px);text-align:left;cursor:pointer;transition:background .18s,border-color .18s}
-.jr-row:hover{background:var(--ob-bg-2);border-color:var(--ob-line-2)}
-.jr-row:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}   /* anillo de señal */
-.jr-row:hover .jr-add{opacity:1}
-.jr-row.activa{background:var(--ob-accent-14);border-color:var(--ob-accent-24)}
-.jr-thumb{position:relative;width:74px;height:42px;border-radius:var(--radius,8px);flex:0 0 auto;overflow:hidden;background:var(--ob-bg-3)}
-.jr-thumb img{width:100%;height:100%;object-fit:cover;display:block}
-.jr-thumb .jr-viz{position:absolute;left:6px;bottom:5px;height:10px}
-.jr-dur{position:absolute;right:4px;bottom:4px;z-index:2;font:600 var(--text-2xs,10px) var(--font-mono);color:#fff;
-  background:oklch(0% 0 0 / .78);padding:1px 5px;border-radius:3px;letter-spacing:var(--ls-wide)}
-.jr-dur.live{background:var(--ob-info);color:#fff}
-/* Fuentes NO-YouTube (streams SomaFM, Spotify): miniaturas redondas de disco/
-   álbum 40px — el chip de duración (mono) flota como badge en la esquina.
-   Selectores por prefijo del id de la fila (data-vid); los thumbs de streams
-   son data-URI 74×42 que el cover recorta dentro del círculo. */
-.jr-row[data-vid^="soma:"] .jr-thumb,.jr-row[data-vid^="spotify:"] .jr-thumb{width:40px;height:40px;border-radius:var(--radius-pill,999px);
-  box-shadow:inset 0 0 0 1px oklch(100% 0 0 / .08)}
-.jr-row[data-vid^="soma:"] .jr-dur,.jr-row[data-vid^="spotify:"] .jr-dur{right:1px;bottom:1px;padding:1px 5px;border-radius:var(--radius-pill,999px)}
-.jr-row[data-vid^="soma:"] .jr-dur{background:var(--ob-info)}   /* en vivo: badge cian, como .jr-dur.live */
-.jr-rmeta{min-width:0;flex:1 1 auto;display:flex;flex-direction:column;gap:3px}
-.jr-rmeta b{font:600 var(--text-sm,12px) var(--font-ui);color:var(--ob-fg-0);line-height:1.3;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.jr-rmeta .s{font:400 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.jr-add{flex:0 0 auto;width:30px;height:30px;border:0;background:transparent;border-radius:var(--radius-btn,7px);display:grid;place-items:center;
-  color:var(--ob-fg-3);opacity:0;cursor:pointer;transition:opacity .18s,background .18s,color .18s}
-.jr-add:hover{background:var(--ob-bg-3);color:var(--ob-fg-0)}
-.jr-add:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
-.jr-add svg{width:17px;height:17px}
-
-/* Dots de continuación — el pie de toda lista: "hay más de esto".
-   Tres puntos que respiran en ola al pasar el mouse y corren mientras cargan.
-   Las filas nuevas entran por abajo sin mover nada de lo que ya se ve. */
-.jr-more{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:4px;padding:11px 8px;
-  border:1px dashed var(--ob-line-1);background:transparent;border-radius:var(--radius-lg,12px);cursor:pointer;
-  color:var(--ob-fg-3);transition:background .18s,border-color .18s,color .18s}
-.jr-more:hover{background:var(--ob-bg-2);border-color:var(--ob-accent-24);color:var(--ob-fg-1)}
-.jr-more:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
-.jr-more-txt{font:500 var(--text-xs,11px) var(--font-ui);letter-spacing:.01em}
-.jr-more-q{font:500 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-2);max-width:150px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.jr-dots{display:inline-flex;align-items:center;gap:5px}
-.jr-dots i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.45;
-  transition:opacity .18s,transform .18s}
-.jr-more:hover .jr-dots i,.jr-more.cargando .jr-dots i{animation:jr-dot-ola 1.05s ease-in-out infinite;color:var(--ob-accent)}
-.jr-more:hover .jr-dots i{background:var(--ob-accent)}
-.jr-more.cargando{border-style:solid;border-color:var(--ob-accent-24);color:var(--ob-fg-2);cursor:progress}
-.jr-more.cargando .jr-dots i{background:var(--ob-accent);animation-duration:.72s}
-.jr-dots i:nth-child(2){animation-delay:.13s}
-.jr-dots i:nth-child(3){animation-delay:.26s}
-.jr-more.fin{border-style:solid;opacity:.5;cursor:default;pointer-events:none}
-.jr-more.fin .jr-dots i{animation:none;opacity:.3}
-@keyframes jr-dot-ola{0%,100%{opacity:.35;transform:translateY(0) scale(1)}
-  45%{opacity:1;transform:translateY(-3px) scale(1.25)}}
+/* Filas (búsqueda, relacionados, canal) */
+.jr-row{position:relative;display:flex;align-items:center;gap:11px;width:100%;padding:6px;border:0;border-radius:14px;
+  background:transparent;text-align:left;cursor:pointer;color:inherit;transition:background .14s,box-shadow .14s}
+.jr-row:hover{background:var(--lg-body);box-shadow:var(--lg-ring)}
+.jr-row:focus-visible{outline:none;box-shadow:0 0 0 2px var(--ob-accent-24)}
+.jr-row.activa{background:var(--lg-gloss),linear-gradient(90deg,var(--ob-accent-24),var(--ob-accent-08) 70%,transparent);
+  box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--ob-accent) 30%,transparent)}
+.jr-thumb{position:relative;width:76px;height:44px;flex:0 0 auto;border-radius:10px;overflow:hidden;background:var(--ob-bg-3);
+  box-shadow:0 0 0 1px color-mix(in oklch,var(--ob-fg-0) 8%,transparent),0 4px 10px -6px oklch(0% 0 0 / .6)}
+.jr-thumb img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .35s var(--ease-out,ease)}
+.jr-row:hover .jr-thumb img{transform:scale(1.07)}
+.jr-dur{position:absolute;right:4px;bottom:4px;z-index:2;padding:1px 5px;border-radius:5px;
+  font:600 9.5px var(--font-mono);color:oklch(100% 0 0);background:oklch(0% 0 0 / .66)}
+.jr-dur.live{background:var(--ob-info);color:oklch(100% 0 0)}
+.jr-thumb-play,.jr-thumb-eq{position:absolute;inset:0;z-index:3;display:grid;place-items:center;opacity:0;transition:opacity .16s;
+  color:oklch(100% 0 0);background:oklch(0% 0 0 / .38)}
+.jr-thumb-play .jr-ico{width:18px;height:18px;filter:drop-shadow(0 1px 3px oklch(0% 0 0 / .6))}
+.jr-row:hover:not(.activa) .jr-thumb-play{opacity:1}
+.jr-thumb-eq{display:flex;align-items:flex-end;justify-content:center;gap:2.5px;padding-bottom:12px}
+.jr-thumb-eq i{width:3px;height:16px;border-radius:2px;background:oklch(100% 0 0);transform-origin:bottom;animation:jr-eq .75s ease-in-out infinite alternate}
+.jr-thumb-eq i:nth-child(2){animation-delay:-.3s}.jr-thumb-eq i:nth-child(3){animation-delay:-.5s}
+.jr-row.activa .jr-thumb-eq{opacity:1}
+.jr-row.activa .jr-dur{opacity:0}
+.jr-row:not(.activa) .jr-thumb-eq i{animation:none}
+.jr-row[data-vid^="soma:"] .jr-thumb,.jr-row[data-vid^="spotify:"] .jr-thumb{width:44px;border-radius:50%}
+.jr-row[data-vid^="soma:"] .jr-dur{background:var(--ob-info)}
+.jr-rmeta{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.jr-rmeta b{font:600 12px/1.3 var(--font-ui);color:var(--ob-fg-0);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.jr-row.activa .jr-rmeta b{color:var(--ob-accent-fg)}
+.jr-rmeta .s{font:400 10.5px var(--font-ui);color:var(--ob-fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jr-add{width:28px;height:28px;flex:0 0 auto;border-radius:50%;display:grid;place-items:center;color:var(--ob-fg-3);opacity:0;
+  transition:opacity .14s,color .14s,background .14s,box-shadow .14s}
+.jr-add .jr-ico{width:15px;height:15px}
+.jr-row:hover .jr-add,.jr-row:focus-within .jr-add{opacity:1}
+.jr-add:hover{color:var(--ob-accent-fg);background:var(--lg-body);box-shadow:inset 0 0 0 1px var(--ob-accent-24)}
 .jr-row.jr-nueva{animation:jr-fila-in .34s cubic-bezier(.2,.72,.3,1) both}
 @keyframes jr-fila-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
-@media (prefers-reduced-motion:reduce){
-  .jr-more:hover .jr-dots i,.jr-more.cargando .jr-dots i{animation:none;opacity:1}
-  .jr-row.jr-nueva{animation:none}
-}
 
-/* Cola */
-.jr-qrow{display:flex;align-items:center;gap:10px;padding:7px 8px;border-radius:var(--radius,8px);cursor:pointer;transition:background .18s}
-.jr-qrow:hover{background:var(--ob-bg-2)}
-.jr-qrow:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
-.jr-qart{width:40px;height:40px;border-radius:var(--radius-sm,6px);flex:0 0 auto}
-.jr-qart .jr-viz{height:14px}
-.jr-qrow .jr-rmeta b{-webkit-line-clamp:1}
-.jr-qdur{font:500 var(--text-2xs,10px) var(--font-mono);color:var(--ob-fg-4);flex:0 0 auto}
+/* "Más" al pie de cada lista */
+.jr-more{display:flex;align-items:center;justify-content:center;gap:10px;width:100%;margin-top:6px;padding:10px 8px;border:0;
+  border-radius:14px;background:transparent;color:var(--ob-fg-3);cursor:pointer;
+  box-shadow:inset 0 0 0 1px color-mix(in oklch,var(--ob-fg-0) 8%,transparent);transition:color .14s,box-shadow .14s,background .14s}
+.jr-more:hover{color:var(--ob-fg-1);background:var(--lg-body);box-shadow:inset 0 0 0 1px var(--ob-accent-24)}
+.jr-more:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
+.jr-more-txt{font:500 var(--text-xs,11px) var(--font-ui)}
+.jr-more-q{font:500 var(--text-xs,11px) var(--font-ui);color:var(--ob-fg-2);max-width:150px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.jr-dots{display:inline-flex;align-items:center;gap:4px}
+.jr-dots i{width:5px;height:5px;border-radius:50%;background:currentColor;opacity:.5}
+.jr-more:hover .jr-dots i,.jr-more.cargando .jr-dots i{background:var(--ob-accent);opacity:1;animation:jr-dot-ola 1s ease-in-out infinite}
+.jr-dots i:nth-child(2){animation-delay:.13s}.jr-dots i:nth-child(3){animation-delay:.26s}
+@keyframes jr-dot-ola{0%,100%{transform:translateY(0)}40%{transform:translateY(-4px)}}
+.jr-more.cargando{cursor:progress;color:var(--ob-fg-2)}
+.jr-more.fin{opacity:.5;cursor:default;pointer-events:none}
+.jr-more.fin .jr-dots i{animation:none;opacity:.3}
 
-/* Estaciones — foto de fondo (generadas con IA) + overlay para legibilidad */
-.jr-station{position:relative;aspect-ratio:1.5/1;border-radius:var(--radius-lg,12px);border:1px solid transparent;overflow:hidden;
-  display:flex;flex-direction:column;justify-content:flex-end;align-items:flex-start;gap:2px;padding:10px 12px;cursor:pointer;color:#fff;
-  background-color:var(--ob-bg-3);background-size:cover;background-position:center;
-  transition:transform .18s cubic-bezier(.34,1.56,.64,1),border-color .18s,box-shadow .18s}
-.jr-station::after{content:"";position:absolute;inset:0;pointer-events:none;
-  background:linear-gradient(to top, oklch(0% 0 0 / .78) 3%, oklch(0% 0 0 / .22) 46%, oklch(0% 0 0 / .05));
-  transition:background .18s ease}
-.jr-station:hover{transform:translateY(-3px);border-color:oklch(100% 0 0 / .35);box-shadow:var(--shadow-2)}
-.jr-station:hover::after{background:linear-gradient(to top, oklch(0% 0 0 / .68) 3%, oklch(0% 0 0 / .12) 50%, transparent)}
-.jr-station>span{position:relative;z-index:2}
-.jr-st-name{font:600 var(--text-sm,12px) var(--font-ui);text-shadow:0 1px 5px oklch(0% 0 0 / .85)}
-.jr-st-tag{font:500 var(--text-2xs,10px) var(--font-mono);letter-spacing:.06em;text-transform:uppercase;color:oklch(100% 0 0 / .82);text-shadow:0 1px 4px oklch(0% 0 0 / .85)}
+/* Cola: numerada */
+.jr-qrow{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:12px;cursor:pointer;transition:background .14s,box-shadow .14s}
+.jr-qrow:hover{background:var(--lg-body);box-shadow:var(--lg-ring)}
+.jr-qn{width:18px;flex:0 0 auto;text-align:right;font:600 10px var(--font-mono);color:var(--ob-fg-4);font-variant-numeric:tabular-nums}
+.jr-art{position:relative;overflow:hidden;background:var(--ob-bg-3)}
+.jr-qart{width:36px;height:36px;flex:0 0 auto;border-radius:9px;box-shadow:0 0 0 1px color-mix(in oklch,var(--ob-fg-0) 8%,transparent)}
+.jr-qart img{width:100%;height:100%;object-fit:cover;display:block}
+.jr-qdur{flex:0 0 auto;font:500 10px var(--font-mono);color:var(--ob-fg-3)}
+
+/* Estaciones: mosaico de portadas */
+.jr-stations:not([hidden]){display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:4px 6px}
+.jr-station{position:relative;aspect-ratio:16/10;border:0;border-radius:16px;overflow:hidden;cursor:pointer;padding:0;
+  display:flex;align-items:flex-end;text-align:left;background-size:cover;background-position:center;background-color:var(--ob-bg-3);
+  box-shadow:0 0 0 1px color-mix(in oklch,var(--ob-fg-0) 10%,transparent),0 8px 18px -10px oklch(0% 0 0 / .7);
+  transition:transform .22s cubic-bezier(.34,1.3,.5,1),box-shadow .22s}
+.jr-station::before{content:"";position:absolute;inset:0;background:linear-gradient(180deg,transparent 30%,oklch(0% 0 0 / .72));transition:opacity .2s}
+.jr-station::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(150deg,oklch(100% 0 0 / .2),transparent 40%)}
+.jr-station:hover{transform:translateY(-2px) scale(1.02);box-shadow:0 0 0 1px var(--ob-accent-24),0 14px 26px -12px var(--ob-accent-glow)}
+.jr-station:focus-visible{outline:none;box-shadow:0 0 0 3px var(--ob-accent-24)}
+.jr-st-txt{position:relative;z-index:1;display:flex;flex-direction:column;gap:2px;padding:10px 11px}
+.jr-st-name{font:650 13px var(--font-ui);color:oklch(100% 0 0);text-shadow:0 1px 6px oklch(0% 0 0 / .8)}
+.jr-st-tag{font:600 9px var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:oklch(100% 0 0 / .78)}
+.jr-st-on{position:absolute;right:9px;top:9px;z-index:1;width:28px;height:28px;border-radius:50%;display:grid;place-items:center;
+  color:oklch(100% 0 0);background:oklch(100% 0 0 / .18);box-shadow:inset 0 0 0 1px oklch(100% 0 0 / .35);
+  opacity:0;transform:scale(.8);transition:opacity .18s,transform .18s cubic-bezier(.34,1.56,.64,1)}
+.jr-st-on .jr-ico{width:13px;height:13px}
+.jr-station:hover .jr-st-on,.jr-station:focus-visible .jr-st-on{opacity:1;transform:none}
 .jr-st-lofi{background-image:url(stations/lofi.webp)}
 .jr-st-synth{background-image:url(stations/synth.webp)}
 .jr-st-focus{background-image:url(stations/focus.webp)}
@@ -465,44 +400,41 @@
 .jr-st-chill{background-image:url(stations/chill.webp)}
 .jr-st-piano{background-image:url(stations/piano.webp)}
 
-/* ── Vista de canal ── */
-.jr-channel{display:flex;flex-direction:column;min-height:0;flex:1 1 auto;animation:jr-chan .26s cubic-bezier(.22,1,.36,1)}
+/* Vista de canal */
+.jr-channel{flex:1;min-height:0;display:flex;flex-direction:column}
 .jr-channel[hidden]{display:none}
-@keyframes jr-chan{from{opacity:0;transform:translateX(12px)}to{opacity:1;transform:none}}
-.jr-cv-head{display:flex;align-items:center;gap:11px;padding:2px 14px 12px}
-.jr-cv-back{width:30px;height:30px;border-radius:var(--radius-btn,7px);border:0;background:var(--ob-bg-2);color:var(--ob-fg-2);
-  display:grid;place-items:center;cursor:pointer;flex:0 0 auto;transition:all .18s cubic-bezier(.4,0,.2,1)}
-.jr-cv-back:hover{background:var(--ob-bg-3);color:var(--ob-fg-0)}
-.jr-cv-back svg{width:16px;height:16px}
-.jr-cv-av{width:44px;height:44px;border-radius:50%;flex:0 0 auto;overflow:hidden;box-shadow:0 0 0 1px var(--ob-line-2);
-  background:linear-gradient(135deg,var(--ob-accent),var(--ob-info))}
-.jr-cv-av img{width:100%;height:100%;object-fit:cover;display:block}
-.jr-cv-meta{min-width:0;flex:1;display:flex;flex-direction:column;gap:3px}
-.jr-cv-meta b{font:600 var(--text-md,15px) var(--font-ui);color:var(--ob-fg-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.jr-cv-meta span{font:400 var(--text-2xs,10px) var(--font-ui);color:var(--ob-fg-3);display:flex;align-items:center;gap:6px}
-.jr-cv-meta span svg{width:12px;height:12px}
-.jr-cv-play{position:relative;flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border-radius:var(--radius-pill,999px);
-  border:0;color:#fff;font:600 var(--text-xs,11px) var(--font-ui);cursor:pointer;
-  background:linear-gradient(180deg, var(--ob-accent-fg), var(--ob-accent) 52%, var(--ob-accent-dim));
-  box-shadow:0 4px 12px -4px var(--ob-accent-glow), 0 1px 0 oklch(100% 0 0 / .38) inset, 0 0 0 1px var(--ob-accent-24);
-  transition:transform .18s cubic-bezier(.4,0,.2,1),box-shadow .18s}
-.jr-cv-play:hover{transform:translateY(-1px)}
-.jr-cv-play svg{width:13px;height:13px;filter:drop-shadow(0 1px 1px oklch(0% 0 0 / .35))}
+.jr-cv-head{display:flex;align-items:center;gap:11px;padding:4px 14px 12px}
+.jr-cv-back{width:32px;height:32px;border:0;border-radius:50%;display:grid;place-items:center;cursor:pointer;color:var(--ob-fg-2);
+  background:var(--lg-gloss),var(--lg-body);box-shadow:var(--lg-ring),var(--lg-inset)}
+.jr-cv-back:hover{color:var(--ob-fg-0)}
+.jr-cv-back .jr-ico{width:16px;height:16px}
+.jr-cv-av{width:42px;height:42px;border-radius:50%;flex:0 0 auto;background:var(--lg-accent-body);
+  box-shadow:0 0 0 3px var(--ob-accent-14),0 6px 14px -8px var(--ob-accent-glow)}
+.jr-cv-meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.jr-cv-meta b{font:650 13px var(--font-ui);color:var(--ob-fg-0);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.jr-cv-meta span{display:flex;align-items:center;gap:5px;font:400 10.5px var(--font-ui);color:var(--ob-fg-3)}
+.jr-cv-meta .jr-ico{width:12px;height:12px}
+.jr-cv-play{display:inline-flex;align-items:center;gap:6px;padding:7px 13px;border:0;border-radius:var(--radius-pill,999px);cursor:pointer;
+  color:var(--ob-on-accent);background:var(--lg-gloss),var(--lg-accent-body);font:600 var(--text-xs,11px) var(--font-ui);
+  box-shadow:inset 0 1px .5px oklch(100% 0 0 / .35),0 6px 16px -8px var(--ob-accent-glow)}
+.jr-cv-play .jr-ico{width:13px;height:13px}
+.jr-cv-play:hover{filter:brightness(1.07)}
 
-/* Cuando el arte tiene miniatura, el visualizer pasa a badge (esquina); si no,
-   queda centrado (pulsa desde el centro, simétrico). */
-.jr-art:has(img) .jr-viz{position:absolute;left:4px;bottom:4px;height:9px;gap:1.5px;padding:2px 3px;
-  border-radius:var(--radius-pill,999px);background:oklch(0% 0 0 / .42);backdrop-filter:blur(4px)}
-.jr-art:has(img) .jr-viz i{width:2px}
-.jr-mini .jr-art:has(img) .jr-viz{display:none}
-.jr-now .jr-art:has(img) .jr-viz{left:7px;bottom:7px;height:12px}
-.jr-now .jr-art:has(img) .jr-viz i{width:2.5px}
+/* ── Temas claros: el disco sigue oscuro (es un vinilo); lo demás, lechoso ── */
+:root:is([data-theme="papel"],[data-theme="alba"]) .jr-amb img{opacity:.4}
+:root:is([data-theme="papel"],[data-theme="alba"]) .jr-seek-knob{background:oklch(100% 0 0)}
+:root:is([data-theme="papel"],[data-theme="alba"]) .jr-vol-fill{background:linear-gradient(90deg,var(--ob-accent-dim),var(--ob-accent))}
+
+/* ── Angosto (ventana chica): el disco se achica ── */
+@container jr-radio (max-width: 380px){
+  .jr-disc{width:88px;height:88px}
+  .jr-now{min-height:96px;gap:12px}
+}
 
 @media (prefers-reduced-motion: reduce){
-  .jr-viz.on i,.jr-livewrap .jr-eq.on i,.jr-wave.on i,.jr-now.playing .jr-art,.jr-tp-btn.pop svg,.jr-pane{animation:none}
-  .jr-viz.on i{transform:scaleY(.7)}
-  .jr-wave.on i{transform:scaleY(.5)}
-  /* Sin goma ni deslizamientos: los cambios son instantáneos (radio.js también
-     apaga el overflow elástico leyendo esta media query) */
-  .jr-seek-fill,.jr-seek-knob,.jr-vol-fill,.jr-vol-track,.jr-seek-bar::before,.jr-seg::before,.jr-seek-bub{transition:none}
+  .jr-card{animation:none}
+  .jr-now.playing .jr-disc-vinyl,.jr-wave.on i,.jr-eq.on i,.jr-thumb-eq i,
+  .jr-mini.playing .jr-rd-wv,.jr-mini.playing .jr-rd-core,.jr-more:hover .jr-dots i,.jr-more.cargando .jr-dots i,
+  .jr-row.jr-nueva,.jr-tp-btn.pop{animation:none}
+  .jr-arm,.jr-seek-fill,.jr-seek-knob,.jr-seg::before{transition:none}
 }

@@ -1,89 +1,458 @@
-// JARVIS — Memoria compartida del proyecto (UI).
-// Modal glass: lista + viewer (markdown mini con wikilinks clickeables) +
-// vista de GRAFO (force layout en SVG puro) + crear/editar/borrar.
+// JARVIS — Memoria compartida del proyecto (UI) · «Atlas» (rediseño 2026-09).
+//
+// La memoria como un ATLAS vivo del conocimiento del proyecto:
+//   · Lista  — riel con buscador, filtro por estado, pulso de salud y cards
+//              agrupadas por constelación (categoría); lector tipo documento
+//              con vecindario (enlaza a / citada por) y editor con preview.
+//   · Grafo  — constelaciones por categoría (force layout animado que se
+//              APAGA al asentarse), nebulosas de color, foco por hover,
+//              click abre, arrastrar mueve, rueda = zoom.
+//   · Live   — el enjambre en vivo (Pulso = carriles por agente / Mapa =
+//              agentes↔archivos) + línea de tiempo de Recall (qué memorias
+//              sugirió el sistema y cuáles leyeron los agentes) y Actividad.
+// La barra de constelaciones (filtro por categoría) la comparten Lista y Grafo.
+//
 // Los agentes escriben las memorias como archivos (.jarvis/memory/) según el
 // protocolo inyectado en CLAUDE.md; esta UI es la ventana del humano.
-// Expone window.JarvisMemory = { init, onProjectChanged, abrir }.
+// Expone window.JarvisMemory = { init, onProjectChanged, abrir, onLiveEvent }.
+// Lógica pura: memory-meta.js (JarvisMemoryMeta), memory-graph.js
+// (JarvisMemoryGraph), live-state.js (JarvisLiveState).
 
 (() => {
   let _projectId = null;
   let _memorias  = [];
   let _edges     = [];
+  let _salud     = null;          // lint del backend (/memory/salud)
+  let _uso       = { eventos: [], conteo: {} };   // stream de recall (/memory/uso)
+  let _cargando  = false;
+  let _error     = false;
+
+  let _tab       = 'lista';       // 'lista' | 'grafo' | 'live'
   let _slugAbierta = null;
-  let _tab       = 'lista';   // 'lista' | 'grafo' | 'live'
+  let _modo      = 'ver';         // lector: 'ver' | 'editar' | 'nueva'
+  let _leyendo   = false;         // ancho angosto: el lector tapa al riel
   let _query     = '';
-  let _liveEstado = null;          // estado de JarvisLiveState
-  let _liveVista  = 'pulso';       // 'pulso' | 'mapa'
-  let _liveTimer  = null;          // limpieza de flashes
-  let _mapaPos    = {};            // id de nodo → {x,y} del último layout (persistencia del grafo)
-  let _grafT      = { k: 1, x: 0, y: 0 };  // zoom + paneo de la vista Grafo
-  let _grafTimer  = null;          // tick de disparos neuronales del grafo
-  let _grafAC     = null;          // listeners de window del grafo (se abortan en cada re-render)
-  let _grafPaneo  = false;         // true justo después de soltar un paneo (anula el click del nodo)
-  let _core       = null;          // centro de masa del grafo (núcleo central)
-  let _salud      = null;          // lint del backend (/memory/salud)
+  let _cats      = [];            // filtro de constelaciones ([] = todas)
+  let _estado    = 'todas';       // filtro de estado
+  let _saludFiltro = null;        // { k, slugs } — chip de salud activo
+  let _visibles  = [];            // orden visible de la lista (navegación con flechas)
+
+  // Grafo
+  let _grafPos   = {};            // slug → {x,y} (layout persistente entre renders)
+  let _grafT     = null;          // {k,x,y} zoom + paneo
+  let _grafRaf   = 0;
+  let _grafTimer = null;          // disparos neuronales
+  let _grafAC    = null;          // listeners de window del grafo
+  let _grafRO    = null;
+  let _grafEtiq  = false;         // forzar todas las etiquetas
+
+  // Live
+  let _liveEstado = null;         // estado de JarvisLiveState
+  let _liveVista  = 'pulso';      // 'pulso' | 'mapa'
+  let _liveRail   = 'recall';     // 'recall' | 'actividad'
+  let _liveTimer  = null;         // limpieza de flashes
+  let _livePoll   = null;         // refresco del recall mientras Live está a la vista
+  let _mapaPos    = {};           // id de nodo → {x,y} del Mapa del enjambre
 
   const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
   const _t = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
+  const Meta = () => window.JarvisMemoryMeta;
+  const _reducido = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  const _ls = {
+    get(k, def) { try { const v = localStorage.getItem(k); return v === null ? def : v; } catch { return def; } },
+    set(k, v)   { try { localStorage.setItem(k, v); } catch { /* storage bloqueado */ } },
+  };
 
-  /* ── Datos ─────────────────────────────────────────────────── */
+  const LOCK = '<svg class="mem-lock" viewBox="0 0 24 24" width="10" height="10" aria-hidden="true"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/></svg>';
+  const LINK = '<svg viewBox="0 0 24 24" width="11" height="11" aria-hidden="true"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>';
+  const CHEV = '<svg viewBox="0 0 24 24" width="12" height="12" aria-hidden="true"><path d="M6 9l6 6 6-6"/></svg>';
+  const ORBE = `<svg viewBox="0 0 32 32" width="20" height="20" aria-hidden="true">
+      <path class="l" d="M7 22L14 9l11 5-6 11z"/><path class="l" d="M14 9l5 16"/>
+      <circle cx="7" cy="22" r="2.4"/><circle cx="14" cy="9" r="3"/><circle cx="25" cy="14" r="2.2"/><circle cx="19" cy="25" r="2.6"/></svg>`;
+
+  const NOMBRES_SALUD = {
+    rotos: 'links rotos', citas: 'citas muertas', huerfanas: 'huérfanas',
+    contrato: 'no cumplen contrato', choques: 'choques', cuarentena: 'en cuarentena',
+    guard: 'candidatas a guard', duplicados: 'duplicadas', global: 'candidatas a global',
+  };
+  const NOMBRE_MARCA = {
+    rotos: 'link roto', citas: 'cita muerta', huerfanas: 'huérfana', contrato: 'contrato incompleto',
+    choques: 'choque', cuarentena: 'en cuarentena', duplicados: 'duplicada',
+  };
+  const FILTRABLES = new Set(['rotos', 'citas', 'huerfanas', 'contrato', 'choques', 'cuarentena', 'duplicados']);
+
+  /* ══ Datos ═══════════════════════════════════════════════════════ */
   async function _cargar() {
+    const pid = _projectId;
+    _cargando = true; _error = false;
     try {
-      const r = await fetch(`/api/projects/${_projectId}/memory`);
-      if (!r.ok) return;
+      const r = await fetch(`/api/projects/${pid}/memory`);
+      if (!r.ok) throw new Error(String(r.status));
       const data = await r.json();
+      if (pid !== _projectId) return;
       _memorias = data.memorias || [];
       _edges    = data.edges || [];
-    } catch { /* red */ }
+    } catch { _error = true; }
     try {
-      const rs = await fetch(`/api/projects/${_projectId}/memory/salud`);
+      const rs = await fetch(`/api/projects/${pid}/memory/salud`);
       _salud = rs.ok ? await rs.json() : null;
     } catch { _salud = null; }
+    await _cargarUso();
+    _cargando = false;
   }
 
-  // Strip de salud del linter (solo si hay problemas): hace visible lo que
-  // antes era invisible — links rotos, citas muertas, huérfanas, contrato de
-  // admisión, choques lápida-vs-vigente, cuarentena y candidatas a guard.
+  async function _cargarUso() {
+    const pid = _projectId;
+    try {
+      const r = await fetch(`/api/projects/${pid}/memory/uso?n=90`);
+      if (r.ok && pid === _projectId) _uso = await r.json();
+    } catch { /* red: el stream queda como estaba */ }
+  }
+
+  const _mem = (slug) => _memorias.find(m => m.slug === slug);
+  const _hue = (m) => Meta().categoria(m?.categoria).hue;
+  const _catAttr = (catId) => {
+    const c = Meta().categoria(catId);
+    return `style="--h:${c.hue}"${c.neutra ? ' data-neutra' : ''}`;
+  };
+  const _filtradas = () => Meta().filtrar(_memorias, {
+    q: _query, cats: _cats, estado: _estado, slugs: _saludFiltro ? _saludFiltro.slugs : null,
+  });
+  const _lecturas = (slug) => ((_uso.conteo || {})[slug] || {}).leida || 0;
+
+  const _badgesHTML = (m) =>
+    (Meta() ? Meta().badges(m) : [])
+      .map(b => `<span class="mem-badge mem-badge-${b.k}">${b.k === 'leccion' ? icon('sparkle', 9) : ''}${b.label}</span>`).join('');
+
+  function _md(src) {
+    return Meta().markdown(src, { wikiIcon: icon('sparkle', 9) });
+  }
+
+  /* ══ Modal ═══════════════════════════════════════════════════════ */
+  function _onKey(e) {
+    if (!document.querySelector('.mem-overlay')) return;
+    if (document.querySelector('.ob-confirm-overlay')) return;   // el confirm maneja su Esc
+    const enCampo = /^(INPUT|TEXTAREA|SELECT)$/.test(e.target?.tagName || '') || e.target?.isContentEditable;
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      if (_tab === 'lista' && (_modo === 'editar' || _modo === 'nueva')) { _modo = 'ver'; _renderReader(); return; }
+      if (enCampo && e.target.value) { e.target.value = ''; e.target.dispatchEvent(new Event('input')); return; }
+      // Angosto: el lector tapa al riel → Esc vuelve a la lista antes de cerrar.
+      const rail = document.querySelector('.mem-lista-v .mem-rail');
+      if (_tab === 'lista' && _leyendo && rail && getComputedStyle(rail).display === 'none') {
+        _leyendo = false; _aplicarLeyendo(); return;
+      }
+      _cerrar();
+      return;
+    }
+    if (enCampo || e.ctrlKey || e.metaKey || e.altKey) return;
+    if (e.key === '/') {
+      const s = document.getElementById(_tab === 'grafo' ? 'mem-graf-buscar' : 'mem-search');
+      if (s) { e.preventDefault(); s.focus(); s.select(); }
+      return;
+    }
+    if (e.key === '1' || e.key === '2' || e.key === '3') { _setTab(['lista', 'grafo', 'live'][+e.key - 1]); return; }
+    if (_tab === 'lista' && _modo === 'ver') {
+      if (e.key === 'ArrowDown' || e.key === 'j') { e.preventDefault(); _mover(1); }
+      else if (e.key === 'ArrowUp' || e.key === 'k') { e.preventDefault(); _mover(-1); }
+      else if (e.key === 'e' && _slugAbierta) { e.preventDefault(); _modo = 'editar'; _renderReader(); }
+      else if (e.key === 'n') { e.preventDefault(); _crear(); }
+    }
+  }
+
+  function _mover(d) {
+    if (!_visibles.length) return;
+    const i = _visibles.indexOf(_slugAbierta);
+    const j = i < 0 ? 0 : Math.max(0, Math.min(_visibles.length - 1, i + d));
+    _abrirSlug(_visibles[j], { scroll: true });
+  }
+
+  function _pararGrafo() {
+    cancelAnimationFrame(_grafRaf); _grafRaf = 0;
+    clearInterval(_grafTimer); _grafTimer = null;
+    _grafAC?.abort(); _grafAC = null;
+    _grafRO?.disconnect(); _grafRO = null;
+  }
+  function _pararLive() {
+    clearTimeout(_liveTimer); _liveTimer = null;
+    clearInterval(_livePoll); _livePoll = null;
+  }
+
+  function _cerrar() {
+    _pararGrafo(); _pararLive();
+    document.removeEventListener('keydown', _onKey);
+    const ov = document.querySelector('.mem-overlay');
+    if (!ov) return;
+    if (_reducido()) { ov.remove(); return; }
+    ov.classList.add('saliendo');
+    setTimeout(() => ov.remove(), 160);
+  }
+
+  async function abrir() {
+    document.querySelector('.mem-overlay')?.remove();
+    _pararGrafo(); _pararLive();
+    document.removeEventListener('keydown', _onKey);
+    _tab = _ls.get('jarvis.mem.tab', 'lista');
+    if (!['lista', 'grafo', 'live'].includes(_tab)) _tab = 'lista';
+    _liveRail = _ls.get('jarvis.mem.rail', 'recall') === 'actividad' ? 'actividad' : 'recall';
+    _modo = 'ver'; _leyendo = false; _saludFiltro = null;
+
+    const ov = document.createElement('div');
+    ov.className = 'mem-overlay';
+    ov.innerHTML = `
+      <div class="mem-modal" role="dialog" aria-modal="true" aria-label="Memoria del proyecto">
+        <div class="mem-aura" aria-hidden="true"></div>
+        <header class="mem-top">
+          <div class="mem-marca">
+            <span class="mem-orbe">${ORBE}</span>
+            <div class="mem-marca-tx">
+              <h2 class="mem-titulo">Memoria</h2>
+              <span class="mem-count" id="mem-count">…</span>
+            </div>
+          </div>
+          <nav class="mem-tabs" role="tablist" aria-label="Vistas de la memoria">
+            <span class="mem-tabs-thumb" aria-hidden="true"></span>
+            <button class="mem-tab" data-tab="lista" role="tab" type="button" title="Lista (1)">${icon('list-checks', 13)}<span>Lista</span></button>
+            <button class="mem-tab" data-tab="grafo" role="tab" type="button" title="Grafo (2)">${icon('brain', 13)}<span>Grafo</span></button>
+            <button class="mem-tab" data-tab="live" role="tab" type="button" title="Live (3)"><span class="mem-live-dot" aria-hidden="true"></span><span>Live</span></button>
+          </nav>
+          <div class="mem-top-acc">
+            <button class="mem-nueva" id="mem-nueva" type="button" title="Nueva memoria (N)">${icon('plus', 12)}<span>Nueva</span></button>
+            <button class="mem-cerrar" id="mem-cerrar" type="button" aria-label="Cerrar" title="Cerrar (Esc)">${icon('x', 14)}</button>
+          </div>
+        </header>
+        <div class="mem-constel" id="mem-constel"></div>
+        <main class="mem-body" id="mem-body">
+          <div class="mem-cargando" role="status">${_skeleton()}</div>
+        </main>
+      </div>`;
+    document.body.appendChild(ov);
+
+    ov.addEventListener('pointerdown', (e) => { ov._downFuera = e.target === ov; });
+    ov.addEventListener('click', (e) => { if (e.target === ov && ov._downFuera) _cerrar(); });
+    ov.querySelector('#mem-cerrar').addEventListener('click', _cerrar);
+    ov.querySelector('#mem-nueva').addEventListener('click', _crear);
+    ov.querySelectorAll('.mem-tab').forEach(t => t.addEventListener('click', () => _setTab(t.dataset.tab)));
+    document.addEventListener('keydown', _onKey);
+    _marcarTabs();
+
+    await _cargar();
+    if (!document.body.contains(ov)) return;
+    if (!_slugAbierta || !_mem(_slugAbierta)) _slugAbierta = _ordenLista(_filtradas())[0]?.slug || null;
+    _renderTodo();
+  }
+
+  function _skeleton() {
+    return `<div class="mem-skel">${Array.from({ length: 6 }, (_, i) =>
+      `<span style="--i:${i}"></span>`).join('')}</div>`;
+  }
+
+  function _marcarTabs() {
+    const i = ['lista', 'grafo', 'live'].indexOf(_tab);
+    const nav = document.querySelector('.mem-tabs');
+    if (!nav) return;
+    nav.style.setProperty('--i', i);
+    nav.querySelectorAll('.mem-tab').forEach(t => {
+      const on = t.dataset.tab === _tab;
+      t.classList.toggle('activo', on);
+      t.setAttribute('aria-selected', on ? 'true' : 'false');
+    });
+    document.querySelector('.mem-modal')?.setAttribute('data-vista', _tab);
+  }
+
+  function _setTab(t) {
+    if (!t || t === _tab && document.getElementById('mem-body')?.dataset.vista === t) return;
+    _tab = t;
+    _ls.set('jarvis.mem.tab', t);
+    _pararGrafo(); _pararLive();
+    _marcarTabs();
+    _renderTodo();
+  }
+
+  function _renderTodo() {
+    _renderCount();
+    _renderConstel();
+    _renderBody();
+  }
+
+  function _renderCount() {
+    const c = document.getElementById('mem-count');
+    if (!c) return;
+    const nCats = Meta().contarCategorias(_memorias).length;
+    c.textContent = _t('{n} memorias · {e} enlaces · {c} constelaciones')
+      .replace('{n}', _memorias.length).replace('{e}', _edges.length).replace('{c}', nCats);
+  }
+
+  /* ── Barra de constelaciones (filtro por categoría, Lista + Grafo) ── */
+  function _renderConstel() {
+    const bar = document.getElementById('mem-constel');
+    if (!bar) return;
+    if (_tab === 'live' || !_memorias.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    const M = Meta();
+    const probCat = {};
+    for (const f of M.categoriasSalud(_salud)) probCat[f.id] = f.problemas;
+    bar.innerHTML = `
+      <div class="mem-constel-scroll" role="toolbar" aria-label="Constelaciones">
+        <button type="button" class="mem-cat mem-cat-todo${_cats.length ? '' : ' activo'}" data-cat="">
+          <span>Todo</span><b>${_memorias.length}</b>
+        </button>
+        ${M.contarCategorias(_memorias).map(c => `
+          <button type="button" class="mem-cat mc${_cats.includes(c.id) ? ' activo' : ''}" data-cat="${esc(c.id)}"
+                  style="--h:${c.hue}"${c.neutra ? ' data-neutra' : ''} aria-pressed="${_cats.includes(c.id)}">
+            <i class="mem-cat-dot" aria-hidden="true"></i><span>${esc(c.nombre)}</span><b>${c.n}</b>
+            ${probCat[c.id] ? `<em class="mem-cat-warn" title="${esc(_t('{n} problemas de salud').replace('{n}', probCat[c.id]))}">${probCat[c.id]}</em>` : ''}
+          </button>`).join('')}
+      </div>`;
+    bar.querySelectorAll('.mem-cat').forEach(b => b.addEventListener('click', (ev) => {
+      const id = b.dataset.cat;
+      if (!id) _cats = [];
+      else if (ev.shiftKey || ev.ctrlKey || ev.metaKey) {
+        _cats = _cats.includes(id) ? _cats.filter(x => x !== id) : [..._cats, id];
+      } else {
+        _cats = (_cats.length === 1 && _cats[0] === id) ? [] : [id];
+      }
+      _renderConstel();
+      if (_tab === 'grafo') _grafAplicarFiltro();
+      else { _renderItems(); }
+    }));
+  }
+
+  function _renderBody() {
+    const body = document.getElementById('mem-body');
+    if (!body) return;
+    body.dataset.vista = _tab;
+    if (_error && !_memorias.length && _tab !== 'live') {
+      body.innerHTML = `<div class="mem-estado-vacio mem-error">
+          <span class="mem-vacio-icono">${icon('alert', 22)}</span>
+          <b>No pude leer la memoria del proyecto.</b>
+          <span>Revisá que el servidor esté vivo y probá de nuevo.</span>
+          <button type="button" class="mem-btn" id="mem-reintentar">${icon('refresh', 12)} Reintentar</button>
+        </div>`;
+      body.querySelector('#mem-reintentar').addEventListener('click', async () => {
+        body.innerHTML = `<div class="mem-cargando">${_skeleton()}</div>`;
+        await _cargar(); _renderTodo();
+      });
+      return;
+    }
+    if (_tab === 'grafo') { _renderGrafo(body); return; }
+    if (_tab === 'live')  { _renderLive(body);  return; }
+    _renderLista(body);
+  }
+
+  /* ══ LISTA ═══════════════════════════════════════════════════════ */
+  function _renderLista(body) {
+    const est = Meta().contarEstados(_memorias);
+    const ESTADOS = [['todas', 'Todas'], ['vigente', 'Vigentes'], ['leccion', 'Lecciones'],
+      ['obsoleta', 'Obsoletas'], ['lapida', 'Lápidas'], ['archivo', 'Archivo']]
+      .filter(([k]) => k === 'todas' || est[k]);
+    if (!ESTADOS.some(([k]) => k === _estado)) _estado = 'todas';
+
+    body.innerHTML = `
+      <div class="mem-lista-v${_leyendo ? ' leyendo' : ''}" id="mem-lista-v">
+        <aside class="mem-rail">
+          <div class="mem-rail-top">
+            <label class="mem-search">
+              ${icon('search', 13)}
+              <input type="text" id="mem-search" placeholder="Buscar en la memoria…" value="${esc(_query)}"
+                     autocomplete="off" spellcheck="false" aria-label="Buscar en la memoria">
+              <kbd>/</kbd>
+            </label>
+            ${ESTADOS.length > 1 ? `<div class="mem-estados" role="group" aria-label="Filtrar por estado">
+              ${ESTADOS.map(([k, l]) => `<button type="button" class="mem-est${_estado === k ? ' activo' : ''}" data-est="${k}" data-k="${k}">
+                <span>${l}</span><b>${est[k]}</b></button>`).join('')}
+            </div>` : ''}
+          </div>
+          <div class="mem-rail-scroll" id="mem-rail-scroll">
+            ${_saludHTML()}
+            <div class="mem-items" id="mem-items" role="listbox" aria-label="Memorias"></div>
+          </div>
+        </aside>
+        <section class="mem-reader" id="mem-reader" aria-live="polite"></section>
+      </div>`;
+
+    const inp = body.querySelector('#mem-search');
+    inp.addEventListener('input', () => { _query = inp.value; _renderItems(); });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown') { e.preventDefault(); inp.blur(); _mover(_slugAbierta ? 0 : 1); }
+      if (e.key === 'Enter' && _visibles[0]) { _abrirSlug(_visibles[0]); }
+    });
+    body.querySelectorAll('.mem-est').forEach(b => b.addEventListener('click', () => {
+      _estado = b.dataset.est;
+      body.querySelectorAll('.mem-est').forEach(x => x.classList.toggle('activo', x === b));
+      _renderItems();
+    }));
+    _bindSalud(body);
+    _renderItems();
+    _renderReader();
+  }
+
+  // Pulso de salud del atlas: anillo con % de memorias sanas + chips que
+  // FILTRAN la lista (huérfanas, links rotos…) + loop de lecciones,
+  // altímetro del recall y candidatas a memoria global (Promover).
   function _saludHTML() {
-    const meta = window.JarvisMemoryMeta;
-    const probs = meta ? meta.problemasSalud(_salud) : [];
-    const lecc = meta ? meta.estadoLecciones(_salud) : null;
+    const M = Meta();
+    if (!M || !_memorias.length) return '';
+    const probs = M.problemasSalud(_salud);
+    const lecc = M.estadoLecciones(_salud);
+    const alti = M.altimetro(_salud);
     const globales = (_salud && _salud.candidatas_global) || [];
-    if (!probs.length && !lecc && !globales.length) return '';
-    const NOMBRES = {
-      rotos: 'links rotos', citas: 'citas muertas', huerfanas: 'huérfanas',
-      contrato: 'no cumplen contrato', choques: 'choques', cuarentena: 'en cuarentena',
-      guard: 'candidatas a guard', duplicados: 'duplicadas', global: 'candidatas a global',
-    };
-    let html = '';
-    if (probs.length) {
-      html += `<div class="mem-salud" title="Salud de .jarvis/memory/ — links rotos, citas a archivos borrados, huérfanas, contrato de admisión, choques lápida-vs-vigente, cuarentena por no-uso, duplicadas (misma memoria escrita dos veces), lecciones violadas N veces (candidatas a guard) y lecciones que merecen ser globales">
-        ${icon('alert', 11)} ${probs.map(p => `${p.n}&nbsp;<span>${NOMBRES[p.k] || p.k}</span>`).join(' · ')}
-      </div>`;
-    }
-    if (lecc) {
-      html += `<div class="mem-salud mem-salud-lecciones${lecc.alerta ? ' mem-salud-alerta' : ''}"
-        title="Loop de lecciones: cuántas reglas están siempre-cargadas en CLAUDE.md/AGENTS.md y el estado del destilador de fallos">
-        ${icon('sparkle', 11)} <span>${esc(lecc.texto)}</span>
-      </div>`;
-    }
-    const alti = meta ? meta.altimetro(_salud) : null;
-    if (alti) {
-      html += `<div class="mem-salud mem-salud-altimetro"
-        title="¿El recall rinde? De las memorias que el sistema inyectó a los prompts (7 días), cuántas leyeron de verdad los agentes según su cierre, y cuántas lecturas fueron en pasos que terminaron bien">
-        ${icon('chart', 11)} <span>${esc(alti.texto)}</span>
-      </div>`;
-    }
-    if (globales.length) {
-      // Candidatas a memoria GLOBAL: un click y los proyectos futuros la heredan.
-      html += `<div class="mem-salud mem-salud-global" title="Lecciones de este proyecto que valen para TODOS (entorno compartido o fallo repetido en otro proyecto) — promover las siembra en cada proyecto nuevo">
-        ${icon('globe', 11)} ${globales.slice(0, 4).map(c =>
-          `<span class="mem-global-chip">${esc(c.slug)}
-            <button class="mem-promover" data-slug="${esc(c.slug)}" type="button">Promover</button>
-          </span>`).join(' ')}
-      </div>`;
-    }
-    return html;
+    const punt = M.puntajeSalud(_salud, _memorias.length);
+    if (!_salud || !punt) return '';
+    const plegada = _ls.get('jarvis.mem.salud', 'abierta') === 'plegada';
+    const C = 2 * Math.PI * 15;
+    const nivel = punt.pct >= 90 ? 'ok' : punt.pct >= 60 ? 'medio' : 'bajo';
+    return `
+      <section class="mem-salud-card nivel-${nivel}${plegada ? ' plegada' : ''}${lecc?.alerta ? ' alerta' : ''}" id="mem-salud-card">
+        <button type="button" class="mem-salud-head" aria-expanded="${!plegada}">
+          <svg class="mem-anillo" viewBox="0 0 36 36" width="34" height="34" aria-hidden="true">
+            <circle class="pista" cx="18" cy="18" r="15"/>
+            <circle class="valor" cx="18" cy="18" r="15" style="stroke-dasharray:${(C * punt.pct / 100).toFixed(1)} ${C.toFixed(1)}"/>
+          </svg>
+          <span class="mem-salud-pct">${punt.pct}<small>%</small></span>
+          <span class="mem-salud-tx">
+            <b>Salud del atlas</b>
+            <span>${_t('{s} de {n} sin problemas').replace('{s}', punt.sanas).replace('{n}', _memorias.length)}</span>
+          </span>
+          <span class="mem-salud-chev">${CHEV}</span>
+        </button>
+        <div class="mem-salud-body">
+          ${probs.length ? `<div class="mem-salud-probs" title="Salud de .jarvis/memory/ — links rotos, citas a archivos borrados, huérfanas, contrato de admisión, choques lápida-vs-vigente, cuarentena por no-uso, duplicadas (misma memoria escrita dos veces), lecciones violadas N veces (candidatas a guard) y lecciones que merecen ser globales">
+            ${probs.map(p => FILTRABLES.has(p.k)
+              ? `<button type="button" class="mem-prob${_saludFiltro?.k === p.k ? ' activo' : ''}" data-k="${p.k}"><b>${p.n}</b><span>${NOMBRES_SALUD[p.k] || p.k}</span></button>`
+              : `<span class="mem-prob estatico"><b>${p.n}</b><span>${NOMBRES_SALUD[p.k] || p.k}</span></span>`).join('')}
+          </div>` : `<div class="mem-salud-linea ok">${icon('check', 11)}<span>Sin links rotos, huérfanas ni choques.</span></div>`}
+          ${lecc ? `<div class="mem-salud-linea${lecc.alerta ? ' alerta' : ''}" title="Loop de lecciones: cuántas reglas están siempre-cargadas en CLAUDE.md/AGENTS.md y el estado del destilador de fallos">
+            ${icon('sparkle', 11)}<span>${esc(lecc.texto)}</span></div>` : ''}
+          ${alti ? `<div class="mem-salud-linea" title="¿El recall rinde? De las memorias que el sistema inyectó a los prompts (7 días), cuántas leyeron de verdad los agentes según su cierre, y cuántas lecturas fueron en pasos que terminaron bien">
+            ${icon('chart', 11)}<span>${esc(alti.texto)}</span></div>` : ''}
+          ${globales.length ? `<div class="mem-salud-global" title="Lecciones de este proyecto que valen para TODOS (entorno compartido o fallo repetido en otro proyecto) — promover las siembra en cada proyecto nuevo">
+            <span class="mem-salud-sub">${icon('globe', 11)} Candidatas a memoria global</span>
+            ${globales.slice(0, 4).map(c => `
+              <span class="mem-global-chip"><span data-i18n-skip>${esc(c.slug)}</span>
+                <button class="mem-promover" data-slug="${esc(c.slug)}" type="button">Promover</button>
+              </span>`).join('')}
+          </div>` : ''}
+        </div>
+      </section>`;
+  }
+
+  function _bindSalud(root) {
+    const card = root.querySelector('#mem-salud-card');
+    if (!card) return;
+    card.querySelector('.mem-salud-head').addEventListener('click', () => {
+      const pleg = card.classList.toggle('plegada');
+      card.querySelector('.mem-salud-head').setAttribute('aria-expanded', String(!pleg));
+      _ls.set('jarvis.mem.salud', pleg ? 'plegada' : 'abierta');
+    });
+    card.querySelectorAll('.mem-prob[data-k]').forEach(b => b.addEventListener('click', () => {
+      const k = b.dataset.k;
+      _saludFiltro = _saludFiltro?.k === k ? null : { k, slugs: Meta().slugsDe(_salud, k) };
+      card.querySelectorAll('.mem-prob[data-k]').forEach(x => x.classList.toggle('activo', x.dataset.k === _saludFiltro?.k));
+      _renderItems();
+    }));
+    card.querySelectorAll('.mem-promover').forEach(btn =>
+      btn.addEventListener('click', () => _promover(btn.dataset.slug, btn)));
   }
 
   async function _promover(slug, btn) {
@@ -94,486 +463,744 @@
       if (!r.ok) throw new Error(await r.text());
       window.toast?.(_t('Globo · {slug} promovida a memoria global').replace('{slug}', slug), 'ok');
       await _cargar();
-      _renderBody();
+      _renderTodo();
     } catch (e) {
       window.toast?.(_t('No pude promover {slug}').replace('{slug}', slug), 'error');
-      if (btn) { btn.disabled = false; btn.textContent = 'Promover'; }
+      if (btn) { btn.disabled = false; btn.textContent = _t('Promover'); }
     }
   }
 
-  const _badgesHTML = (m) =>
-    (window.JarvisMemoryMeta ? JarvisMemoryMeta.badges(m) : [])
-      .map(b => `<span class="mem-badge mem-badge-${b.k}">${b.label}</span>`).join('');
-
-  /* ── Markdown mini (escapado primero; wikilinks como chips) ── */
-  function _render_md(src) {
-    src = String(src ?? '');                               // memoria vacía/null no debe romper el viewer
-    let h = esc(src.replace(/^---[\s\S]*?---\s*/, '')); // sin frontmatter
-    h = h.replace(/`([^`\n]+)`/g, '<code>$1</code>');
-    h = h.replace(/^### (.+)$/gm, '<h3>$1</h3>');
-    h = h.replace(/^## (.+)$/gm, '<h2>$1</h2>');
-    h = h.replace(/^# (.+)$/gm, '<h1>$1</h1>');
-    h = h.replace(/\*\*([^*\n]+)\*\*/g, '<b>$1</b>');
-    h = h.replace(/^- (.+)$/gm, '<li>$1</li>');
-    h = h.replace(/\[\[([^\]\n]+)\]\]/g, (_, t) =>
-      `<button class="mem-wikilink" data-link="${esc(t)}">${icon('sparkle', 9)} ${esc(t)}</button>`);
-    return h.split(/\n{2,}/).map(p =>
-      p.startsWith('<h') || p.startsWith('<li') ? p : `<p>${p.replace(/\n/g, '<br>')}</p>`).join('');
-  }
-
-  /* ── Modal ─────────────────────────────────────────────────── */
-  // Handler de Esc nombrado a nivel de módulo: se quita SIEMPRE en _cerrar()
-  // (antes solo se autoremovía al apretar Escape → leak al cerrar con ✕/overlay).
-  function _onKey(e) { if (e.key === 'Escape') _cerrar(); }
-  function _cerrar() {
-    clearTimeout(_liveTimer);
-    clearInterval(_grafTimer); _grafTimer = null;
-    document.removeEventListener('keydown', _onKey);
-    document.querySelector('.mem-overlay')?.remove();
-  }
-
-  async function abrir() {
-    _cerrar();
-    await _cargar();
-
-    const ov = document.createElement('div');
-    ov.className = 'mem-overlay';
-    ov.innerHTML = `
-      <div class="mem-modal" role="dialog" aria-modal="true" aria-label="Memoria del proyecto">
-        <div class="mem-top">
-          <span class="mem-titulo">Memoria.</span>
-          <span class="mem-count" id="mem-count"></span>
-          <div class="mem-tabs" role="tablist">
-            <button class="mem-tab activo" data-tab="lista" role="tab">Lista</button>
-            <button class="mem-tab" data-tab="grafo" role="tab">Grafo</button>
-            <button class="mem-tab" data-tab="live" role="tab"><span class="mem-live-dot"></span>Live</button>
-          </div>
-          <button class="mem-nueva" id="mem-nueva" type="button">${icon('plus', 11)} Nueva</button>
-          <button class="mem-cerrar" id="mem-cerrar" type="button" aria-label="Cerrar">${icon('x', 13)}</button>
-        </div>
-        <div class="mem-body" id="mem-body"></div>
-      </div>`;
-    document.body.appendChild(ov);
-
-    ov.addEventListener('click', (e) => { if (e.target === ov) _cerrar(); });
-    ov.querySelector('#mem-cerrar').addEventListener('click', _cerrar);
-    ov.querySelector('#mem-nueva').addEventListener('click', _crear);
-    ov.querySelectorAll('.mem-tab').forEach(t =>
-      t.addEventListener('click', () => {
-        _tab = t.dataset.tab;
-        ov.querySelectorAll('.mem-tab').forEach(x => x.classList.toggle('activo', x === t));
-        _renderBody();
-      }));
-    document.addEventListener('keydown', _onKey);
-
-    _slugAbierta = _memorias[0]?.slug || null;
-    _renderBody();
-  }
-
-  function _renderBody() {
-    const body = document.getElementById('mem-body');
-    if (!body) return;
-    document.getElementById('mem-count').textContent =
-      _t('{n} memoria(s) · .jarvis/memory/').replace('{n}', _memorias.length);
-    if (_tab === 'grafo') { _renderGrafo(body); return; }
-    if (_tab === 'live')  { _renderLive(body);  return; }
-
-    body.innerHTML = `
-      <div class="mem-lista">
-        <div class="mem-search">
-          ${icon('search', 12)}
-          <input type="text" id="mem-search" placeholder="Buscar…" value="${esc(_query)}"
-                 autocomplete="off" spellcheck="false">
-        </div>
-        ${_saludHTML()}
-        <div class="mem-items" id="mem-items"></div>
-      </div>
-      <div class="mem-viewer" id="mem-viewer"></div>`;
-
-    document.getElementById('mem-search').addEventListener('input', (e) => {
-      _query = e.target.value; _renderItems();
-    });
-    body.querySelectorAll('.mem-promover').forEach(btn =>
-      btn.addEventListener('click', () => _promover(btn.dataset.slug, btn)));
-    _renderItems();
-    _renderViewer();
+  // Orden de la lista: por constelación (orden canónico), dentro de cada una
+  // lo más fresco arriba.
+  function _ordenLista(mems) {
+    const orden = Meta().contarCategorias(_memorias).map(c => c.id);
+    const fecha = (m) => m.actualizado || m.creado || '';
+    return [...mems].sort((a, b) =>
+      orden.indexOf(a.categoria || 'sin-clasificar') - orden.indexOf(b.categoria || 'sin-clasificar')
+      || fecha(b).localeCompare(fecha(a)) || a.titulo.localeCompare(b.titulo));
   }
 
   function _renderItems() {
     const cont = document.getElementById('mem-items');
     if (!cont) return;
-    const q = _query.toLowerCase();
-    const filtradas = _memorias.filter(m =>
-      !q || m.titulo.toLowerCase().includes(q) || m.resumen.toLowerCase().includes(q)
-        || (m.tags || []).some(t => t.toLowerCase().includes(q)));
-    if (!filtradas.length) {
-      cont.innerHTML = `<div class="mem-vacio">${_memorias.length
-        ? 'Sin coincidencias.'
-        : 'Todavía no hay memorias.<br><br>Las escriben tus agentes al descubrir cosas del proyecto (el protocolo ya está en el CLAUDE.md) — o creá la primera vos.'}</div>`;
+    const M = Meta();
+    const marcas = M.marcasSalud(_salud);
+    const filtradas = _ordenLista(_filtradas());
+    _visibles = filtradas.map(m => m.slug);
+
+    const filtroPill = _saludFiltro
+      ? `<div class="mem-filtro-pill"><span>${_t('Mostrando: {k}').replace('{k}', _t(NOMBRES_SALUD[_saludFiltro.k] || _saludFiltro.k))}</span>
+           <button type="button" id="mem-quitar-filtro" aria-label="Quitar filtro">${icon('x', 10)}</button></div>`
+      : '';
+
+    if (!_memorias.length) {
+      cont.innerHTML = `<div class="mem-vacio">
+          <b>Todavía no hay memorias.</b>
+          <span>Las escriben tus agentes al descubrir cosas del proyecto (el protocolo ya está en el CLAUDE.md) — o creá la primera vos.</span>
+        </div>`;
       return;
     }
-    cont.innerHTML = filtradas.map((m, i) => `
-      <button class="mem-item ${m.slug === _slugAbierta ? 'activo' : ''} ${(m.estado && m.estado !== 'vigente') ? 'mem-item-apagada' : ''}" data-slug="${esc(m.slug)}" style="--i:${Math.min(i, 12)}">
-        <span class="mem-item-titulo">${esc(m.titulo)}${_badgesHTML(m)}</span>
-        <span class="mem-item-sub">${esc(window.JarvisMemoryMeta ? JarvisMemoryMeta.subLinea(m) : (m.autor || '—'))}</span>
-      </button>`).join('');
-    cont.querySelectorAll('.mem-item').forEach(it =>
-      it.addEventListener('click', () => {
-        _slugAbierta = it.dataset.slug;
-        _renderItems(); _renderViewer();
-      }));
+    if (!filtradas.length) {
+      cont.innerHTML = `${filtroPill}<div class="mem-vacio">
+          <b>Sin coincidencias.</b>
+          <button type="button" class="mem-btn" id="mem-limpiar">${icon('x', 11)} Limpiar filtros</button>
+        </div>`;
+      cont.querySelector('#mem-limpiar').addEventListener('click', _limpiarFiltros);
+      cont.querySelector('#mem-quitar-filtro')?.addEventListener('click', _quitarFiltroSalud);
+      return;
+    }
+
+    let html = filtroPill, catActual = null, i = 0;
+    const porCat = {};
+    for (const m of filtradas) porCat[m.categoria || 'sin-clasificar'] = (porCat[m.categoria || 'sin-clasificar'] || 0) + 1;
+    for (const m of filtradas) {
+      const cid = m.categoria || 'sin-clasificar';
+      if (cid !== catActual) {
+        if (catActual !== null) html += '</div>';
+        const c = M.categoria(cid);
+        html += `<div class="mem-grupo mc" ${_catAttr(cid)}>
+          <div class="mem-grupo-head"><i aria-hidden="true"></i><span>${esc(c.nombre)}</span><b>${porCat[cid]}</b></div>`;
+        catActual = cid;
+      }
+      const est = M.estadoDe(m);
+      const mk = marcas[m.slug] || [];
+      const nLinks = (m.links || []).length;
+      html += `
+        <button type="button" class="mem-card mc${m.slug === _slugAbierta ? ' activo' : ''}${est !== 'vigente' ? ' apagada est-' + est : ''}"
+                data-slug="${esc(m.slug)}" role="option" aria-selected="${m.slug === _slugAbierta}" ${_catAttr(cid)} data-i="${i}">
+          <span class="mem-card-t" data-i18n-skip>${esc(m.titulo)}</span>
+          ${m.resumen ? `<span class="mem-card-r" data-i18n-skip>${esc(M.textoPlano(m.resumen))}</span>` : ''}
+          <span class="mem-card-pie">
+            ${_badgesHTML(m)}
+            ${nLinks ? `<span class="mem-pie-links" title="${esc(_t('{n} enlaces').replace('{n}', nLinks))}">${LINK}${nLinks}</span>` : ''}
+            ${mk.length ? `<span class="mem-pie-warn" title="${esc(mk.map(k => _t(NOMBRE_MARCA[k] || k)).join(' · '))}">${icon('alert', 10)}</span>` : ''}
+            <span class="mem-pie-fecha">${esc(M.fechaRelativa(m.actualizado || m.creado))}</span>
+          </span>
+        </button>`;
+      i++;
+    }
+    if (catActual !== null) html += '</div>';
+    cont.innerHTML = html;
+    if (!_reducido()) {
+      cont.querySelectorAll('.mem-card').forEach(c => {
+        const n = +c.dataset.i;
+        if (n < 16) c.style.setProperty('--d', (n * 18) + 'ms'); else c.classList.add('sin-anim');
+      });
+    }
+    cont.querySelector('#mem-quitar-filtro')?.addEventListener('click', _quitarFiltroSalud);
+    cont.querySelectorAll('.mem-card').forEach(it =>
+      it.addEventListener('click', () => _abrirSlug(it.dataset.slug)));
   }
 
-  async function _renderViewer() {
-    const v = document.getElementById('mem-viewer');
-    if (!v) return;
-    if (!_slugAbierta) {
-      v.innerHTML = '<div class="mem-vacio">Elegí una memoria de la lista.</div>';
+  function _quitarFiltroSalud() {
+    _saludFiltro = null;
+    document.querySelectorAll('.mem-prob[data-k]').forEach(x => x.classList.remove('activo'));
+    _renderItems();
+  }
+  function _limpiarFiltros() {
+    _query = ''; _cats = []; _estado = 'todas'; _saludFiltro = null;
+    _renderConstel();
+    const body = document.getElementById('mem-body');
+    if (body) _renderLista(body);
+  }
+
+  function _abrirSlug(slug, opts) {
+    if (!slug) return;
+    if (_tab !== 'lista') {
+      _slugAbierta = slug; _modo = 'ver'; _leyendo = true;
+      _setTab('lista');
       return;
     }
+    _slugAbierta = slug; _modo = 'ver'; _leyendo = true;
+    document.querySelectorAll('.mem-card').forEach(c => {
+      const on = c.dataset.slug === slug;
+      c.classList.toggle('activo', on);
+      c.setAttribute('aria-selected', String(on));
+      if (on && opts?.scroll) c.scrollIntoView({ block: 'nearest' });
+    });
+    _aplicarLeyendo();
+    _renderReader();
+  }
+
+  function _aplicarLeyendo() {
+    document.getElementById('mem-lista-v')?.classList.toggle('leyendo', _leyendo);
+  }
+
+  /* ── Lector ── */
+  async function _renderReader() {
+    const v = document.getElementById('mem-reader');
+    if (!v) return;
+    if (_modo === 'nueva') { _renderComposer(v); return; }
+    if (!_slugAbierta || !_mem(_slugAbierta)) { _renderBienvenida(v); return; }
     // slug/proyecto CONGELADOS: si mientras viajaba la respuesta se eligió otra
     // memoria, esta respuesta ya no vale — y Borrar/Guardar deben actuar sobre
-    // la memoria MOSTRADA, no sobre la global _slugAbierta (borraba la otra).
-    const slug = _slugAbierta, pid = _projectId;
+    // la memoria MOSTRADA, no sobre la global _slugAbierta.
+    const slug = _slugAbierta, pid = _projectId, modo = _modo;
+    if (!v.querySelector('.mem-doc') || v.dataset.slug !== slug) {
+      v.innerHTML = `<div class="mem-doc-cargando">${_skeleton()}</div>`;
+    }
     let mem;
     try {
-      const r = await fetch(`/api/projects/${pid}/memory/${slug}`);
-      if (slug !== _slugAbierta || pid !== _projectId) return;
-      if (!r.ok) { v.innerHTML = '<div class="mem-vacio">No se pudo cargar.</div>'; return; }
+      const r = await fetch(`/api/projects/${pid}/memory/${encodeURIComponent(slug)}`);
+      if (slug !== _slugAbierta || pid !== _projectId || modo !== _modo) return;
+      if (!r.ok) {
+        v.innerHTML = `<div class="mem-estado-vacio"><span class="mem-vacio-icono">${icon('alert', 20)}</span><b>No se pudo cargar.</b></div>`;
+        return;
+      }
       mem = await r.json();
     } catch { return; }
-    if (slug !== _slugAbierta || pid !== _projectId) return;
+    if (slug !== _slugAbierta || pid !== _projectId || modo !== _modo) return;
+    v.dataset.slug = slug;
+    if (_modo === 'editar') _renderEditor(v, mem, slug, pid);
+    else _renderDoc(v, mem, slug, pid);
+  }
 
+  function _renderBienvenida(v) {
+    const vacio = !_memorias.length;
+    v.dataset.slug = '';
     v.innerHTML = `
-      <div class="mem-view-head">
-        <span class="mem-view-titulo">${esc(mem.titulo)}${_badgesHTML(mem)}</span>
-        <span class="mem-view-meta">${esc(mem.autor || '')} · ${esc(mem.creado || '')}${mem.actualizado ? ` · ${_t('act. {f}').replace('{f}', esc(mem.actualizado))}` : ''}</span>
-        <span class="mem-view-acciones">
-          <button id="mem-editar" type="button">${icon('edit', 11)} Editar</button>
-          <button id="mem-borrar" type="button" class="peligro">${icon('trash', 11)} Borrar</button>
-        </span>
+      <div class="mem-bienvenida">
+        <svg class="mem-bienv-arte" viewBox="0 0 220 140" aria-hidden="true">
+          <g class="lineas"><path d="M30 100L78 52 128 74 176 34M78 52l22 64 28-42M128 74l52 40"/></g>
+          <circle class="mc" style="--h:220" cx="30" cy="100" r="6"/><circle class="mc" style="--h:290" cx="78" cy="52" r="9"/>
+          <circle class="mc" style="--h:155" cx="128" cy="74" r="7"/><circle class="mc" style="--h:55" cx="176" cy="34" r="5"/>
+          <circle class="mc" style="--h:330" cx="100" cy="116" r="5"/><circle class="mc" style="--h:88" cx="180" cy="114" r="6"/>
+        </svg>
+        <h3>${vacio ? 'Tu atlas está vacío' : 'Elegí una memoria'}</h3>
+        <p>${vacio
+          ? 'Las memorias son hechos del proyecto que tus agentes leen antes de trabajar. Las escriben ellos al descubrir algo — o creá la primera vos.'
+          : 'Cada memoria es un hecho del proyecto que los agentes leen antes de trabajar. Navegá con ↑ ↓, buscá con /, editá con E.'}</p>
+        ${vacio ? `<button type="button" class="mem-btn primario" id="mem-bienv-nueva">${icon('plus', 12)} Crear la primera</button>` : ''}
+      </div>`;
+    v.querySelector('#mem-bienv-nueva')?.addEventListener('click', _crear);
+  }
+
+  function _renderDoc(v, mem, slug, pid) {
+    const M = Meta();
+    const c = M.categoria(mem.categoria);
+    const marcas = M.marcasSalud(_salud)[slug] || [];
+    const vec = M.conexiones(slug, _edges, _memorias);
+    const leidas = _lecturas(slug);
+    const autor = mem.autor || '—';
+    const vecino = (s) => {
+      const m = _mem(s);
+      if (!m) return '';
+      const cc = M.categoria(m.categoria);
+      return `<button type="button" class="mem-vecino mc" data-slug="${esc(s)}" ${_catAttr(m.categoria)}>
+          <i aria-hidden="true"></i><span class="t" data-i18n-skip>${esc(m.titulo)}</span><span class="c">${esc(cc.nombre)}</span></button>`;
+    };
+    v.innerHTML = `
+      <div class="mem-doc-bar">
+        <button type="button" class="mem-volver" id="mem-volver">${icon('undo', 12)}<span>Lista</span></button>
+        <span class="mem-doc-ruta" data-i18n-skip title=".jarvis/memory/${esc(slug)}.md">.jarvis/memory/<b>${esc(slug)}</b>.md</span>
+        <div class="mem-doc-acc">
+          <button type="button" class="mem-btn" id="mem-copiar" title="Copiar [[${esc(slug)}]]">${icon('copy', 12)}<span>Copiar enlace</span></button>
+          <button type="button" class="mem-btn" id="mem-editar" title="Editar (E)">${icon('edit', 12)}<span>Editar</span></button>
+          <button type="button" class="mem-btn peligro" id="mem-borrar">${icon('trash', 12)}<span>Borrar</span></button>
+        </div>
       </div>
-      <div class="mem-contenido" id="mem-contenido">
-        ${(mem.tags || []).map(t => `<span class="mem-tag">${esc(t)}</span>`).join('')}
-        ${_render_md(mem.contenido)}
+      <div class="mem-doc-scroll">
+        <article class="mem-doc mc est-${esc(M.estadoDe(mem))}" ${_catAttr(mem.categoria)}>
+          <div class="mem-doc-eyebrow">
+            <span class="mem-catpill"><i aria-hidden="true"></i>${esc(c.nombre)}</span>
+            ${_badgesHTML(mem)}
+            ${marcas.map(k => `<span class="mem-marca-salud">${icon('alert', 9)}${NOMBRE_MARCA[k] || k}</span>`).join('')}
+          </div>
+          <h1 class="mem-doc-titulo" data-i18n-skip>${esc(mem.titulo)}</h1>
+          <div class="mem-doc-meta">
+            <span class="mem-avatar" data-i18n-skip aria-hidden="true">${esc(autor.trim().charAt(0).toUpperCase() || '·')}</span>
+            <span class="mem-doc-autor" data-i18n-skip>${esc(autor)}</span>
+            ${mem.creado ? `<span class="sep">·</span><span title="${esc(mem.creado)}">${esc(_t('creada {f}').replace('{f}', mem.creado))}</span>` : ''}
+            ${mem.actualizado ? `<span class="sep">·</span><span title="${esc(mem.actualizado)}">${esc(_t('act. {f}').replace('{f}', M.fechaRelativa(mem.actualizado)))}</span>` : ''}
+            ${leidas ? `<span class="sep">·</span><span class="mem-doc-uso">${icon('eye', 11)}${esc(_t('leída {n}×').replace('{n}', leidas))}</span>` : ''}
+          </div>
+          ${(mem.tags || []).length ? `<div class="mem-doc-tags" data-i18n-skip>${mem.tags.map(t => `<span class="mem-tag">#${esc(t)}</span>`).join('')}</div>` : ''}
+          <div class="mem-prosa" data-i18n-skip>${_md(mem.contenido) || `<p class="mem-prosa-vacia">—</p>`}</div>
+          ${(vec.salientes.length || vec.entrantes.length || vec.rotos.length) ? `
+          <footer class="mem-vecinos">
+            <div class="mem-vec-col">
+              <h4>${icon('send', 11)} Enlaza a <b>${vec.salientes.length + vec.rotos.length}</b></h4>
+              ${vec.salientes.map(vecino).join('')}
+              ${vec.rotos.map(s => `<span class="mem-vecino roto" title="No existe (todavía)"><i aria-hidden="true"></i><span class="t" data-i18n-skip>${esc(s)}</span><span class="c">no existe</span></span>`).join('')}
+              ${!(vec.salientes.length + vec.rotos.length) ? '<span class="mem-vec-nada">No enlaza a otras memorias.</span>' : ''}
+            </div>
+            <div class="mem-vec-col">
+              <h4>${icon('history', 11)} Citada por <b>${vec.entrantes.length}</b></h4>
+              ${vec.entrantes.map(vecino).join('') || '<span class="mem-vec-nada">Ninguna memoria la cita todavía.</span>'}
+            </div>
+          </footer>` : ''}
+        </article>
       </div>`;
 
-    v.querySelectorAll('.mem-wikilink').forEach(b =>
-      b.addEventListener('click', () => {
-        const destino = _memorias.find(m =>
-          m.slug === b.dataset.link.toLowerCase().replace(/[^a-z0-9]+/g, '-') || m.titulo === b.dataset.link);
-        if (destino) { _slugAbierta = destino.slug; _renderItems(); _renderViewer(); }
-        else toast(_t('No existe (todavía) la memoria "{s}"').replace('{s}', b.dataset.link), 'info');
-      }));
-
+    v.querySelector('#mem-volver').addEventListener('click', () => { _leyendo = false; _aplicarLeyendo(); });
+    v.querySelectorAll('.mem-wikilink').forEach(b => b.addEventListener('click', () => {
+      const t = b.dataset.link;
+      const destino = _mem(M.slugDeLink(t)) || _memorias.find(m => m.titulo === t);
+      if (destino) _abrirSlug(destino.slug);
+      else window.toast?.(_t('No existe (todavía) la memoria "{s}"').replace('{s}', t), 'info');
+    }));
+    v.querySelectorAll('.mem-vecino[data-slug]').forEach(b => b.addEventListener('click', () => _abrirSlug(b.dataset.slug, { scroll: true })));
+    v.querySelector('#mem-copiar').addEventListener('click', async () => {
+      try { await navigator.clipboard.writeText(`[[${slug}]]`); window.toast?.(_t('Copiado: [[{s}]]').replace('{s}', slug), 'success'); }
+      catch { window.toast?.(_t('No pude copiar al portapapeles'), 'error'); }
+    });
     v.querySelector('#mem-borrar').addEventListener('click', async () => {
-      if (!(await confirmar(_t('¿Borrar la memoria "{t}"?').replace('{t}', mem.titulo), { peligro: true, confirmText: 'Borrar' }))) return;
-      await fetch(`/api/projects/${pid}/memory/${slug}`, { method: 'DELETE' });
-      _slugAbierta = null;
-      await _cargar(); _renderBody();
+      if (!(await confirmar(_t('¿Borrar la memoria "{t}"?').replace('{t}', mem.titulo),
+        { peligro: true, confirmText: _t('Borrar'), titulo: _t('Borrar memoria') }))) return;
+      const r = await fetch(`/api/projects/${pid}/memory/${encodeURIComponent(slug)}`, { method: 'DELETE' }).catch(() => null);
+      if (!r || !r.ok) { window.toast?.(_t('No se pudo borrar.'), 'error'); return; }
+      const i = _visibles.indexOf(slug);
+      _slugAbierta = _visibles[i + 1] || _visibles[i - 1] || null;
+      if (_slugAbierta === slug) _slugAbierta = null;
+      _leyendo = false;
+      await _cargar(); _renderTodo();
+      window.toast?.(_t('Memoria borrada.'), 'success');
     });
+    v.querySelector('#mem-editar').addEventListener('click', () => { _modo = 'editar'; _renderReader(); });
+  }
 
-    v.querySelector('#mem-editar').addEventListener('click', () => {
-      v.innerHTML = `
-        <div class="mem-editor">
-          <textarea id="mem-textarea" spellcheck="false"></textarea>
-          <div class="mem-editor-acciones">
-            <button class="ob-confirm-btn" id="mem-cancelar" type="button">Cancelar</button>
-            <button class="ob-confirm-btn primario" id="mem-guardar" type="button">Guardar</button>
+  // Editor: fuente markdown (con frontmatter) + preview en vivo.
+  function _renderEditor(v, mem, slug, pid) {
+    v.innerHTML = `
+      <div class="mem-ed">
+        <div class="mem-ed-bar">
+          <span class="mem-ed-tit">${icon('edit', 12)}<span>Editando</span><b data-i18n-skip>${esc(mem.titulo)}</b></span>
+          <span class="mem-ed-hint"><kbd>Ctrl S</kbd><span>Guardar</span><kbd>Esc</kbd><span>Cancelar</span></span>
+          <button class="mem-btn" id="mem-cancelar" type="button">Cancelar</button>
+          <button class="mem-btn primario" id="mem-guardar" type="button">${icon('check', 12)} Guardar</button>
+        </div>
+        <div class="mem-ed-split">
+          <div class="mem-ed-col">
+            <span class="mem-ed-label">Markdown</span>
+            <textarea class="mem-ed-src" id="mem-textarea" spellcheck="false" aria-label="Contenido de la memoria"></textarea>
           </div>
-        </div>`;
-      const ta = v.querySelector('#mem-textarea');
-      ta.value = mem.contenido;
-      ta.focus();
-      v.querySelector('#mem-cancelar').addEventListener('click', _renderViewer);
-      v.querySelector('#mem-guardar').addEventListener('click', async () => {
-        await fetch(`/api/projects/${pid}/memory/${slug}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contenido: ta.value }),
-        });
-        await _cargar(); _renderBody();
-        toast('Memoria guardada.', 'success');
-      });
-    });
-  }
-
-  async function _crear() {
-    const titulo = await pedirTexto('Título corto y específico:', {
-      titulo: 'Nueva memoria', placeholder: 'ej. El backend usa cookies httpOnly', confirmText: 'Crear',
-    });
-    if (!titulo) return;
-    const contenido = await pedirTexto('Contenido (después podés editarlo largo):', {
-      titulo: 'Contenido', placeholder: 'qué hay que saber…', confirmText: 'Guardar',
-    });
-    const r = await fetch(`/api/projects/${_projectId}/memory`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ titulo, contenido: contenido || '' }),
-    });
-    if (!r.ok) {
-      const e = await r.json().catch(() => ({}));
-      toast(e.detail || 'No se pudo crear.', 'error');
-      return;
-    }
-    const { slug } = await r.json();
-    await _cargar();
-    _slugAbierta = slug;
-    _renderBody();
-  }
-
-  /* ── Grafo (force layout mini, SVG puro + zoom/paneo) ──────────── */
-  // Metáfora neuronal: el núcleo es la memoria en sí, las neuronas son las
-  // memorias y las sinapsis los [[wikilinks]]. El mundo es grande (1400×900)
-  // y SIN clamps de borde — el layout respira y el fit() inicial encuadra;
-  // el svg es overflow:visible para que nada se corte al paneear.
-  function _renderGrafo(body) {
-    clearInterval(_grafTimer); _grafTimer = null;   // apagar disparos del render anterior
-    if (!_memorias.length) {
-      body.innerHTML = `<div class="mem-vacio" style="flex:1;align-self:center">${_t('El grafo aparece cuando haya memorias enlazadas con [[wikilinks]].')}</div>`;
-      return;
-    }
-    const W = 1400, H = 900;
-    const nodos = _memorias.map((m, i) => {
-      const grado = _edges.filter(e => e.from === m.slug || e.to === m.slug).length;
-      return {
-        ...m,
-        x: W / 2 + Math.cos(i * 2.4) * (120 + (i % 5) * 40),
-        y: H / 2 + Math.sin(i * 2.4) * (90 + (i % 4) * 35),
-        vx: 0, vy: 0,
-        grado,
-        mayor: grado >= 2,   // hierarchy: the declutter (sin-etiquetas) respects them
-      };
-    });
-    const porSlug = Object.fromEntries(nodos.map(n => [n.slug, n]));
-    const springs = _edges
-      .map(e => [porSlug[e.from], porSlug[e.to]])
-      .filter(([a, b]) => a && b);
-
-    // Simulación precomputada (sin loop de animación: 0 costo en reposo).
-    // Repulsión más fuerte + gravedad suave al centro; sin límites duros.
-    for (let it = 0; it < 320; it++) {
-      for (const a of nodos) {
-        for (const b of nodos) {
-          if (a === b) continue;
-          const dx = a.x - b.x, dy = a.y - b.y;
-          const d2 = Math.max(dx * dx + dy * dy, 64);
-          const f = 8200 / d2;
-          const d = Math.sqrt(d2);
-          a.vx += (dx / d) * f; a.vy += (dy / d) * f;
-        }
-        a.vx += (W / 2 - a.x) * 0.010;
-        a.vy += (H / 2 - a.y) * 0.010;
-      }
-      for (const [a, b] of springs) {
-        const dx = b.x - a.x, dy = b.y - a.y;
-        const d = Math.max(Math.hypot(dx, dy), 1);
-        const f = (d - 130) * 0.02;
-        a.vx += (dx / d) * f; a.vy += (dy / d) * f;
-        b.vx -= (dx / d) * f; b.vy -= (dy / d) * f;
-      }
-      for (const n of nodos) {
-        n.x += n.vx * 0.5; n.y += n.vy * 0.5;
-        n.vx *= 0.6; n.vy *= 0.6;
-      }
-    }
-
-    // Núcleo central: centro de masa promedio de las neuronas (memoria en sí).
-    _core = {
-      x: nodos.reduce((s, n) => s + n.x, 0) / Math.max(1, nodos.length),
-      y: nodos.reduce((s, n) => s + n.y, 0) / Math.max(1, nodos.length),
+          <div class="mem-ed-col mem-ed-prevcol">
+            <span class="mem-ed-label">Vista previa</span>
+            <div class="mem-ed-prev mem-prosa" id="mem-ed-prev" data-i18n-skip></div>
+          </div>
+        </div>
+      </div>`;
+    const ta = v.querySelector('#mem-textarea');
+    const prev = v.querySelector('#mem-ed-prev');
+    ta.value = mem.contenido || '';
+    let tPrev = null;
+    const refrescar = () => { prev.innerHTML = _md(ta.value) || '<p class="mem-prosa-vacia">—</p>'; };
+    refrescar();
+    ta.addEventListener('input', () => { clearTimeout(tPrev); tPrev = setTimeout(refrescar, 120); });
+    ta.focus();
+    ta.setSelectionRange(0, 0);
+    const guardar = async () => {
+      const btn = v.querySelector('#mem-guardar');
+      btn.disabled = true;
+      const r = await fetch(`/api/projects/${pid}/memory/${encodeURIComponent(slug)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contenido: ta.value }),
+      }).catch(() => null);
+      if (!r || !r.ok) { btn.disabled = false; window.toast?.(_t('No se pudo guardar.'), 'error'); return; }
+      _modo = 'ver';
+      await _cargar(); _renderTodo();
+      window.toast?.(_t('Memoria guardada.'), 'success');
     };
+    ta.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); guardar(); }
+    });
+    v.querySelector('#mem-cancelar').addEventListener('click', () => { _modo = 'ver'; _renderReader(); });
+    v.querySelector('#mem-guardar').addEventListener('click', guardar);
+  }
+
+  // Nueva memoria: compositor inline (título + tags + contenido + preview).
+  function _crear() {
+    if (_tab !== 'lista') { _modo = 'nueva'; _leyendo = true; _setTab('lista'); return; }
+    _modo = 'nueva'; _leyendo = true; _aplicarLeyendo();
+    _renderReader();
+  }
+
+  function _renderComposer(v) {
+    v.dataset.slug = '';
+    v.innerHTML = `
+      <div class="mem-ed mem-nuevo">
+        <div class="mem-ed-bar">
+          <span class="mem-ed-tit">${icon('sparkle', 12)}<span>Nueva memoria</span></span>
+          <span class="mem-ed-hint"><kbd>Ctrl ↵</kbd><span>Crear</span><kbd>Esc</kbd><span>Cancelar</span></span>
+          <button class="mem-btn" id="mem-cancelar" type="button">Cancelar</button>
+          <button class="mem-btn primario" id="mem-crear" type="button" disabled>${icon('check', 12)} Crear</button>
+        </div>
+        <div class="mem-ed-split">
+          <div class="mem-ed-col mem-nuevo-form">
+            <input type="text" class="mem-nuevo-titulo" id="mem-nuevo-titulo" maxlength="120"
+                   placeholder="Título corto y específico" autocomplete="off" aria-label="Título">
+            <input type="text" class="mem-nuevo-tags" id="mem-nuevo-tags" autocomplete="off"
+                   placeholder="tags, separados por coma — ej. xterm, foco" aria-label="Tags">
+            <textarea class="mem-ed-src" id="mem-nuevo-cont" spellcheck="false" aria-label="Contenido"
+                      placeholder="Qué hay que saber… (markdown; enlazá otras memorias con [[slug]])"></textarea>
+            <p class="mem-nuevo-nota">${icon('info', 11)}<span>La categoría se infiere de los tags · autor: usuario · estado: vigente</span></p>
+          </div>
+          <div class="mem-ed-col mem-ed-prevcol">
+            <span class="mem-ed-label">Vista previa</span>
+            <div class="mem-ed-prev" id="mem-ed-prev"></div>
+          </div>
+        </div>
+      </div>`;
+    const tit = v.querySelector('#mem-nuevo-titulo');
+    const tags = v.querySelector('#mem-nuevo-tags');
+    const cont = v.querySelector('#mem-nuevo-cont');
+    const prev = v.querySelector('#mem-ed-prev');
+    const btn = v.querySelector('#mem-crear');
+    const listaTags = () => tags.value.split(/[,\n]/).map(s => s.trim().replace(/^#/, '')).filter(Boolean);
+    const refrescar = () => {
+      btn.disabled = !tit.value.trim();
+      prev.innerHTML = `
+        <div class="mem-doc-eyebrow"><span class="mem-catpill mem-catpill-auto"><i aria-hidden="true"></i><span>categoría automática</span></span></div>
+        <h1 class="mem-doc-titulo" data-i18n-skip>${esc(tit.value.trim()) || `<span class="mem-fantasma">${esc(_t('Sin título'))}</span>`}</h1>
+        ${listaTags().length ? `<div class="mem-doc-tags" data-i18n-skip>${listaTags().map(t => `<span class="mem-tag">#${esc(t)}</span>`).join('')}</div>` : ''}
+        <div class="mem-prosa" data-i18n-skip>${_md(cont.value)}</div>`;
+    };
+    refrescar();
+    let tPrev = null;
+    [tit, tags, cont].forEach(el => el.addEventListener('input', () => { clearTimeout(tPrev); tPrev = setTimeout(refrescar, 90); }));
+    tit.addEventListener('input', () => { btn.disabled = !tit.value.trim(); });
+    tit.focus();
+    const crear = async () => {
+      const titulo = tit.value.trim();
+      if (!titulo) { tit.focus(); return; }
+      btn.disabled = true;
+      const r = await fetch(`/api/projects/${_projectId}/memory`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ titulo, contenido: cont.value || '', tags: listaTags() }),
+      }).catch(() => null);
+      if (!r || !r.ok) {
+        const e = r ? await r.json().catch(() => ({})) : {};
+        window.toast?.(e.detail || _t('No se pudo crear.'), 'error');
+        btn.disabled = false;
+        return;
+      }
+      const { slug, similares } = await r.json();
+      _modo = 'ver';
+      await _cargar();
+      _slugAbierta = slug;
+      _renderTodo();
+      window.toast?.(_t('Memoria creada.'), 'success');
+      if ((similares || []).length) {
+        window.toast?.(_t('Ojo: se parece a {s} — ¿no convenía actualizar esa?').replace('{s}', similares.slice(0, 3).join(', ')), 'warning', 7000);
+      }
+    };
+    [tit, tags, cont].forEach(el => el.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); crear(); }
+      else if (e.key === 'Enter' && el === tit) { e.preventDefault(); tags.focus(); }
+      else if (e.key === 'Enter' && el === tags) { e.preventDefault(); cont.focus(); }
+    }));
+    btn.addEventListener('click', crear);
+    v.querySelector('#mem-cancelar').addEventListener('click', () => {
+      _modo = 'ver'; _leyendo = !!_slugAbierta && _leyendo; _renderReader();
+    });
+  }
+
+  /* ══ GRAFO — constelaciones vivas ═══════════════════════════════════ */
+  function _renderGrafo(body) {
+    _pararGrafo();
+    const M = Meta(), G = window.JarvisMemoryGraph;
+    if (!G) {
+      // Red de seguridad: si el <script> de memory-graph.js no está en el HTML,
+      // se carga a demanda (misma carpeta que este archivo).
+      body.innerHTML = `<div class="mem-cargando">${_skeleton()}</div>`;
+      const src = (document.querySelector('script[src*="sections/memory/memory.js"]')?.src || '/static/sections/memory/memory.js')
+        .replace(/memory\.js(\?.*)?$/, 'memory-graph.js');
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = () => { if (_tab === 'grafo' && document.body.contains(body)) _renderGrafo(body); };
+      document.head.appendChild(s);
+      return;
+    }
+    if (!_memorias.length) {
+      body.innerHTML = `<div class="mem-estado-vacio">
+          <span class="mem-vacio-icono">${icon('brain', 22)}</span>
+          <b>El grafo aparece cuando haya memorias.</b>
+          <span>El grafo aparece cuando haya memorias enlazadas con [[wikilinks]].</span></div>`;
+      return;
+    }
+    const grados = M.grados(_edges);
+    const sim = G.crear(
+      _memorias.map(m => ({ id: m.slug, cat: m.categoria || 'sin-clasificar', grado: grados[m.slug] || 0 })),
+      _edges.map(e => ({ a: e.from, b: e.to })), _grafPos);
+    const por = Object.fromEntries(sim.nodos.map(n => [n.id, n]));
+    const aristas = sim.aristas.map(([i, j]) => [sim.nodos[i], sim.nodos[j]]);
+    const cats = M.contarCategorias(_memorias);
+    const aisladas = sim.nodos.filter(n => !n.grado).length;
 
     body.innerHTML = `
-      <div class="mem-grafo">
-        <div class="mem-graf-ctrl">
-          <button type="button" title="${_t('Alejar')}" data-act="out" aria-label="${_t('Alejar')}">−</button>
-          <span class="mem-graf-zoom" id="mem-graf-zoom">100%</span>
-          <button type="button" title="${_t('Acercar')}" data-act="in" aria-label="${_t('Acercar')}">+</button>
-          <button type="button" title="${_t('Ajustar')}" data-act="fit" aria-label="${_t('Ajustar')}">⤢</button>
-        </div>
-        <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="overflow:visible">
-          <g class="mem-graf-v">
-            <g class="mem-core" transform="translate(${_core.x.toFixed(1)},${_core.y.toFixed(1)})">
-              <circle class="mem-core-nucleo" r="30"/>
-              <circle class="mem-core-anillo" r="44"/>
-              <text class="mem-core-label" y="72" text-anchor="middle">${_t('Memoria')}</text>
-            </g>
-            ${springs.map(([a, b], i) =>
-              `<line class="mem-edge" style="--d:${(i * 22).toFixed(0)}ms" x1="${a.x.toFixed(1)}" y1="${a.y.toFixed(1)}" x2="${b.x.toFixed(1)}" y2="${b.y.toFixed(1)}"/>`).join('')}
-            ${nodos.map(n => `
-              <g class="mem-nodo${n.mayor ? ' mayor' : ''}" data-slug="${esc(n.slug)}" transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})">
-                <circle r="${7 + Math.min(n.grado * 2.5, 14)}"/>
-                <text x="0" y="${18 + Math.min(n.grado * 2.5, 14)}" text-anchor="middle">${esc(n.titulo.slice(0, 26))}</text>
-              </g>`).join('')}
+      <div class="mem-grafo" id="mem-grafo" tabindex="-1">
+        <svg class="mem-graf-svg" id="mem-graf-svg" role="img" aria-label="Grafo de memorias">
+          <defs>
+            ${cats.map(c => `<radialGradient id="mem-neb-${esc(c.id)}" class="mc" style="--h:${c.hue}"${c.neutra ? ' data-neutra' : ''}>
+                <stop offset="0%" class="s0"/><stop offset="70%" class="s1"/><stop offset="100%" class="s2"/></radialGradient>`).join('')}
+          </defs>
+          <g class="mem-graf-v" id="mem-graf-v">
+            <g class="mem-nebs">${cats.map(c => `<circle class="mem-neb" data-cat="${esc(c.id)}" fill="url(#mem-neb-${esc(c.id)})"/>`).join('')}</g>
+            <g class="mem-ges">${aristas.map(([a, b], i) => `<g class="mem-ge" data-i="${i}" style="--ha:${_hue(_mem(a.id))};--hb:${_hue(_mem(b.id))}"><line class="glow"/><line class="hilo"/></g>`).join('')}</g>
+            <g class="mem-nebl">${cats.map(c => `<text class="mem-neb-lbl mc" data-cat="${esc(c.id)}" style="--h:${c.hue}"${c.neutra ? ' data-neutra' : ''} text-anchor="middle">${esc(c.nombre)}</text>`).join('')}</g>
+            <g class="mem-gns">${sim.nodos.map(n => {
+              const m = _mem(n.id);
+              const est = M.estadoDe(m);
+              return `<g class="mem-gn mc${n.grado >= 2 ? ' mayor' : ''}${!n.grado ? ' aislada' : ''} est-${est}${M.esLeccion(m) ? ' leccion' : ''}" data-slug="${esc(n.id)}" ${_catAttr(n.cat)} tabindex="0" role="button" aria-label="${esc(m.titulo)}">
+                  <circle class="halo" r="${(n.r * 2.3).toFixed(1)}"/>
+                  <circle class="pulso" r="${(n.r + 4).toFixed(1)}"/>
+                  <circle class="core" r="${n.r.toFixed(1)}"/>
+                  <text class="lbl" y="${(n.r + 14).toFixed(1)}" text-anchor="middle" data-i18n-skip>${esc(m.titulo.length > 30 ? m.titulo.slice(0, 29) + '…' : m.titulo)}</text>
+                </g>`; }).join('')}</g>
           </g>
         </svg>
-        <div class="mem-tooltip" hidden style="position:fixed"></div>
-        <span class="mem-grafo-hint">${_t('click en un nodo = abrir · tamaño = conexiones · rueda = zoom · arrastrar = mover')}</span>
+        <div class="mem-graf-top">
+          <label class="mem-graf-buscar">${icon('search', 12)}
+            <input type="text" id="mem-graf-buscar" placeholder="Resaltar…" value="${esc(_query)}" autocomplete="off" spellcheck="false" aria-label="Resaltar memorias">
+          </label>
+          <div class="mem-graf-ctrl" role="toolbar" aria-label="Zoom">
+            <button type="button" data-act="out" title="Alejar (−)" aria-label="Alejar">−</button>
+            <span class="mem-graf-zoom" id="mem-graf-zoom">100%</span>
+            <button type="button" data-act="in" title="Acercar (+)" aria-label="Acercar">+</button>
+            <span class="sep" aria-hidden="true"></span>
+            <button type="button" data-act="fit" title="Ajustar (0)" aria-label="Ajustar">${icon('maximize', 13)}</button>
+            <button type="button" data-act="shake" title="Reordenar" aria-label="Reordenar">${icon('refresh', 13)}</button>
+            <button type="button" data-act="etiq" class="${_grafEtiq ? 'activo' : ''}" title="Mostrar todas las etiquetas" aria-label="Mostrar todas las etiquetas" aria-pressed="${_grafEtiq}">Aa</button>
+          </div>
+        </div>
+        <div class="mem-graf-card" id="mem-graf-card" hidden></div>
+        <div class="mem-graf-pie">
+          <span class="mem-graf-stats">${_t('{n} memorias · {e} enlaces · {a} aisladas').replace('{n}', sim.nodos.length).replace('{e}', aristas.length).replace('{a}', aisladas)}</span>
+          <span class="mem-graf-hint">${_t('click = abrir · arrastrar = mover · rueda = zoom · shift+click en constelación = sumar')}</span>
+        </div>
       </div>`;
 
-    body.querySelectorAll('.mem-nodo').forEach(g =>
-      g.addEventListener('click', () => {
-        if (_grafPaneo) return;   // fue el final de un arrastre, no un click
-        _slugAbierta = g.dataset.slug;
-        _tab = 'lista';
-        document.querySelectorAll('.mem-tab').forEach(t =>
-          t.classList.toggle('activo', t.dataset.tab === 'lista'));
-        _renderBody();
-      }));
-
-    // ── Zoom + paneo ────────────────────────────────────────────
-    const view = body.querySelector('.mem-grafo');
-    const svg  = body.querySelector('svg');
-    const grp  = body.querySelector('.mem-graf-v');
+    const view = body.querySelector('#mem-grafo');
+    const svg  = body.querySelector('#mem-graf-svg');
+    const grp  = body.querySelector('#mem-graf-v');
     const zlbl = body.querySelector('#mem-graf-zoom');
-    const tip  = body.querySelector('.mem-tooltip');
-    const nodeEls = [...body.querySelectorAll('.mem-nodo')];
-    const edges   = [...body.querySelectorAll('.mem-edge')];
+    const card = body.querySelector('#mem-graf-card');
+    const nodeEls = {};
+    body.querySelectorAll('.mem-gn').forEach(g => { nodeEls[g.dataset.slug] = g; });
+    const edgeEls = [...body.querySelectorAll('.mem-ge')].map(g => ({ g, l: g.querySelectorAll('line') }));
+    const nebs = {}, nebl = {};
+    body.querySelectorAll('.mem-neb').forEach(c => { nebs[c.dataset.cat] = c; });
+    body.querySelectorAll('.mem-neb-lbl').forEach(t => { nebl[t.dataset.cat] = t; });
+    const vecinos = {};
+    for (const [a, b] of aristas) {
+      (vecinos[a.id] = vecinos[a.id] || new Set()).add(b.id);
+      (vecinos[b.id] = vecinos[b.id] || new Set()).add(a.id);
+    }
 
-    function aplicar() {
+    let W = view.clientWidth || 800, H = view.clientHeight || 500;
+    svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+
+    function pintar() {
+      for (const n of sim.nodos) nodeEls[n.id].setAttribute('transform', `translate(${n.x.toFixed(1)},${n.y.toFixed(1)})`);
+      aristas.forEach(([a, b], i) => {
+        for (const l of edgeEls[i].l) {
+          l.setAttribute('x1', a.x.toFixed(1)); l.setAttribute('y1', a.y.toFixed(1));
+          l.setAttribute('x2', b.x.toFixed(1)); l.setAttribute('y2', b.y.toFixed(1));
+        }
+      });
+      for (const c of G.constelaciones(sim)) {
+        const el = nebs[c.cat], lb = nebl[c.cat];
+        if (el) { el.setAttribute('cx', c.x.toFixed(1)); el.setAttribute('cy', c.y.toFixed(1)); el.setAttribute('r', (c.r * 1.25).toFixed(1)); }
+        if (lb) { lb.setAttribute('x', c.x.toFixed(1)); lb.setAttribute('y', (c.y - c.r - 6).toFixed(1)); }
+      }
+    }
+    // Declutter de etiquetas (greedy, por grado): abajo del nodo → arriba →
+    // se oculta (vuelve con hover/foco o con «Aa»). Los rótulos de las
+    // constelaciones se reservan primero. Corre al asentarse y al hacer zoom.
+    const lblEls = {};
+    body.querySelectorAll('.mem-gn').forEach(g => { lblEls[g.dataset.slug] = g.querySelector('.lbl'); });
+    function declutter() {
+      const lk = Math.max(0.85, Math.min(2.2, 1 / _grafT.k));
+      const cajas = [];
+      const choca = (b) => cajas.some(o => b.x < o.x + o.w && b.x + b.w > o.x && b.y < o.y + o.h && b.y + b.h > o.y);
+      for (const c of G.constelaciones(sim)) {
+        const nom = M.categoria(c.cat).nombre;
+        const w = nom.length * 7.2 * lk;
+        cajas.push({ x: c.x - w / 2, y: c.y - c.r - 6 - 11 * lk, w, h: 13 * lk });
+      }
+      for (const n of sim.nodos) cajas.push({ x: n.x - n.r, y: n.y - n.r, w: n.r * 2, h: n.r * 2 });
+      const orden = [...sim.nodos].sort((a, b) => b.grado - a.grado || a.id.localeCompare(b.id));
+      for (const n of orden) {
+        const el = lblEls[n.id];
+        if (!el) continue;
+        const w = Math.min(30, el.textContent.length) * 5.7 * lk, h = 13 * lk;
+        const abajo = { x: n.x - w / 2, y: n.y + n.r + 3, w, h };
+        const arriba = { x: n.x - w / 2, y: n.y - n.r - 3 - h, w, h };
+        let pos = 'abajo', caja = abajo;
+        if (choca(abajo)) { if (!choca(arriba)) { pos = 'arriba'; caja = arriba; } else pos = 'oculta'; }
+        el.setAttribute('y', pos === 'arriba' ? (-(n.r + 6)).toFixed(1) : (n.r + 14).toFixed(1));
+        el.classList.toggle('oculta', pos === 'oculta');
+        if (pos !== 'oculta') cajas.push(caja);
+      }
+    }
+    let _tDecl = null;
+    function aplicarT() {
       grp.setAttribute('transform', `translate(${_grafT.x.toFixed(1)},${_grafT.y.toFixed(1)}) scale(${_grafT.k.toFixed(3)})`);
-      // Escala servida a las etiquetas: el CSS las agranda al alejar (1/k)
-      // para que el nombre de cada memoria sea legible a cualquier zoom.
-      svg.style.setProperty('--lk', 1 / _grafT.k);
-      svg.classList.toggle('sin-etiquetas', _grafT.k < 0.95);
-      if (zlbl) zlbl.textContent = Math.round(_grafT.k * 100) + '%';
+      svg.style.setProperty('--lk', Math.max(0.85, Math.min(2.2, 1 / _grafT.k)).toFixed(3));
+      svg.classList.toggle('sin-etiquetas', _grafT.k < 0.8 && !_grafEtiq);
+      svg.classList.toggle('todas-etiquetas', _grafEtiq);
+      zlbl.textContent = Math.round(_grafT.k * 100) + '%';
+      clearTimeout(_tDecl);
+      _tDecl = setTimeout(() => { if (!_grafRaf) declutter(); }, 60);
     }
-    function zoomEn(factor) {
-      const cx = W / 2, cy = H / 2;
-      const k2 = Math.max(0.3, Math.min(3.5, _grafT.k * factor));
-      _grafT = { k: k2,
-        x: cx - (cx - _grafT.x) * (k2 / _grafT.k),
-        y: cy - (cy - _grafT.y) * (k2 / _grafT.k) };
-      aplicar();
+    function fit(anim) {
+      // área útil: debajo de la barra flotante (52px) y arriba del pie (32px)
+      _grafT = G.encuadre(G.limites(sim, 24, true), W, H - 84, 0.3, 1.6);
+      _grafT.y += 52;
+      view.classList.toggle('suave', !!anim && !_reducido());
+      aplicarT();
+      if (anim) setTimeout(() => view.classList.remove('suave'), 320);
     }
-    function fit() {
-      const xs = nodos.map(n => n.x), ys = nodos.map(n => n.y);
-      const minX = Math.min(...xs) - 50, maxX = Math.max(...xs) + 50;
-      const minY = Math.min(...ys) - 50, maxY = Math.max(...ys) + 50;
-      const k = Math.max(0.3, Math.min(2.5, Math.min(W / (maxX - minX), H / (maxY - minY)) * 0.92));
-      _grafT = { k: k, x: (W - (maxX + minX) * k) / 2, y: (H - (maxY + minY) * k) / 2 };
-      aplicar();
+    function guardarPos() { for (const n of sim.nodos) _grafPos[n.id] = { x: n.x, y: n.y }; declutter(); }
+    let _frames = 0;
+    function loop() {
+      _grafRaf = 0;
+      G.paso(sim); G.paso(sim);
+      pintar();
+      if (++_frames % 10 === 0) declutter();
+      if (!G.asentada(sim)) _grafRaf = requestAnimationFrame(loop);
+      else guardarPos();
+    }
+    function arrancar(a) {
+      if (a) G.recalentar(sim, a);
+      if (_reducido()) { G.asentar(sim); pintar(); guardarPos(); return; }
+      if (!_grafRaf && !G.asentada(sim)) _grafRaf = requestAnimationFrame(loop);
     }
 
-    view.querySelector('[data-act="in"]').addEventListener('click', () => zoomEn(1.25));
-    view.querySelector('[data-act="out"]').addEventListener('click', () => zoomEn(1 / 1.25));
-    view.querySelector('[data-act="fit"]').addEventListener('click', fit);
+    // Primer encuadre: se precalcula casi todo el layout para que el fit
+    // encuadre la forma FINAL (y la animación sea solo el último asentamiento).
+    const nuevo = sim.alpha >= 1;
+    if (nuevo) { for (let i = 0; i < 170; i++) G.paso(sim); }
+    pintar();
+    if (!_grafT || nuevo) fit(false); else aplicarT();
+    declutter();
+    arrancar();
 
+    // ── filtro compartido (constelaciones + buscador) ──
+    _grafAplicarFiltro = () => {
+      const vis = new Set(_filtradas().map(m => m.slug));
+      const todo = vis.size === _memorias.length;
+      for (const id in nodeEls) nodeEls[id].classList.toggle('fuera', !todo && !vis.has(id));
+      aristas.forEach(([a, b], i) => edgeEls[i].g.classList.toggle('fuera', !todo && !(vis.has(a.id) && vis.has(b.id))));
+      for (const c in nebs) {
+        const on = !_cats.length || _cats.includes(c);
+        nebs[c].classList.toggle('fuera', !on); nebl[c].classList.toggle('fuera', !on);
+      }
+      view.classList.toggle('filtrado', !todo);
+    };
+    _grafAplicarFiltro();
+    const bus = body.querySelector('#mem-graf-buscar');
+    bus.addEventListener('input', () => { _query = bus.value; _grafAplicarFiltro(); });
+
+    // ── controles ──
+    const zoomEn = (f, cx, cy) => {
+      cx = cx ?? W / 2; cy = cy ?? H / 2;
+      const k2 = Math.max(0.25, Math.min(3.5, _grafT.k * f));
+      _grafT = { k: k2, x: cx - (cx - _grafT.x) * (k2 / _grafT.k), y: cy - (cy - _grafT.y) * (k2 / _grafT.k) };
+      aplicarT();
+    };
+    view.querySelector('[data-act="in"]').addEventListener('click', () => { view.classList.add('suave'); zoomEn(1.25); setTimeout(() => view.classList.remove('suave'), 300); });
+    view.querySelector('[data-act="out"]').addEventListener('click', () => { view.classList.add('suave'); zoomEn(1 / 1.25); setTimeout(() => view.classList.remove('suave'), 300); });
+    view.querySelector('[data-act="fit"]').addEventListener('click', () => fit(true));
+    view.querySelector('[data-act="shake"]').addEventListener('click', () => {
+      for (const n of sim.nodos) { n.vx += (Math.random() - 0.5) * 30; n.vy += (Math.random() - 0.5) * 30; }
+      arrancar(0.6);
+      setTimeout(() => fit(true), _reducido() ? 0 : 900);
+    });
+    view.querySelector('[data-act="etiq"]').addEventListener('click', (e) => {
+      _grafEtiq = !_grafEtiq;
+      e.currentTarget.classList.toggle('activo', _grafEtiq);
+      e.currentTarget.setAttribute('aria-pressed', String(_grafEtiq));
+      aplicarT();
+    });
+
+    const aPx = (ev) => { const r = svg.getBoundingClientRect(); return { x: ev.clientX - r.left, y: ev.clientY - r.top }; };
     view.addEventListener('wheel', (ev) => {
       ev.preventDefault();
-      const r = svg.getBoundingClientRect();
-      const px = (ev.clientX - r.left) / r.width * W;
-      const py = (ev.clientY - r.top) / r.height * H;
-      const f = ev.deltaY < 0 ? 1.16 : 1 / 1.16;
-      const k2 = Math.max(0.3, Math.min(3.5, _grafT.k * f));
-      _grafT = { k: k2,
-        x: px - (px - _grafT.x) * (k2 / _grafT.k),
-        y: py - (py - _grafT.y) * (k2 / _grafT.k) };
-      aplicar();
+      const p = aPx(ev);
+      zoomEn(ev.deltaY < 0 ? 1.14 : 1 / 1.14, p.x, p.y);
     }, { passive: false });
 
-    // Cada render del Grafo sumaba otro par de listeners en window que nunca se
-    // quitaban: se abortan los del render anterior.
-    _grafAC?.abort();
     _grafAC = new AbortController();
-    const _sig = { signal: _grafAC.signal };
+    const sig = { signal: _grafAC.signal };
     let down = null;
-    view.addEventListener('pointerdown', (ev) => {
+    svg.addEventListener('pointerdown', (ev) => {
       if (ev.button !== 0) return;
-      down = { x: ev.clientX, y: ev.clientY, moved: false };
+      const g = ev.target.closest('.mem-gn');
+      down = { x: ev.clientX, y: ev.clientY, moved: false, nodo: g ? por[g.dataset.slug] : null, t0: _grafT };
+      if (down.nodo) { down.nodo.fijo = true; ocultarCard(); }
     });
     window.addEventListener('pointermove', (ev) => {
       if (!down) return;
-      const r = svg.getBoundingClientRect();
       if (!down.moved && Math.hypot(ev.clientX - down.x, ev.clientY - down.y) > 4) {
         down.moved = true;
-        view.classList.add('paneando');
+        view.classList.add(down.nodo ? 'arrastrando' : 'paneando');
       }
-      if (down.moved) {
-        ev.preventDefault();
-        _grafT.x += (ev.clientX - down.x) / r.width * W / _grafT.k;
-        _grafT.y += (ev.clientY - down.y) / r.height * H / _grafT.k;
-        down = { x: ev.clientX, y: ev.clientY, moved: true };
-        aplicar();
+      if (!down.moved) return;
+      ev.preventDefault();
+      if (down.nodo) {
+        const p = aPx(ev);
+        down.nodo.x = (p.x - _grafT.x) / _grafT.k;
+        down.nodo.y = (p.y - _grafT.y) / _grafT.k;
+        pintar();
+        arrancar(0.18);
+      } else {
+        _grafT = { k: _grafT.k, x: down.t0.x + (ev.clientX - down.x), y: down.t0.y + (ev.clientY - down.y) };
+        aplicarT();
       }
-    }, _sig);
+    }, sig);
     window.addEventListener('pointerup', () => {
-      // Soltar sobre un nodo tras panear disparaba su click (abría la memoria).
-      if (down?.moved) { _grafPaneo = true; setTimeout(() => { _grafPaneo = false; }, 0); }
-      down = null; view.classList.remove('paneando');
-    }, _sig);
+      if (!down) return;
+      const d = down; down = null;
+      view.classList.remove('paneando', 'arrastrando');
+      if (d.nodo) {
+        d.nodo.fijo = false;
+        if (!d.moved) _abrirSlug(d.nodo.id);
+        else guardarPos();
+      }
+    }, sig);
 
-    // ── Highlight del subgrafo conectado (hover) + tooltip ─────
-    // El tooltip se llena SOLO en pointerenter (no en el move) y queda
-    // visible a cualquier zoom: la identidad de la memoria no se pierde
-    // al alejar (las etiquetas del nodo las escala --lk).
-    function tooltipMostrar(ev, n) {
-      tip.innerHTML = `${_badgesHTML(n)}<b>${esc(n.titulo)}</b><i>${esc(n.autor)} · ${esc(n.creado)}${n.actualizado ? ' · act. ' + esc(n.actualizado) : ''}</i><em>${_t('Conexiones')}: ${n.grado}</em>`;
-      tip.hidden = false;
-      const w = tip.offsetWidth, h = tip.offsetHeight;
-      // Flip: si a la derecha no entra, va a la IZQUIERDA del cursor
-      const aDerecha = (ev.clientX + 14 + w) <= window.innerWidth - 6;
-      tip.style.left = (aDerecha ? ev.clientX + 14 : ev.clientX - w - 14) + 'px';
-      tip.style.top  = Math.min(ev.clientY + 14, window.innerHeight - h - 6) + 'px';
+    // ── foco por hover: el vecindario brilla, el resto se apaga ──
+    let hoverId = null;
+    function ocultarCard() { card.hidden = true; }
+    function enfocar(id) {
+      hoverId = id;
+      const vec = vecinos[id] || new Set();
+      view.classList.add('foco');
+      for (const k in nodeEls) {
+        nodeEls[k].classList.toggle('vecino', vec.has(k));
+        nodeEls[k].classList.toggle('hito', k === id);
+      }
+      aristas.forEach(([a, b], i) => edgeEls[i].g.classList.toggle('on', a.id === id || b.id === id));
+      const n = por[id], m = _mem(id);
+      const c = M.categoria(m.categoria);
+      card.innerHTML = `
+        <span class="mem-catpill mc" ${_catAttr(m.categoria)}><i aria-hidden="true"></i>${esc(c.nombre)}</span>
+        <b data-i18n-skip>${esc(m.titulo)}</b>
+        ${m.resumen ? `<p data-i18n-skip>${esc(M.textoPlano(m.resumen))}</p>` : ''}
+        <span class="mem-graf-card-meta">${_badgesHTML(m)}<span data-i18n-skip>${esc(m.autor || '—')}</span> · ${esc(M.fechaRelativa(m.actualizado || m.creado))} · ${esc(_t('{n} conexiones').replace('{n}', n.grado))}</span>`;
+      card.hidden = false;
+      const sx = _grafT.x + n.x * _grafT.k, sy = _grafT.y + n.y * _grafT.k;
+      const w = card.offsetWidth, h = card.offsetHeight;
+      const dx = n.r * _grafT.k + 16;
+      let left = sx + dx; if (left + w > W - 10) left = sx - dx - w;
+      card.style.left = Math.max(10, left) + 'px';
+      card.style.top = Math.max(56, Math.min(H - h - 44, sy - h / 2)) + 'px';
     }
-    nodeEls.forEach(g => {
-      g.addEventListener('pointerenter', (ev) => {
-        const slug = g.dataset.slug;
-        const conn = new Set([slug]);
-        springs.forEach(([a, b]) => {
-          if (a.slug === slug) conn.add(b.slug);
-          if (b.slug === slug) conn.add(a.slug);
-        });
-        nodeEls.forEach(o => o.classList.toggle('dim', !conn.has(o.dataset.slug)));
-        edges.forEach((e, i) => {
-          const [a, b] = springs[i];
-          const toca = a.slug === slug || b.slug === slug;
-          e.classList.toggle('activo', toca);
-          e.classList.toggle('atenuado', !toca);
-        });
-        g.classList.add('hito');
-        const n = porSlug[slug];
-        if (n) tooltipMostrar(ev, n);
-      });
-      g.addEventListener('pointerleave', () => {
-        nodeEls.forEach(o => o.classList.remove('dim'));
-        edges.forEach(e => e.classList.remove('activo', 'atenuado'));
-        g.classList.remove('hito');
-        tip.hidden = true;
-      });
+    function desenfocar() {
+      hoverId = null;
+      view.classList.remove('foco');
+      for (const k in nodeEls) nodeEls[k].classList.remove('vecino', 'hito');
+      edgeEls.forEach(e => e.g.classList.remove('on'));
+      ocultarCard();
+    }
+    Object.values(nodeEls).forEach(g => {
+      g.addEventListener('pointerenter', () => { if (!down) enfocar(g.dataset.slug); });
+      g.addEventListener('pointerleave', () => { if (!down) desenfocar(); });
+      g.addEventListener('focus', () => enfocar(g.dataset.slug));
+      g.addEventListener('blur', desenfocar);
+      g.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); _abrirSlug(g.dataset.slug); } });
+    });
+    view.addEventListener('keydown', (e) => {
+      if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
+      if (e.key === '+' || e.key === '=') zoomEn(1.2);
+      else if (e.key === '-') zoomEn(1 / 1.2);
+      else if (e.key === '0') fit(true);
     });
 
-    fit();
+    // ── tamaño real: el viewBox sigue al contenedor ──
+    _grafRO = new ResizeObserver(() => {
+      const w2 = view.clientWidth, h2 = view.clientHeight;
+      if (!w2 || !h2 || (w2 === W && h2 === H)) return;
+      _grafT = { k: _grafT.k, x: _grafT.x + (w2 - W) / 2, y: _grafT.y + (h2 - H) / 2 };
+      W = w2; H = h2;
+      svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+      aplicarT();
+    });
+    _grafRO.observe(view);
 
-    // ── Disparos neuronales ─────────────────────────────────────
-    // Un nodo al azar "dispara" y sus sinapsis se encienden: flash efímero
-    // sin animaciones infinitas. Se limpia en el próximo render/cierre.
-    // El mouse sobre el grafo pausa los disparos (el hover ya es señal).
-    let _firing = true;
-    view.addEventListener('pointerenter', () => { _firing = false; });
-    view.addEventListener('pointerleave', () => { _firing = true; });
-    _grafTimer = setInterval(() => {
-      if (!_firing) return;
-      const g = nodeEls[Math.floor(Math.random() * nodeEls.length)];
-      if (!g) return;
-      const slug = g.dataset.slug;
-      g.classList.add('fire');
-      edges.forEach((e, i) => {
-        const [a, b] = springs[i];
-        if (a.slug === slug || b.slug === slug) e.classList.add('sinapsis');
-      });
-      setTimeout(() => {
-        g.classList.remove('fire');
-        edges.forEach((e, i) => {
-          const [a, b] = springs[i];
-          if (a.slug === slug || b.slug === slug) e.classList.remove('sinapsis');
-        });
-      }, 750);
-    }, 2400);
+    // ── disparos neuronales: un nodo late y su vecindario se enciende ──
+    // Efímero (0.9s), cada 2.8s, solo con el grafo quieto, a la vista y sin
+    // hover; nunca con reduced-motion.
+    if (!_reducido()) {
+      const conGrado = sim.nodos.filter(n => n.grado);
+      _grafTimer = setInterval(() => {
+        if (document.hidden || hoverId || down || _grafRaf || !conGrado.length) return;
+        const n = conGrado[Math.floor(Math.random() * conGrado.length)];
+        const g = nodeEls[n.id];
+        if (!g || g.classList.contains('fuera')) return;
+        g.classList.add('fire');
+        const on = [];
+        aristas.forEach(([a, b], i) => { if (a.id === n.id || b.id === n.id) { edgeEls[i].g.classList.add('sinapsis'); on.push(edgeEls[i].g); } });
+        setTimeout(() => { g.classList.remove('fire'); on.forEach(e => e.classList.remove('sinapsis')); }, 900);
+      }, 2800);
+    }
   }
+  let _grafAplicarFiltro = () => {};
 
-  /* ── Live (agentes en vivo) ────────────────────────────────── */
+  /* ══ LIVE — el enjambre y su recall ════════════════════════════════ */
   async function _cargarLive() {
     try {
       const r = await fetch(`/api/projects/${_projectId}/live`);
@@ -589,56 +1216,93 @@
     if (!document.querySelector('.mem-overlay')) return;
     _liveEstado = window.JarvisLiveState.aplicarSnapshot(
       _liveEstado || window.JarvisLiveState.crearEstado(), data.snapshot, Date.now());
-    // re-render solo si el modal está abierto en la pestaña live
-    if (_tab === 'live' && document.querySelector('.mem-overlay')) {
+    if (_tab === 'live') {
       const body = document.getElementById('mem-body');
       if (body) _renderLive(body, /*sinFetch*/ true);
     }
   }
 
   async function _renderLive(body, sinFetch) {
-    if (!sinFetch) await _cargarLive();
-    const L = window.JarvisLiveState;
-    const st = _liveEstado || L.crearEstado();
-    const ahora = Date.now();
-    const flashes = new Set(L.flashesVigentes(st, ahora));
+    if (!body.querySelector('.mem-live')) {
+      body.innerHTML = `
+        <div class="mem-live">
+          <div class="mem-live-main">
+            <div class="mem-vitales" id="mem-vitales"></div>
+            <div class="mem-live-head">
+              <h3>Enjambre</h3>
+              <div class="mem-seg" role="tablist" aria-label="Vista del enjambre">
+                <button type="button" class="mem-live-v" data-v="pulso">Pulso</button>
+                <button type="button" class="mem-live-v" data-v="mapa">Mapa</button>
+              </div>
+            </div>
+            <div class="mem-live-cuerpo" id="mem-live-cuerpo"></div>
+          </div>
+          <aside class="mem-live-rail">
+            <div class="mem-seg mem-rail-tabs" role="tablist" aria-label="Línea de tiempo">
+              <button type="button" class="mem-rail-t" data-r="recall">${icon('brain', 12)} Recall</button>
+              <button type="button" class="mem-rail-t" data-r="actividad">${icon('history', 12)} Actividad</button>
+            </div>
+            <div class="mem-tl" id="mem-tl"></div>
+          </aside>
+        </div>`;
+      body.querySelectorAll('.mem-live-v').forEach(b => b.addEventListener('click', () => {
+        _liveVista = b.dataset.v; _renderLive(body, true);
+      }));
+      body.querySelectorAll('.mem-rail-t').forEach(b => b.addEventListener('click', () => {
+        _liveRail = b.dataset.r; _ls.set('jarvis.mem.rail', _liveRail); _renderLiveRail();
+      }));
+      body.querySelector('#mem-live-cuerpo').innerHTML = `<div class="mem-cargando">${_skeleton()}</div>`;
+    }
+    if (!sinFetch) {
+      await Promise.all([_cargarLive(), _cargarUso()]);
+      if (_tab !== 'live' || !document.body.contains(body)) return;
+      clearInterval(_livePoll);
+      _livePoll = setInterval(async () => {
+        if (document.hidden || _tab !== 'live') return;
+        await _cargarUso();
+        if (_tab === 'live') { _renderLiveRail(); _renderVitales(); _renderLiveCuerpo(); }
+      }, 8000);
+    }
+    body.querySelectorAll('.mem-live-v').forEach(b => b.classList.toggle('activo', b.dataset.v === _liveVista));
+    _renderVitales();
+    _renderLiveCuerpo();
+    _renderLiveRail();
+  }
 
+  function _renderVitales() {
+    const el = document.getElementById('mem-vitales');
+    if (!el) return;
+    const st = _liveEstado || window.JarvisLiveState.crearEstado();
     const nAg   = (st.agentes || []).length;
     const nTrab = (st.agentes || []).filter(a => a.estado === 'trabajando').length;
     const nArch = new Set((st.agentes || []).flatMap(a => (a.archivos || []).map(f => f.path))).size;
+    const ev = _uso.eventos || [];
+    const leidas = ev.filter(e => e.resultado !== 'inyectada').length;
+    const sugeridas = ev.length - leidas;
+    const alti = _salud && _salud.altimetro;
+    el.innerHTML = `
+      <div class="mem-vital run${nTrab ? ' vivo' : ''}"><i aria-hidden="true"></i><b>${nTrab}</b><span>${_t('trabajando')}</span></div>
+      <div class="mem-vital"><i aria-hidden="true"></i><b>${nAg}</b><span>${_t('agente(s)')}</span></div>
+      <div class="mem-vital"><i aria-hidden="true"></i><b>${nArch}</b><span>${_t('archivo(s)')}</span></div>
+      <div class="mem-vital acento" title="${esc(_t('Memorias leídas por los agentes / sugeridas por el recall'))}"><i aria-hidden="true"></i>
+        <b>${alti && (alti.lecturas || alti.inyecciones) ? `${alti.lecturas || 0}<small>/${alti.inyecciones || 0}</small>` : `${leidas}<small>/${sugeridas}</small>`}</b>
+        <span>${alti && (alti.lecturas || alti.inyecciones) ? _t('leídas / sugeridas · 7d') : _t('leídas / sugeridas')}</span></div>`;
+  }
 
-    body.innerHTML = `
-      <div class="mem-live">
-        <div class="mem-live-main" id="mem-live-main">
-          <div class="mem-live-toolbar">
-            <div class="mem-live-vistas">
-              <button class="mem-live-v ${_liveVista === 'pulso' ? 'activo' : ''}" data-v="pulso">Pulso</button>
-              <button class="mem-live-v ${_liveVista === 'mapa' ? 'activo' : ''}" data-v="mapa">Mapa</button>
-            </div>
-            <div class="mem-live-stats">
-              <span class="mem-live-stat"><i class="dot ${nTrab ? 'trab' : ''}"></i>${_t('{n} trabajando').replace('{n}', nTrab)}</span>
-              <span class="mem-live-stat">${_t('{n} agente(s)').replace('{n}', nAg)}</span>
-              <span class="mem-live-stat">${_t('{n} archivo(s)').replace('{n}', nArch)}</span>
-            </div>
-          </div>
-          <div class="mem-live-cuerpo" id="mem-live-cuerpo"></div>
-        </div>
-        <aside class="mem-live-feed" id="mem-live-feed"></aside>
-      </div>`;
-
-    body.querySelectorAll('.mem-live-v').forEach(b =>
-      b.addEventListener('click', () => { _liveVista = b.dataset.v; _renderLive(body, true); }));
-
-    const cuerpo = body.querySelector('#mem-live-cuerpo');
+  function _renderLiveCuerpo() {
+    const cuerpo = document.getElementById('mem-live-cuerpo');
+    if (!cuerpo) return;
+    const L = window.JarvisLiveState;
+    const st = _liveEstado || L.crearEstado();
+    const flashes = new Set(L.flashesVigentes(st, Date.now()));
+    cuerpo.classList.toggle('es-mapa', _liveVista === 'mapa');
     if (_liveVista === 'mapa') _renderLiveMapa(cuerpo, st, flashes);
     else _renderLivePulso(cuerpo, st, flashes);
-    _renderLiveFeed(body.querySelector('#mem-live-feed'), st);
-
     // los flashes decaen solos: un re-render diferido los apaga
     clearTimeout(_liveTimer);
     if (flashes.size) {
       _liveTimer = setTimeout(() => {
-        if (_tab === 'live' && document.getElementById('mem-live-cuerpo')) _renderLive(body, true);
+        if (_tab === 'live' && document.getElementById('mem-live-cuerpo')) _renderLiveCuerpo();
       }, L.FLASH_MS + 100);
     }
   }
@@ -648,65 +1312,135 @@
       p.archivo === path || path.endsWith('/' + p.archivo) || p.archivo.endsWith('/' + path));
   }
 
+  const PERMISO_TX = { pendiente: 'permiso pendiente', ok: 'permiso concedido', no: 'permiso denegado', expirado: 'permiso expirado' };
+
   function _renderLivePulso(cuerpo, st, flashes) {
     const L = window.JarvisLiveState;
     const agentes = L.ordenarAgentes(st.agentes);
     if (!agentes.length) {
-      cuerpo.innerHTML = '<div class="mem-vacio">Sin agentes activos en este proyecto.</div>';
+      cuerpo.innerHTML = `<div class="mem-estado-vacio chico">
+          <span class="mem-vacio-icono">${icon('terminal', 20)}</span>
+          <b>Sin agentes activos en este proyecto.</b>
+          <span>Cuando abras terminales con agentes, acá vas a ver qué archivos tocan y qué memorias leen.</span></div>`;
       return;
     }
-    const PEMOJI = { pendiente: '⏳', ok: '✅', no: '⛔', expirado: '💨' };
-    cuerpo.innerHTML = `<div class="mem-live-cards">${agentes.map(a => `
-      <div class="mem-live-card" data-estado="${esc(a.estado)}">
-        <div class="mem-live-head">
-          <span class="mem-live-anillo" data-estado="${esc(a.estado)}">${window.cliLogo(a.tipo_ia, 18)}</span>
-          <span class="mem-live-nombre">${esc(a.nombre)}</span>
-          <span class="mem-live-estado">${a.estado === 'trabajando' ? 'trabajando' : 'idle'}</span>
+    // memorias recientes por terminal (del stream de recall)
+    const memsDe = {};
+    for (const e of _uso.eventos || []) {
+      if (e.terminal_id == null) continue;
+      const arr = memsDe[e.terminal_id] || (memsDe[e.terminal_id] = []);
+      if (!arr.some(x => x.slug === e.slug) && arr.length < 5) arr.push(e);
+    }
+    cuerpo.innerHTML = `<div class="mem-lanes">${agentes.map((a, i) => {
+      const arch = (a.archivos || []).filter(f => f.writes > 0 || f.reads > 0);
+      const mems = memsDe[a.terminal_id] || [];
+      const ult = arch.length ? Math.min(...arch.map(f => f.hace_s ?? 1e9)) : null;
+      return `
+      <article class="mem-lane" data-estado="${esc(a.estado)}" style="--i:${Math.min(i, 10)}">
+        <div class="mem-lane-id">
+          <span class="mem-live-anillo" data-estado="${esc(a.estado)}">${window.cliLogo ? window.cliLogo(a.tipo_ia, 18) : ''}</span>
+          <span class="mem-lane-nom">
+            <b data-i18n-skip>${esc(a.nombre)}</b>
+            <span class="mem-lane-est">${a.estado === 'trabajando' ? 'trabajando' : 'idle'}${ult != null && ult < 1e9 ? ` · ${_t('hace {t}').replace('{t}', L.hace(ult))}` : ''}</span>
+          </span>
         </div>
-        <div class="mem-live-chips">${(a.archivos || []).filter(f => f.writes > 0 || f.reads > 0).map(f => {
+        <div class="mem-lane-files">${arch.map(f => {
           const permisos = _permisosDe(st, f.path);
           const burbujas = permisos.map(p =>
-            `<span class="mem-live-permiso" data-estado="${esc(p.estado)}"
-                   title="${esc(p.pide)} → ${esc(p.dueno)}: ${esc(p.detalle || '')}${p.respuesta ? ' · ' + _t('resp: {r}').replace('{r}', esc(p.respuesta)) : ''}">${PEMOJI[p.estado] || '·'}</span>`).join('');
-          return `<span class="mem-live-chip ${flashes.has(f.path) ? 'flash' : ''} ${f.writes ? 'write' : 'read'}"
-                        title="${esc(f.path)} — ${f.writes}w/${f.reads}r, hace ${L.hace(f.hace_s)}">
-            ${f.dueno ? '<i class="lock">🔒</i>' : ''}${esc(f.path.split('/').pop())}${f.writes > 1 ? `<i class="x">×${f.writes}</i>` : ''}${burbujas}
+            `<i class="mem-perm p-${esc(p.estado)}" title="${esc(_t(PERMISO_TX[p.estado] || p.estado))} — ${esc(p.pide)} → ${esc(p.dueno)}: ${esc(p.detalle || '')}${p.respuesta ? ' · ' + _t('resp: {r}').replace('{r}', esc(p.respuesta)) : ''}"></i>`).join('');
+          return `<span class="mem-fchip ${flashes.has(f.path) ? 'flash' : ''} ${f.writes ? 'write' : 'read'}"
+                        title="${esc(f.path)} — ${f.writes}w/${f.reads}r, ${esc(_t('hace {t}').replace('{t}', L.hace(f.hace_s)))}">
+            ${f.dueno ? LOCK : ''}<span data-i18n-skip>${esc(f.path.split('/').pop())}</span>${f.writes > 1 ? `<i class="x">×${f.writes}</i>` : ''}${burbujas}
           </span>`;
-        }).join('') || '<span class="mem-live-sinops">sin actividad de archivos</span>'}</div>
-      </div>`).join('')}</div>`;
+        }).join('') || '<span class="mem-lane-nada">sin actividad de archivos</span>'}</div>
+        ${mems.length ? `<div class="mem-lane-mems">${icon('brain', 11)}${mems.map(e => {
+          const m = _mem(e.slug);
+          return `<button type="button" class="mem-mchip mc" data-slug="${esc(e.slug)}" ${_catAttr(m?.categoria)} title="${esc(Meta().resultadoUso(e.resultado).label)}">
+            <i aria-hidden="true"></i><span data-i18n-skip>${esc(m ? m.titulo : e.slug)}</span></button>`;
+        }).join('')}</div>` : ''}
+      </article>`; }).join('')}</div>`;
+    cuerpo.querySelectorAll('.mem-mchip[data-slug]').forEach(b => b.addEventListener('click', () => {
+      if (_mem(b.dataset.slug)) _abrirSlug(b.dataset.slug);
+    }));
   }
 
-  function _renderLiveFeed(aside, st) {
-    aside.innerHTML = `<div class="mem-live-feed-titulo">Actividad</div>
-      <div class="mem-live-feed-items">${(st.actividad || []).map((e, i) => `
-        <div class="mem-live-evento ${esc(e.clase)}" style="--i:${Math.min(i, 12)}">
-          <span class="mem-live-hora">${esc(e.hora)}</span><span class="tx">${esc(e.texto)}</span>
-        </div>`).join('') || '<div class="mem-vacio">Todavía nada.</div>'}</div>`;
+  function _renderLiveRail() {
+    const tl = document.getElementById('mem-tl');
+    if (!tl) return;
+    document.querySelectorAll('.mem-rail-t').forEach(b => b.classList.toggle('activo', b.dataset.r === _liveRail));
+    const M = Meta();
+    if (_liveRail === 'actividad') {
+      const st = _liveEstado || window.JarvisLiveState.crearEstado();
+      const act = st.actividad || [];
+      tl.innerHTML = act.length ? `<ol class="mem-tl-list">${act.map((e, i) => `
+        <li class="mem-tl-ev k-${esc(e.clase || 'normal')}" style="--i:${Math.min(i, 12)}">
+          <i class="mem-tl-node" aria-hidden="true"></i>
+          <div class="mem-tl-body">
+            <span class="mem-tl-tx" data-i18n-skip>${esc(e.texto)}</span>
+            <span class="mem-tl-meta">${esc(e.hora)}</span>
+          </div>
+        </li>`).join('')}</ol>`
+        : `<div class="mem-tl-vacio">${icon('history', 18)}<span>Todavía nada.</span></div>`;
+      return;
+    }
+    // Recall: eventos de memoria_uso agrupados por (terminal, resultado, instante)
+    const grupos = [];
+    for (const e of _uso.eventos || []) {
+      const g = grupos[grupos.length - 1];
+      const clave = `${e.terminal_id}|${e.resultado}|${String(e.timestamp).slice(0, 19)}`;
+      if (g && g.clave === clave) g.slugs.push(e.slug);
+      else grupos.push({ clave, terminal: e.terminal, tipo_ia: e.tipo_ia, resultado: e.resultado, timestamp: e.timestamp, slugs: [e.slug] });
+    }
+    if (!grupos.length) {
+      tl.innerHTML = `<div class="mem-tl-vacio">${icon('brain', 18)}
+          <b>Sin lecturas registradas todavía.</b>
+          <span>Aparecen cuando el recall le sugiere memorias a un agente y cuando un agente cierra su paso citando las que usó.</span></div>`;
+      return;
+    }
+    tl.innerHTML = `<ol class="mem-tl-list">${grupos.slice(0, 40).map((g, i) => {
+      const r = M.resultadoUso(g.resultado);
+      return `
+      <li class="mem-tl-ev k-${r.k}" style="--i:${Math.min(i, 12)}">
+        <i class="mem-tl-node" aria-hidden="true"></i>
+        <div class="mem-tl-body">
+          <span class="mem-tl-meta"><span class="mem-res r-${r.k}">${r.label}</span>
+            ${g.terminal ? `<span class="mem-tl-quien" data-i18n-skip>${esc(g.terminal)}</span>` : ''}
+            <span class="mem-tl-hace" title="${esc(g.timestamp)}">${esc(M.haceCorto(g.timestamp))}</span></span>
+          <span class="mem-tl-mems">${g.slugs.map(s => {
+            const m = _mem(s);
+            return m
+              ? `<button type="button" class="mem-mchip mc" data-slug="${esc(s)}" ${_catAttr(m.categoria)}><i aria-hidden="true"></i><span data-i18n-skip>${esc(m.titulo)}</span></button>`
+              : `<span class="mem-mchip borrada" title="${esc(_t('ya no existe'))}"><i aria-hidden="true"></i><span data-i18n-skip>${esc(s)}</span></span>`;
+          }).join('')}</span>
+        </div>
+      </li>`; }).join('')}</ol>`;
+    tl.querySelectorAll('.mem-mchip[data-slug]').forEach(b => b.addEventListener('click', () => _abrirSlug(b.dataset.slug)));
   }
 
-  // El Mapa: constelación viva del enjambre. Mide el contenedor REAL (px) →
-  // el grafo llena el espacio disponible en vez de un viewBox fijo 900×480 que
-  // se achicaba (pedido del usuario: "se queda sin espacio"). Layout de fuerzas
-  // + colisión + declutter de etiquetas; posiciones persistidas entre renders
-  // (_mapaPos) para que un update no re-baraje todo — solo lo nuevo se acomoda.
+  // El Mapa: constelación viva del enjambre (agentes ↔ archivos). Mide el
+  // contenedor REAL (px) → llena el espacio disponible. Layout de fuerzas +
+  // colisión + declutter de etiquetas; posiciones persistidas entre renders
+  // (_mapaPos) para que un update no re-baraje todo.
   function _renderLiveMapa(cuerpo, st, flashes) {
     const agentes = (st.agentes || []).filter(a => (a.archivos || []).length || a.estado === 'trabajando');
     const paths = [...new Set((st.agentes || []).flatMap(a => (a.archivos || []).map(f => f.path)))];
     if (!agentes.length) {
-      cuerpo.innerHTML = '<div class="mem-vacio">El mapa aparece cuando los agentes tocan archivos.</div>';
+      cuerpo.innerHTML = `<div class="mem-estado-vacio chico">
+          <span class="mem-vacio-icono">${icon('workflow', 20)}</span>
+          <b>El mapa aparece cuando los agentes tocan archivos.</b></div>`;
       return;
     }
     const rect = cuerpo.getBoundingClientRect();
     const W = Math.max(360, Math.round(rect.width)), H = Math.max(280, Math.round(rect.height));
     const R = Math.min(W, H);
-    const SC = Math.max(0.8, Math.min(1.7, R / 470));       // escala el grafo al tamaño real (llena el espacio)
-    const REST = 118 * SC;                                   // largo de reposo de los resortes agente↔archivo
-    const AR = 18, FR = 6;                                   // radios de nodo
-    const MXA = 76, MYT = 34, MYB = 58, MF = 34;             // márgenes (agente: lados/arriba/abajo; archivo)
-    const LEG = { w: 280, h: 52 };                           // zona de la leyenda (abajo-izq): keep-out
+    const SC = Math.max(0.8, Math.min(1.7, R / 470));
+    const REST = 118 * SC;
+    const AR = 18, FR = 6;
+    const MXA = 76, MYT = 34, MYB = 58, MF = 34;
+    const LEG = { w: 300, h: 52 };
     const seed = (id, fx, fy) => {
       const p = _mapaPos[id];
-      return p ? { x: p.x, y: p.y } : { x: fx, y: fy };      // arranca de la posición previa si existe
+      return p ? { x: p.x, y: p.y } : { x: fx, y: fy };
     };
 
     const nodos = [
@@ -751,7 +1485,7 @@
         const dx = b.x - a.x, dy = b.y - a.y, d = Math.max(Math.hypot(dx, dy), 1);
         const f = (d - REST) * 0.022; a.vx += dx / d * f; a.vy += dy / d * f; b.vx -= dx / d * f; b.vy -= dy / d * f;
       }
-      for (const n of nodos) for (const m of nodos) {              // colisión (separación mínima)
+      for (const n of nodos) for (const m of nodos) {
         if (n === m) continue;
         const dx = n.x - m.x, dy = n.y - m.y, d = Math.hypot(dx, dy);
         const min = n.tipo === 'agente' && m.tipo === 'agente' ? AR * 2 + 62
@@ -768,7 +1502,6 @@
       }
     }
 
-    // Lado del label de archivo (arriba/abajo), fijado UNA vez para no oscilar.
     for (const n of nodos) if (n.tipo === 'archivo') n.up = n.y < H * 0.5;
     const clamp = (n) => {
       const mx = n.tipo === 'agente' ? MXA : MF, myT = n.tipo === 'agente' ? MYT : MF, myB = n.tipo === 'agente' ? MYB : MF;
@@ -781,7 +1514,7 @@
       const cy = isA ? n.y + AR + 21 : (n.up ? n.y - 16 : n.y + 16);
       return { x: n.x - w / 2, y: cy - h / 2, w, h, n };
     };
-    for (let it = 0; it < 80; it++) {                             // declutter de etiquetas
+    for (let it = 0; it < 80; it++) {
       const bx = nodos.map(lblBox); let movido = false;
       for (let i = 0; i < bx.length; i++) for (let j = i + 1; j < bx.length; j++) {
         const a = bx[i], b = bx[j];
@@ -795,11 +1528,10 @@
       for (const n of nodos) clamp(n);
       if (!movido) break;
     }
-    _mapaPos = {};                                               // persistir para el próximo render
+    _mapaPos = {};
     for (const n of nodos) _mapaPos[n.id] = { x: n.x, y: n.y };
 
-    const stateCol = { trabajando: 'var(--ob-run)', idle: 'var(--ob-fg-4)' };
-    const P = (e) => {                                           // conector curvo agente→archivo
+    const P = (e) => {
       const ax = e.a.x, ay = e.a.y, bx = e.b.x, by = e.b.y;
       const mx = (ax + bx) / 2, my = (ay + by) / 2, dx = bx - ax, dy = by - ay, len = Math.hypot(dx, dy) || 1;
       const off = Math.min(38, len * 0.16), cx = mx - dy / len * off, cy = my + dx / len * off;
@@ -809,17 +1541,6 @@
     cuerpo.innerHTML = `
       <div class="mem-live-mapa">
         <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
-          <defs>
-            <radialGradient id="mem-amb" cx="50%" cy="40%" r="72%">
-              <stop offset="0%" stop-color="var(--ob-accent)" stop-opacity="0.11"/>
-              <stop offset="55%" stop-color="var(--ob-accent)" stop-opacity="0.03"/>
-              <stop offset="100%" stop-color="transparent"/>
-            </radialGradient>
-            <filter id="mem-softglow" x="-150%" y="-150%" width="400%" height="400%">
-              <feGaussianBlur stdDeviation="8"/>
-            </filter>
-          </defs>
-          <rect x="0" y="0" width="${W}" height="${H}" fill="url(#mem-amb)"/>
           <g class="mem-live-aristas">
             ${aristas.map(e => `<path class="mem-live-arista ${e.clase} ${e.activa ? 'activa' : ''}" d="${P(e)}"
                 style="--w:${Math.min(3, 1 + (e.writes || 0) * 0.5)}px"/>`).join('')}
@@ -828,16 +1549,16 @@
             ${nodos.filter(n => n.tipo === 'archivo').map(n => `
               <g class="mem-live-narchivo ${flashes.has(n.path) ? 'flash' : ''}" transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})">
                 <circle class="halo" r="11"/><circle class="dot" r="4.5"/>
-                <text class="lbl" y="${n.up ? -11 : 16}" dominant-baseline="${n.up ? 'auto' : 'hanging'}">${esc(n.label.slice(0, 26))}</text>
+                <text class="lbl" y="${n.up ? -11 : 16}" dominant-baseline="${n.up ? 'auto' : 'hanging'}" data-i18n-skip>${esc(n.label.slice(0, 26))}</text>
               </g>`).join('')}
             ${nodos.filter(n => n.tipo === 'agente').map(n => `
               <g class="mem-live-nagente" data-estado="${esc(n.estado)}" transform="translate(${n.x.toFixed(1)},${n.y.toFixed(1)})">
-                <circle class="aura" r="${AR + 9}" style="fill:${stateCol[n.estado] || 'var(--ob-fg-4)'}" filter="url(#mem-softglow)"/>
+                <circle class="aura" r="${AR + 12}"/>
                 <circle class="disco" r="${AR}"/>
-                <circle class="anillo" r="${AR}" style="stroke:${stateCol[n.estado] || 'var(--ob-line-3)'}"/>
-                <foreignObject x="-12" y="-12" width="24" height="24"><div class="lg" xmlns="http://www.w3.org/1999/xhtml">${window.cliLogo(n.tipo_ia, 19)}</div></foreignObject>
+                <circle class="anillo" r="${AR}"/>
+                <foreignObject x="-12" y="-12" width="24" height="24"><div class="lg" xmlns="http://www.w3.org/1999/xhtml">${window.cliLogo ? window.cliLogo(n.tipo_ia, 19) : ''}</div></foreignObject>
                 ${n.estado === 'trabajando' ? `<circle class="pip" r="3.6" cx="${(AR * 0.72).toFixed(1)}" cy="${(-AR * 0.72).toFixed(1)}"/>` : ''}
-                <text class="lbl" y="${AR + 15}">${esc(n.label)}</text>
+                <text class="lbl" y="${AR + 15}" data-i18n-skip>${esc(n.label)}</text>
               </g>`).join('')}
           </g>
         </svg>
@@ -846,23 +1567,24 @@
           <span><i class="ln read"></i>lee</span>
           <span><i class="ln pendiente"></i>permiso</span>
           <span><i class="ln denegada"></i>conflicto</span>
-          <span><i class="lock">🔒</i>dueño</span>
+          <span>${LOCK}dueño</span>
         </div>
       </div>`;
   }
 
-  /* ── API pública ───────────────────────────────────────────── */
+  /* ══ API pública ═════════════════════════════════════════════════ */
   window.JarvisMemory = {
     init(projectId) {
       _projectId = projectId;
-      // El disparador ahora vive en JarvisSettings (sección Memoria) — el
-      // botón #btn-memory del header viejo fue eliminado.
+      // El disparador vive en JarvisSettings (sección Memoria).
     },
     onProjectChanged(projectId) {
       _projectId = projectId;
-      _memorias = []; _edges = []; _slugAbierta = null;
-      _liveEstado = null; _mapaPos = {}; clearTimeout(_liveTimer);
-      clearInterval(_grafTimer); _grafTimer = null; _core = null;
+      _memorias = []; _edges = []; _salud = null; _uso = { eventos: [], conteo: {} };
+      _slugAbierta = null; _modo = 'ver'; _leyendo = false;
+      _cats = []; _query = ''; _estado = 'todas'; _saludFiltro = null;
+      _liveEstado = null; _mapaPos = {}; _grafPos = {}; _grafT = null;
+      _pararGrafo(); _pararLive();
     },
     abrir,
     onLiveEvent,
