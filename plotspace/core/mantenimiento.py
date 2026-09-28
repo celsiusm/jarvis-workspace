@@ -2,8 +2,7 @@
 JARVIS — Mantenimiento del estado local.
 
 Antes no había NINGUNA herramienta para limpiar estado viejo, así que se
-acumulaba: task_events sin techo, workflows 'running' de semanas atrás
-reviviendo monitores en cada boot, sesiones tmux huérfanas (sin terminal en
+acumulaba: task_events sin techo y sesiones tmux huérfanas (sin terminal en
 DB). Esto junta esas limpiezas en una pasada segura, disparable a mano desde
 la UI (POST /api/workspace/mantenimiento).
 
@@ -17,7 +16,7 @@ import shutil
 import sqlite3
 import subprocess
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from plotspace.core.database import get_db
 from plotspace.core.terminal_backend import backend
@@ -25,7 +24,6 @@ from plotspace.core.terminal_backend import backend
 # Solo sesiones de card (jarvis_<id>). El mobile preview u otras sesiones con
 # otro nombre NO matchean y por lo tanto nunca se las considera huérfanas.
 _SESION_RE = re.compile(r'^jarvis_(\d+)$')
-_STALE_HORAS = 12
 
 # Logs por-terminal (.workspace/logs/terminal_<id>_<nombre>.log[.1]): crecían sin
 # techo (790MB medidos) porque la rotación de 5MB acota cada log VIVO pero los de
@@ -365,14 +363,13 @@ def ejecutar_mantenimiento(keep_eventos: int = 5000) -> dict:
     limpiado. Cada paso es defensivo: un fallo no aborta los demás."""
     resumen = {
         'task_events_purgados':   0,
-        'workflows_stale':        0,
         'tmux_huerfanas_matadas': 0,
         'logs_borrados':          0,
         'bytes_liberados':        0,
         'vacuum':                 False,
     }
 
-    # ── DB: purga de task_events + workflows zombie por edad ──────────────────
+    # ── DB: purga de task_events ─────────────────────────────────────────────
     ids_db: set = set()
     db_ok = False
     try:
@@ -387,14 +384,6 @@ def ejecutar_mantenimiento(keep_eventos: int = 5000) -> dict:
             )
             despues = cur.execute('SELECT COUNT(*) FROM task_events').fetchone()[0]
             resumen['task_events_purgados'] = max(0, antes - despues)
-
-            limite = (datetime.now() - timedelta(hours=_STALE_HORAS)).isoformat()
-            r = cur.execute(
-                "UPDATE workflows SET estado = 'error' "
-                "WHERE estado IN ('running', 'paused') AND created_at < ?",
-                (limite,)
-            )
-            resumen['workflows_stale'] = r.rowcount if r.rowcount and r.rowcount > 0 else 0
 
             ids_db = {row['id'] for row in cur.execute('SELECT id FROM terminals').fetchall()}
             conn.commit()
@@ -489,7 +478,7 @@ def mantener_memorias() -> dict:
             print(f'[mantenimiento] memoria: INDEX de {ruta} falló: {e}')
         # Bloque siempre-cargado de lecciones: se recompila acá (determinista
         # desde las memorias [leccion] + destilado si existe) para que refleje
-        # lo que el enjambre escribió, haya workflows o no. Compare-before-write.
+        # lo que el enjambre escribió. Compare-before-write.
         try:
             inyectar_lecciones(ruta)
         except Exception as e:

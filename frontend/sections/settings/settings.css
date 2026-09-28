@@ -1167,35 +1167,7 @@
 .mk-i { display: flex; align-items: center; gap: 16px; padding: 10px 0; border-bottom: 1px dashed color-mix(in oklch, var(--ob-line-1) 55%, transparent); }
 .mk-i:last-child { border-bottom: 0; }
 
-/* ─────────────────────────────────────────────────────────────
-   7 · WORKFLOWS — línea de tiempo
-   ───────────────────────────────────────────────────────────── */
-.wf { display: flex; flex-direction: column; }
-.wf-i { padding: 15px 0; border-bottom: 1px solid color-mix(in oklch, var(--ob-line-1) 60%, transparent); }
-.wf-i:last-child { border-bottom: 0; }
-.wf-h { display: flex; align-items: center; gap: 11px; }
-.wf-h b { font: 500 13px var(--font-ui); color: var(--ob-fg-0); }
-.wf-d { margin-left: auto; font-size: 11px; }
-.wf-o { margin: 7px 0 0; max-width: 72ch; font: 400 12px/1.55 var(--font-ui); color: var(--ob-fg-3); }
-.wf-track { display: flex; align-items: center; gap: 4px; margin-top: 11px; }
-.wf-track i {
-  display: block; width: 22px; height: 4px;
-  border-radius: 99px;
-  background: color-mix(in oklch, var(--ob-fg-4) 22%, transparent);
-}
-.wf-track i.ok { background: var(--ob-run); }
-.wf-track i.now { background: var(--ob-work); animation: wf-now 1.6s var(--ease-in-out) infinite; }
-@keyframes wf-now { 50% { opacity: .35; } }
-.wf-n { margin-left: 8px; font-size: 11px; }
-.wf-demo { opacity: .62; padding-top: 0; }
-.wf-leg { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 14px; font: 400 11.5px var(--font-ui); color: var(--ob-fg-3); }
-.wf-leg span { display: inline-flex; align-items: center; gap: 7px; }
-.wf-leg i { display: block; width: 16px; height: 4px; border-radius: 99px; background: color-mix(in oklch, var(--ob-fg-4) 22%, transparent); }
-.wf-leg i.ok { background: var(--ob-run); }
-.wf-leg i.now { background: var(--ob-work); }
-
 @media (prefers-reduced-motion: reduce) {
-  .wf-track i.now { animation: none; }
   .ap-t { transition: box-shadow var(--dur-1) var(--ease-out); }
 }
 

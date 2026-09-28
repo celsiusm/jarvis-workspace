@@ -1,12 +1,10 @@
 """
-Test: enviar_prompt + reuso de terminales + estado vivo (Etapa 3 del rework).
+Test: enviar_prompt + estado vivo de las terminales.
 
-El agujero que cierra: el orquestador VEÍA las terminales abiertas pero no
-tenía manos — ninguna action permitía mandarle un prompt a una existente, y
-los workflows spawneaban SIEMPRE terminales nuevas (la instrucción "reusá
-terminales" del prompt era letra muerta). Acá se fija el contrato de:
+El agujero que cerró: el orquestador VEÍA las terminales abiertas pero no
+tenía manos — ninguna action permitía mandarle un prompt a una existente.
+Acá se fija el contrato de:
   - la action `enviar_prompt` en el tool schema + su guarda pura
-  - `_terminal_reusable` (pasos de workflow con terminal_id opcional)
   - el bloque [Estado actual] de core/orq_contexto (estado vivo + dueños)
 """
 import os
@@ -16,7 +14,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from plotspace.routers.orchestrator import (
     RESPONDER_SCHEMA,
-    _terminal_reusable,
     _validar_enviar_prompt,
 )
 
@@ -32,12 +29,6 @@ def test_schema_incluye_enviar_prompt():
     assert 'prompt' in _props_action()
 
 
-def test_schema_paso_acepta_terminal_id():
-    paso = (RESPONDER_SCHEMA['properties']['workflow']
-            ['properties']['pasos']['items']['properties'])
-    assert 'terminal_id' in paso
-
-
 # ─── Guarda de enviar_prompt ─────────────────────────────────────────────────
 
 ACTIVAS = {10, 11, 12}
@@ -46,50 +37,30 @@ ACTIVAS = {10, 11, 12}
 def test_envio_valido():
     tid, motivo = _validar_enviar_prompt(
         {'type': 'enviar_prompt', 'terminal_id': 11, 'prompt': 'mejorá el diseño'},
-        ACTIVAS, ocupadas=set())
+        ACTIVAS)
     assert tid == 11 and motivo is None
 
 
 def test_envio_terminal_id_como_string_numerico():
     tid, motivo = _validar_enviar_prompt(
-        {'terminal_id': '12', 'prompt': 'x'}, ACTIVAS, set())
+        {'terminal_id': '12', 'prompt': 'x'}, ACTIVAS)
     assert tid == 12 and motivo is None
 
 
 def test_envio_sin_terminal_id():
-    tid, motivo = _validar_enviar_prompt({'prompt': 'x'}, ACTIVAS, set())
+    tid, motivo = _validar_enviar_prompt({'prompt': 'x'}, ACTIVAS)
     assert tid is None and motivo
 
 
 def test_envio_sin_prompt():
-    tid, motivo = _validar_enviar_prompt({'terminal_id': 11}, ACTIVAS, set())
+    tid, motivo = _validar_enviar_prompt({'terminal_id': 11}, ACTIVAS)
     assert tid is None and 'prompt' in motivo
 
 
 def test_envio_a_terminal_inexistente():
     tid, motivo = _validar_enviar_prompt(
-        {'terminal_id': 99, 'prompt': 'x'}, ACTIVAS, set())
+        {'terminal_id': 99, 'prompt': 'x'}, ACTIVAS)
     assert tid is None and '99' in motivo
-
-
-def test_envio_a_terminal_ocupada_en_workflow():
-    tid, motivo = _validar_enviar_prompt(
-        {'terminal_id': 11, 'prompt': 'x'}, ACTIVAS, ocupadas={11})
-    assert tid is None and 'ocupada' in motivo
-
-
-# ─── Reuso de terminales en pasos de workflow ────────────────────────────────
-
-def test_reusable_libre():
-    assert _terminal_reusable(11, ACTIVAS, ocupadas=set(), reclamadas=set())
-
-
-def test_no_reusable():
-    assert not _terminal_reusable(None, ACTIVAS, set(), set())
-    assert not _terminal_reusable(99, ACTIVAS, set(), set())          # no activa
-    assert not _terminal_reusable(11, ACTIVAS, {11}, set())           # ocupada
-    assert not _terminal_reusable(11, ACTIVAS, set(), {11})           # ya reclamada por otro paso
-    assert not _terminal_reusable('11', ACTIVAS, set(), set())        # tipo raro: spawn normal
 
 
 # ─── Estado enriquecido (núcleo puro) ────────────────────────────────────────
@@ -123,12 +94,12 @@ def test_estado_muestra_fase_viva():
     assert 'quieta' in _bloque_de(txt, 11)
 
 
-def test_estado_muestra_rol_de_workflow_y_libre():
-    txt = _estado({10: {'fase': 'idle', 'rol': {'workflow': 'Notas', 'agente': 'Backend',
-                                                'estado': 'running'},
-                        'paso_activo': {'estado': 'running'}},
+def test_estado_muestra_origen_jarvis_y_libre():
+    txt = _estado({10: {'fase': 'trabajando',
+                        'origen': {'origen': 'jarvis', 'orquestacion': 'módulo de notas'}},
                    11: {'fase': 'idle'}})
-    assert "rol: 'Backend' del workflow 'Notas' (paso running)" in _bloque_de(txt, 10)
+    assert 'lanzada por Jarvis para: módulo de notas' in _bloque_de(txt, 10)
+    assert 'ocupada' in _bloque_de(txt, 10)
     assert 'LIBRE' in _bloque_de(txt, 11)
     assert 'libres: #11 Claude Code #2' in txt
 
@@ -146,7 +117,7 @@ def test_estado_sin_terminales():
     assert formatear_bloque_terminales([], {}) == 'No hay terminales activas.'
 
 
-# ─── Guardas con estado VIVO (no solo pasos running) ──────────────────────────
+# ─── Guardas con estado VIVO ─────────────────────────────────────────────────
 
 from plotspace.routers.orchestrator import (  # noqa: E402
     _cierre_prompt_directo, _motivo_rechazo_envio,

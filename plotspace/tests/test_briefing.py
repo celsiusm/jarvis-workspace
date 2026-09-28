@@ -4,7 +4,7 @@
 EL PROBLEMA QUE RESUELVE
 `jv estado` tiene el dato fresco y completo, pero es PULL: el agente tiene que
 acordarse de correrlo, y no se acuerda. La única entrega garantizada de contexto
-(`bloque_pendientes_para_tarea`) solo corre en modo workflow, y el trabajo real
+(`bloque_pendientes_para_tarea`) solo corre cuando Jarvis entrega una tarea, y el trabajo real
 de este repo es en terminales directas — ahí no había ningún momento en el que
 el sistema garantizara que el agente sabe con quién está trabajando.
 

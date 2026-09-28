@@ -161,9 +161,9 @@ def test_inyectar_sin_lecciones_es_noop():
 
 
 # ─── Compilación determinista desde memorias [leccion] (cero API) ────────────
-# task_events puede estar VACÍA (el enjambre trabaja fuera de workflows), pero
+# task_events puede estar VACÍA (el enjambre trabaja en terminales directas), pero
 # los agentes SÍ escriben lecciones como memorias. Esa mitad del bloque
-# siempre-cargado no depende de la API ni de que haya workflows.
+# siempre-cargado no depende de la API ni de que haya cierres registrados.
 
 def _leccion(d, slug, resumen='', cuerpo='cuerpo de la lección',
              tags='leccion, git', estado='vigente', actualizado='2026-07-10'):

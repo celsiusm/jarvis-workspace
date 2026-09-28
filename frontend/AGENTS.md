@@ -80,7 +80,7 @@ Every new visible text needs its entry — with English on, nothing may stay in 
 - The engine never sees: xterm content (`term.write`), `.monaco-editor`, textarea
   content, canvas, `[data-i18n-skip]`, `document.title`, OS notifications, TTS, text
   sent to the backend. There, call `JarvisI18n.t('frase {x}').replace('{x}', v)`.
-- Text born on the SERVER and shown as-is (chat notices, workflow close, orchestrator
+- Text born on the SERVER and shown as-is (chat notices, orchestrator
   reply) is localized there with `plotspace.core.idioma_ui.L(es, en)`; the frontend
   reports the UI language via presence and each chat request. Plain error `detail`s
   just need a dict entry.

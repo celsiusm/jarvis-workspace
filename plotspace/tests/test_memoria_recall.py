@@ -108,27 +108,27 @@ def test_bloque_vacio_sin_relevantes():
         assert bloque_relevantes('/ruta/inexistente', ['a.py'], 'x') == ''
 
 
-# ─── Integración: el engine inyecta el bloque al prompt del paso ─────────────
+# ─── Integración: el bloque viaja en la tarea del agente ─────────────────────
 
-def test_tarea_engine_inyecta_memorias():
-    from plotspace.routers.orchestrator import _tarea_engine_para_terminal
+def test_tarea_del_agente_inyecta_memorias():
+    from plotspace.routers.orchestrator import _tarea_para_agente
     with tempfile.TemporaryDirectory() as d:
         _mem(d, 'gotcha-preview', 'Ojo con `frontend/sections/preview/preview.js`.')
-        paso = {'tarea': 'Ajustá el preview.', 'archivos': ['frontend/sections/preview/preview.js'],
-                'rol': 'builder'}
-        tarea = _tarea_engine_para_terminal(paso, 7, project_ruta=d)
+        tarea = _tarea_para_agente('Ajustá el preview.',
+                                   ['frontend/sections/preview/preview.js'], 7, project_ruta=d)
         assert '.jarvis/memory/gotcha-preview.md' in tarea
-        assert 'CIERRE ESTRUCTURADO' in tarea        # el bloque sentinel sigue
+        assert '.jarvis/signals/terminal_7.json' in tarea     # el cierre sentinel sigue
 
-        # sin ruta de proyecto (reasignación legacy): degrada sin bloque, sin romper
-        tarea2 = _tarea_engine_para_terminal(paso, 7)
+        # sin ruta de proyecto: degrada sin bloque, sin romper
+        tarea2 = _tarea_para_agente('Ajustá el preview.',
+                                    ['frontend/sections/preview/preview.js'], 7)
         assert 'MEMORIAS DEL PROYECTO' not in tarea2
         assert 'gotcha-preview.md' not in tarea2
-        assert 'CIERRE ESTRUCTURADO' in tarea2
+        assert '.jarvis/signals/terminal_7.json' in tarea2
 
 
 def test_planning_recibe_memoria_relevante_al_pedido():
-    """El orquestador que DISEÑA workflows planea con las memorias relevantes
+    """El orquestador que PLANIFICA agentes lo hace con las memorias relevantes
     al pedido — para que las tareas nazcan esquivando los errores conocidos."""
     from plotspace.routers.orchestrator import _bloque_memoria_para_orden
     with tempfile.TemporaryDirectory() as d:
@@ -147,18 +147,6 @@ def test_planning_sin_memoria_no_agrega_bloque():
         assert _bloque_memoria_para_orden(d, 'construí un login con OAuth') == ''
         # ruta inexistente degrada sin romper
         assert _bloque_memoria_para_orden('/no/existe', 'cualquier cosa') == ''
-
-
-def test_reviewer_recibe_union_de_archivos():
-    from plotspace.routers.orchestrator import _tarea_engine_para_terminal
-    with tempfile.TemporaryDirectory() as d:
-        _mem(d, 'gotcha-voice', 'Cuidado con `plotspace/routers/voice.py`.')
-        pasos = [
-            {'tarea': 'x', 'archivos': ['plotspace/routers/voice.py'], 'rol': 'builder'},
-            {'tarea': 'sos el reviewer', 'archivos': [], 'rol': 'reviewer'},
-        ]
-        tarea = _tarea_engine_para_terminal(pasos[1], 9, project_ruta=d, pasos_workflow=pasos)
-        assert '.jarvis/memory/gotcha-voice.md' in tarea
 
 
 # ─── BM25 sobre los cuerpos: encuentra por contenido, no solo título/ruta ────

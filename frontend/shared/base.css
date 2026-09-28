@@ -484,7 +484,7 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 /* Contador de terminales — píldora neutra; verde estático cuando trabaja (mock .ct) */
 .sb-row-count { display: inline-flex; align-items: center; justify-content: center; flex: none;
   font: 600 11px var(--font-mono); font-feature-settings: "tnum"; padding: 2px 7px; border-radius: 6px;
-  background: color-mix(in oklch, var(--ob-fg-0) 5%, transparent); color: var(--sb-fg-3);
+  background: color-mix(in oklch, var(--ob-fg-0) 5%, transparent); color: var(--sb-fg-2);
   border: 1px solid color-mix(in oklch, var(--ob-line-1) 55%, transparent); }
 .sb-row.status-work .sb-row-count, .sb-row.status-run .sb-row-count {
   color: var(--ob-run); border-color: color-mix(in oklch, var(--ob-run) 26%, transparent);
@@ -813,18 +813,23 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 .tea-card kbd, .jww-cta kbd {
   flex: 0 0 auto; padding: 4px 9px; border-radius: 6px;
   font: 600 10px var(--font-mono); letter-spacing: 0.08em; text-transform: uppercase;
-  color: var(--ob-fg-3);
-  background: linear-gradient(180deg, oklch(27% 0.022 300), oklch(21% 0.02 300));
-  border: 1px solid oklch(36% 0.025 300);
-  box-shadow: inset 0 1px 0 oklch(100% 0 0/.10), 0 2px 0 oklch(11% 0.012 300),
-    0 3px 6px -2px oklch(0% 0 0/.5);
+  /* Todo por tokens: con fondo fijo oscuro, en los temas CLAROS quedaba una
+     tecla negra con texto gris (2.5:1). La cornisa se oscurece desde el fondo
+     del tema, así el relieve se lee igual en oscuros y claros. */
+  color: var(--ob-fg-2);
+  background: linear-gradient(180deg, var(--ob-bg-4), var(--ob-bg-3));
+  border: 1px solid var(--ob-line-2);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0/.10),
+    0 2px 0 color-mix(in oklch, var(--ob-line-2), oklch(0% 0 0) 35%),
+    0 3px 6px -2px oklch(0% 0 0/.25);
   transition: color var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out),
               transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 .tea-card:hover kbd {
   color: var(--ob-accent-fg); border-color: var(--ob-accent-24); transform: translateY(-1px);
-  box-shadow: inset 0 1px 0 oklch(100% 0 0/.12), 0 3px 0 oklch(11% 0.012 300),
-    0 4px 8px -2px oklch(0% 0 0/.5);
+  box-shadow: inset 0 1px 0 oklch(100% 0 0/.12),
+    0 3px 0 color-mix(in oklch, var(--ob-line-2), oklch(0% 0 0) 35%),
+    0 4px 8px -2px oklch(0% 0 0/.3);
 }
 .tea-card kbd.tea-k-ico { padding: 5px 8px; }
 .tea-card kbd.tea-k-ico svg { width: 10px; height: 10px; display: block; }
@@ -832,9 +837,9 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 /* susurro de voz — mientras dictás sube de susurro a señal (--vf-i) */
 .tea-voice { display: flex; align-items: center; gap: 8px; margin-top: 30px;
   font: 400 var(--text-xs) var(--font-ui);
-  color: color-mix(in oklch, var(--ob-fg-4), var(--ob-fg-1) calc(var(--vf-i, 0) * 100%)); }
+  color: color-mix(in oklch, var(--ob-fg-3), var(--ob-fg-1) calc(var(--vf-i, 0) * 100%)); }
 .tea-voice svg { width: 12px; height: 12px; color: currentColor; }
-.tea-voice b { color: var(--ob-fg-3); font-weight: 600; }
+.tea-voice b { color: var(--ob-fg-1); font-weight: 600; }
 .tea-vdot { width: 4px; height: 4px; border-radius: 50%; background: var(--ob-info);
   box-shadow: 0 0 8px var(--tea-info-30); animation: tea-vbeat 3s var(--ease-in-out) infinite;
   scale: calc(1 + var(--vf-i, 0) * 1.1); }
@@ -1214,7 +1219,7 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 /* Brillo líquido que barre lento y sutil — SOLO cuando el agente TRABAJA (es la
    "señal de vida"; idle/terminado quedan con el vidrio estático). Pedido del
    usuario 2026-07-06. La clase .t-trabajando la togglea agent_watch en
-   workspace.js; :has(.t-status-thinking) cubre el mismo estado en workflows.
+   workspace.js; :has(.t-status-thinking) cubre el mismo estado vía el pip.
    Corre en el compositor y no repinta el canvas del xterm. */
 .terminal-chrome::after {
   content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none; z-index: 0;
@@ -1383,7 +1388,7 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
   transition: background 200ms ease, box-shadow 200ms ease;
 }
 /* Semántica de estados (veredicto Obsidian Glass):
-   idle     = INVISIBLE (sin workflow no hay nada que señalar — un punto gris
+   idle     = INVISIBLE (sin actividad no hay nada que señalar — un punto gris
               permanente lee como elemento muerto; visibility preserva el ancho
               para que los botones del chrome no salten al aparecer)
    thinking = VIOLETA que respira (el agente trabaja — la "señal de vida")
@@ -2072,19 +2077,6 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
    eran todos placeholders dummy que nunca se actualizaban — el shell adentro
    ya muestra branch en su prompt). */
 
-/* ═══════════════════════════════════════════════════════════════
-   EXECUTION PLAN — wrapper de la workflow card en el chat.
-   El contenido real es la .orch-action-card premium (orchestrator.css);
-   la card legacy .ep-* fue eliminada (emojis + hex inline).
-═══════════════════════════════════════════════════════════════ */
-
-.execution-plan {
-  overflow-y: auto;
-  max-height: 280px;
-  margin:     2px 0;
-  animation:  ob-pop-in var(--dur-2) var(--ease-out);
-}
-
 /* ═══════════════════════════════════════════════════════════════════
    PANELES TOGGLEABLES (Editor / Orquestador)
 ═══════════════════════════════════════════════════════════════════ */
@@ -2155,7 +2147,7 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 .btn-danger:hover { background: var(--ob-err-08); }
 
 /* ═══════════════════════════════════════════════════════════════════
-   MODALES: historial / workflows / tmux
+   MODALES: historial / tmux
 ═══════════════════════════════════════════════════════════════════ */
 
 .hist-lista {

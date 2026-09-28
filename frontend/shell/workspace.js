@@ -424,6 +424,14 @@ let _bootIdServer = null;    // boot_id del server al cargar la página (FE Watc
 const _faseTerminales = {};
 
 let _wsAvisoTope = false;   // ya avisamos del tope global (1013) en esta ráfaga
+// Eventos WS que cambian el estado de algún agente → el monitor en vivo de la
+// pestaña Tasks (window.JarvisTasks.onAgentEvent) se refresca.
+const _EVENTOS_AGENTES = new Set([
+  'agente_termino', 'agente_espera', 'agente_trabajando', 'task_event',
+  'cuenta_rotada', 'limite_sin_cuenta', 'dev_server_detectado', 'dev_server_caido',
+  'live_update', 'agentes_update',
+]);
+
 function conectarEventosWs() {
   if (eventsWs) {
     // Soltar los handlers ANTES de cerrar: si no, el onclose del socket viejo
@@ -504,14 +512,20 @@ function conectarEventosWs() {
     }
     // Actividad de agentes → panel del preview móvil (solo visual, no altera
     // el comportamiento existente de estas ramas).
-    if (data.type === 'task_event' || data.type === 'workflow_update' || data.type === 'workflow_done') {
+    if (data.type === 'task_event') {
       window.MobilePreview?.onActividad?.(data);
+    }
+    // Monitor en vivo de agentes (pestaña Tasks): cualquier cambio de estado de
+    // un agente lo refresca. La pestaña levanta su propio badge.
+    if (_EVENTOS_AGENTES.has(data.type)) {
+      window.JarvisTasks?.onAgentEvent?.(data);
     }
 
     if (data.type === 'task_event') {
-      // Silenciado en el chat — el progreso se refleja solo en el execution plan card.
+      // Silenciado en el chat — el progreso se ve en el monitor de Tasks.
       // Sonido de notificación: el agente avisa que terminó (o que necesita atención).
-      sonarEventoTarea(data.event);
+      if (data.event === 'TASK_DONE') _sonarFinDedup(data.terminal_id);
+      else sonarEventoTarea(data.event);
       // Pip de estado de la card: keyword real del agente
       if (data.terminal_id != null) {
         if (data.event === 'TASK_DONE') {
@@ -527,43 +541,10 @@ function conectarEventosWs() {
       // La lista de proyectos cambió en el server (creado por CLI/API/otro
       // cliente/el orquestador): refrescar el sidebar en vivo, sin F5.
       cargarSidebar();
-    } else if (data.type === 'tasks_update') {
-      // El task board cambió en el server (crear/asignar/TASK_DONE)
-      window.JarvisTasks?.onTasksUpdate?.();
-      window.JarvisDock?.notify?.('tasks', 1);
-    } else if (data.type === 'workflow_update') {
-      // Actualiza la tarjeta — sin TTS
-      _actualizarWorkflowCard(data.workflow_id, data.pasos, data.paso_actual, data.estado);
-      // Proyección en vivo en el task board
-      window.JarvisTasks?.onWorkflowUpdate?.(data);
-      window.JarvisDock?.notify?.('tasks', 1);
-      // Pips de las terminales según el estado de cada paso del workflow
-      for (const paso of (data.pasos || [])) {
-        if (paso.terminal_id == null) continue;
-        const map = { running: 'thinking', done: 'watching', blocked: 'error', error: 'error' };
-        setTerminalStatus(paso.terminal_id, map[paso.estado] || 'idle');
-        // El paso arrancó → el agente trabaja: apagar el aura de esa card
-        if (map[paso.estado] === 'thinking') window.TerminalAura?.apagar?.(paso.terminal_id);
-      }
     } else if (data.type === 'orquestador_mensaje') {
       // Mensajes intermedios del orquestador — solo chat, sin TTS
       agregarMensajeChat('jarvis', data.message);
       window.JarvisDock?.notify?.('jarvis', 1);
-    } else if (data.type === 'workflow_done') {
-      // Finalización del workflow — chat + TTS
-      // Si hay preview_url, avisar en el chat + abrir pestaña (los localhost
-      // vivos quedan listados en el menú #jw-localhosts-btn de la barra).
-      if (data.preview_url) {
-        agregarMensajeChat('jarvis', `${data.message}\n\n[${_sbT('abrir preview')}](${data.preview_url})`);
-        try { window.open(data.preview_url, '_blank', 'noopener'); } catch {}
-      } else {
-        agregarMensajeChat('jarvis', data.message);
-      }
-      window.JarvisDock?.notify?.('jarvis', 1);
-      reproducirVoz(data.message).catch(() => {});
-      // El workflow terminó por completo: si había update esperando agentes,
-      // el banner "Actualizar ahora" puede salir ya (sin esperar el poll).
-      window.JarvisUpdater?.chequear?.();
     } else if (data.type === 'dev_server_detectado') {
       // "Menú-primero" (pedido del usuario 2026-07-12): un dev server / demo
       // detectado NO abre NUNCA una pestaña sola. Antes cada detección (este
@@ -595,7 +576,7 @@ function conectarEventosWs() {
       // "terminó todo", no el commit. Acorde ascendente.
       _faseTerminales[data.terminal_id] = 'quieto';
       document.getElementById(`terminal-card-${data.terminal_id}`)?.classList.remove('t-trabajando');
-      _sonarFinDedup();
+      _sonarFinDedup(data.terminal_id);
       window.TerminalAura?.notificar?.('agente_termino', data.terminal_id);
       window.JarvisNotify?.avisar?.({ tipo: 'termino', nombre: _nombreTerm(data.terminal_id), sonidoOn: sonidoTareas });
       // ¿Era el último agente ocupado? El banner del updater puede aparecer.
@@ -625,17 +606,6 @@ function conectarEventosWs() {
       toast(_sbT('{n} llegó al límite de uso: rotado de {de} a {a}.')
         .replace('{n}', _nombreTerm(data.terminal_id) || `Terminal ${data.terminal_id}`)
         .replace('{de}', data.de_label || '?').replace('{a}', data.a_label || '?'), 'info', 6000);
-    } else if (data.type === 'paso_estancado') {
-      // swarm_watchdog: un paso de workflow lleva >3 min sin cerrar y no se
-      // encontró TASK_* perdido (el agente murió o quedó en un prompt).
-      window.TerminalAura?.notificar?.('agente_espera', data.terminal_id);
-      toast(_sbT('Paso estancado: {n} lleva {m} min sin cerrar su tarea. Revisá su terminal.')
-        .replace('{n}', data.terminal_nombre || _nombreTerm(data.terminal_id) || `Terminal ${data.terminal_id}`)
-        .replace('{m}', Math.max(1, Math.round((data.edad_seg || 0) / 60))), 'warning', 9000);
-    } else if (data.type === 'paso_rescatado') {
-      toast(_sbT('Paso rescatado: {n} había cerrado con {kw} y no se había registrado.')
-        .replace('{n}', data.terminal_nombre || _nombreTerm(data.terminal_id) || `Terminal ${data.terminal_id}`)
-        .replace('{kw}', data.keyword || ''), 'info', 6000);
     } else if (data.type === 'agente_trabajando') {
       // El agente retomó actividad: el aura vieja ya no informa nada.
       _faseTerminales[data.terminal_id] = 'trabajando';
@@ -851,14 +821,22 @@ function sonarEventoTarea(event) {
 // agente asentado en su prompt idle) o el TASK_DONE del protocolo. NO suena en cada
 // commit: los agentes commitean muchas veces a mitad de tarea y eso disparaba falsos
 // "terminé" (pedido del usuario 2026-07-04). El de-dup deja una sola campanita por
-// ventana, por si la quietud y un TASK_DONE cercano coincidieran.
-let _ultimoSonidoFin = 0;
+// ventana POR TERMINAL (la quietud y un TASK_DONE cercano del MISMO agente
+// suenan una vez), pero cada CLI que termina tiene su campanita: antes la
+// ventana era global y de 3 agentes terminando juntos sonaba uno solo. Si
+// terminan a la vez, las campanitas se escalonan para no pisarse.
+const _ultimoSonidoFin = new Map();   // terminal_id → ts
 const _VENTANA_SONIDO_FIN = 8000;
-function _sonarFinDedup() {
+const _SEPARACION_SONIDOS = 650;
+let _proximoSonido = 0;
+function _sonarFinDedup(terminalId) {
   const ahora = Date.now();
-  if (ahora - _ultimoSonidoFin < _VENTANA_SONIDO_FIN) return false;
-  _ultimoSonidoFin = ahora;
-  sonarEventoTarea('TASK_DONE');
+  const clave = terminalId == null ? '?' : String(terminalId);
+  if (ahora - (_ultimoSonidoFin.get(clave) || 0) < _VENTANA_SONIDO_FIN) return false;
+  _ultimoSonidoFin.set(clave, ahora);
+  const cuando = Math.max(ahora, _proximoSonido);
+  _proximoSonido = cuando + _SEPARACION_SONIDOS;
+  setTimeout(() => sonarEventoTarea('TASK_DONE'), cuando - ahora);
   return true;
 }
 
@@ -889,73 +867,6 @@ window.JarvisSonido = {
     if (sonidoTareas) sonarEventoTarea('TASK_DONE');  // feedback al activar
   },
 };
-
-// ─── Workflow card en el chat ─────────────────────────────────────────────────
-
-function _renderWorkflowCard(wf) {
-  const p = _panel();
-  if (!p || !wf) return;
-
-  // Si ya existe una card para este workflow (ej. reconexión), actualizarla
-  const existing = p.findWorkflowCard(wf.id);
-  if (existing) {
-    _llenarWorkflowCard(existing, wf);
-    return;
-  }
-
-  const card = document.createElement('div');
-  card.className = 'execution-plan';
-  card.dataset.workflowId = wf.id;
-  _llenarWorkflowCard(card, wf);
-
-  // addWorkflowCard registra la card en panel._wfCards y la adjunta a $messages.
-  // La card sobrevive a setMessages() y cambios de proyecto.
-  p.addWorkflowCard(wf.id, card);
-}
-
-// Renderiza la workflow card usando el builder premium del OrchestratorPanel
-// (.orch-action-card: progress 2px violeta→cian, checks stroke-draw, spinner).
-// Antes acá vivía la card legacy .ep-* con emojis y hex inline — eliminada.
-function _llenarWorkflowCard(card, wf) {
-  const p = _panel();
-  if (!p) return;
-  const mapEstado = { done: 'done', running: 'running', blocked: 'blocked', error: 'error' };
-  const plan = {
-    title: wf.nombre || card.dataset.nombre || 'Workflow',
-    done:  wf.estado === 'done',
-    steps: (wf.pasos || []).map((paso, i) => ({
-      label:  paso.agente || `Paso ${i + 1}`,
-      status: mapEstado[paso.estado] || 'idle',
-      rol:    paso.rol || null,
-      target: (paso.tarea || '').replace(/Cuando termines.*$/i, '').trim().slice(0, 60),
-    })),
-  };
-  card.dataset.nombre = plan.title;
-  card.innerHTML = p._buildActionCard(plan);
-}
-
-function _actualizarWorkflowCard(workflowId, pasos, pasoActual, estado) {
-  const p = _panel();
-  // Buscar primero en el registro del panel (sobrevive a setMessages())
-  const card = p?.findWorkflowCard(workflowId);
-  if (!card) return;
-
-  const nombre = card.dataset.nombre || '';
-  _llenarWorkflowCard(card, { id: workflowId, nombre, pasos, paso_actual: pasoActual, estado });
-
-  if (estado === 'done') {
-    setTimeout(() => {
-      card.style.transition = 'opacity 0.8s ease, transform 0.8s ease';
-      card.style.opacity    = '0';
-      card.style.transform  = 'translateY(-4px)';
-      setTimeout(() => {
-        p.removeWorkflowCard(workflowId);
-      }, 850);
-    }, 3000);
-  }
-
-  if (p?.$messages && !p._userScrolled) p.$messages.scrollTop = p.$messages.scrollHeight;
-}
 
 // Limpia el chat del panel y restaura el historial del proyecto activo.
 function _restaurarChat() {
@@ -3478,17 +3389,13 @@ async function enviarMensaje(texto, imagenBase64 = null, mediaType = null) {
       else { (chatSesiones[pid] ||= []).push({ rol: 'jarvis', texto: data.response }); }
     }
 
-    // Acciones/terminales/workflow — SOLO si seguimos en el MISMO proyecto (si el usuario
+    // Acciones/terminales — SOLO si seguimos en el MISMO proyecto (si el usuario
     // navegó, el trabajo ya quedó hecho server-side para `pid` y se verá al volver allí).
     if (pid === projectId) {
       if (data.closed_all) cerrarTodasLasTerminales();
       if (data.created_terminals?.length) {
         for (const t of data.created_terminals) agregarTarjetaTerminal(t);
         actualizarVista();
-      }
-      if (data.workflow_card) {
-        _renderWorkflowCard(data.workflow_card);
-        await reproducirVoz('De acuerdo señor, me pongo a trabajar. Te aviso cuando esté listo.');
       }
     }
 
@@ -3518,7 +3425,7 @@ function _textoProgreso(ev) {
 }
 
 // POST /chat-stream + revela el 'message' token a token. Devuelve el evento 'done'
-// (response + actions + created_terminals + workflow_card), igual que /chat. Solo
+// (response + actions + created_terminals + closed_all), igual que /chat. Solo
 // LANZA (→ fallback) si falla ANTES de recibir cualquier evento; si el server ya
 // empezó a contestar, finaliza con lo que haya (reintentar por /chat repetiría
 // las acciones). Mientras espera muestra qué contexto recibió Jarvis y qué lee.
@@ -3587,7 +3494,7 @@ async function _chatStream(body, pid, signal) {
         done = ev;
       } else if (ev.type === 'error') {
         done = { response: acumulado || ('⚠ ' + _chatT(ev.detail || 'Error')), actions: [],
-                 created_terminals: [], closed_all: false, workflow_card: null };
+                 created_terminals: [], closed_all: false };
       }
     }
   }
@@ -3595,7 +3502,7 @@ async function _chatStream(body, pid, signal) {
   if (!done) {
     if (!recibido) throw new Error('stream vacío');   // → fallback
     done = { response: acumulado || ('⚠ ' + _sbT('La respuesta se cortó.')), actions: [],
-             created_terminals: [], closed_all: false, workflow_card: null };
+             created_terminals: [], closed_all: false };
   }
   mostrar(done.response || acumulado);   // texto final autoritativo
   (chatSesiones[pid] ||= []).push({ rol: 'jarvis', texto: done.response || acumulado });
@@ -4788,7 +4695,7 @@ window.togglePanel = (panel) => {
 };
 
 // ═══════════════════════════════════════════════════════════════════
-//  ORQUESTADOR — Historial, nuevo thread, export, workflows
+//  ORQUESTADOR — Historial, nuevo thread, export
 // ═══════════════════════════════════════════════════════════════════
 
 // thread_id del thread actual (se genera al cargar el proyecto)
@@ -4800,7 +4707,6 @@ window._orchOnHeaderAction = async (action) => {
     case 'history':       return abrirModalHistorial();
     case 'new-thread':    return nuevoThread();
     case 'export':        return exportarConversacion();
-    case 'workflows':     return window.JarvisSettings?.open('workflows');
     case 'clear-history': return limpiarHistorialCompleto();
   }
 };
@@ -4972,50 +4878,6 @@ function exportarConversacion() {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-
-// ─── Bridge: workflows del proyecto (reutilizable desde JarvisSettings) ─
-
-window.JarvisWorkflows = {
-  async render(cont) {
-    if (!cont) return;
-    cont.innerHTML = '<div class="hist-empty" aria-hidden="true"><div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div></div>';
-    try {
-      const res = await fetch(`/api/orchestrator/workflows/${projectId}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const wfs = await res.json();
-
-      if (wfs.length === 0) {
-        cont.innerHTML = '<div class="hist-empty">Sin workflows ejecutados todavía.</div>';
-        return;
-      }
-
-      cont.innerHTML = '';
-      for (const w of wfs) {
-        const fecha = w.created_at ? new Date(w.created_at).toLocaleString('es-AR', {
-          day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit',
-        }) : '—';
-        const estadoColor = {
-          running: 'var(--ob-work)', done: 'var(--ob-run)', failed: 'var(--ob-err)', pending: 'var(--ob-fg-3)',
-        }[w.estado] || 'var(--ob-fg-3)';
-        const el = document.createElement('div');
-        el.className = 'hist-item';
-        el.innerHTML = `
-          <div class="hist-item-text">
-            <div class="hist-item-preview">${esc(w.nombre)}</div>
-            <div class="hist-item-meta">
-              <span style="color:${estadoColor}">${icon('dot', 10)} ${esc(w.estado)}</span>
-              · ${w.paso_actual}/${w.total_pasos} pasos
-              · ${fecha}
-            </div>
-          </div>
-        `;
-        cont.appendChild(el);
-      }
-    } catch (err) {
-      cont.innerHTML = `<div class="hist-empty">Error: ${esc(err.message)}</div>`;
-    }
-  },
-};
 
 // El viejo "preview badge/pill" de la barra (● preview · :PUERTO) se eliminó:
 // los localhost vivos se ven y se cierran desde el menú #jw-localhosts-btn

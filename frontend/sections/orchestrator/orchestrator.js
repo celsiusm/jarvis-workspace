@@ -126,9 +126,6 @@ class OrchestratorPanel {
             <button class="orch-more-item" data-action="export" role="menuitem">
               <span>Exportar conversación</span>
             </button>
-            <button class="orch-more-item" data-action="workflows" role="menuitem">
-              <span>Ver workflows</span>
-            </button>
             <button class="orch-more-item" data-action="clear-history" role="menuitem">
               <span>Limpiar historial</span>
             </button>
@@ -206,7 +203,6 @@ class OrchestratorPanel {
     this.$net            = q('#orch-net');            // canvas de la constelación
     this.$messages       = q('#orch-messages');
     this.$textarea       = q('#orch-textarea');
-    this._wfCards        = new Map();
     this.$sendBtn        = q('#orch-send-btn');
     this.$mentionMenu    = q('#orch-mention-menu');
     this.$slashMenu      = q('#orch-slash-menu');
@@ -700,11 +696,9 @@ class OrchestratorPanel {
     this._renderMessages();
   }
 
-  // Limpia mensajes y workflow cards. Útil al iniciar un thread nuevo.
+  // Limpia los mensajes. Útil al iniciar un thread nuevo.
   clearMessages() {
     this.messages = [];
-    this._wfCards.forEach(card => card.remove());
-    this._wfCards.clear();
     this._renderMessages();
   }
 
@@ -716,38 +710,6 @@ class OrchestratorPanel {
       content:   m.content,
       timestamp: m.timestamp,
     }));
-  }
-
-  // Registra un elemento DOM como workflow card y lo adjunta a $messages.
-  // La card persiste en cambios de proyecto y llamadas a setMessages().
-  addWorkflowCard(id, el) {
-    this.$messages.querySelector('.orch-empty')?.remove();    // salir del hero
-    this._wfCards.set(String(id), el);
-    this.$messages.appendChild(el);
-    this._syncConv();
-    if (!this._userScrolled) {
-      requestAnimationFrame(() => {
-        this.$messages.scrollTop = this.$messages.scrollHeight;
-      });
-    }
-  }
-
-  // Devuelve el elemento DOM de una workflow card por su ID, o null.
-  findWorkflowCard(id) {
-    return this._wfCards.get(String(id)) ?? null;
-  }
-
-  // Elimina una workflow card del registro y del DOM.
-  removeWorkflowCard(id) {
-    const card = this._wfCards.get(String(id));
-    if (card) {
-      this._wfCards.delete(String(id));
-      card.remove();
-    }
-    // Si se vació todo, volver al hero.
-    if (this.messages.length === 0 && this._wfCards.size === 0
-        && !this.$messages.querySelector('.orch-empty')) this._renderMessages();
-    this._syncConv();
   }
 
   /* ══════════════════════════════════════════════════════════
@@ -766,8 +728,7 @@ class OrchestratorPanel {
     }
   }
 
-  // AGENTES en la telemetría = pasos de workflow corriendo/pendientes (agentes
-  // realmente trabajando). Se llama en cada cambio de mensajes.
+  // Se llama en cada cambio de mensajes.
   // data-conv sobre .orch-panel: '1' cuando hay conversación (la red se atenúa
   // para dar contraste al chat) · '0' en el hero (la red brilla plena).
   _syncConv() {
@@ -788,7 +749,6 @@ class OrchestratorPanel {
     return c === '¿Qué hacemos, señor?' || c === 'What shall we build, sir?';
   }
   _isHeroState() {
-    if (this._wfCards.size > 0) return false;
     if (this.messages.length === 0) return true;
     return this.messages.length === 1 && this._isWelcomeMsg(this.messages[0]);
   }
@@ -1043,7 +1003,7 @@ class OrchestratorPanel {
     this.$messages.innerHTML = '';
     this._syncConv();
 
-    // I1: empty state editorial cuando no hay mensajes y no hay workflow cards.
+    // I1: empty state editorial cuando no hay mensajes.
     // Muestra la mark "J" grande + una frase editorial — coherente con el home/sidebar.
     if (this._isHeroState()) {
       // Hero de la constelación: el saludo gigante pisa la red (el nodo central
@@ -1053,7 +1013,7 @@ class OrchestratorPanel {
       empty.innerHTML = `
         <span class="orch-eyebrow">Red de agentes</span>
         <h1 class="orch-greet">¿Qué hacemos, <span class="k">señor</span>?</h1>
-        <p class="orch-greet-sub">Sostené tu tecla de voz y hablá, o escribí abajo. Coordino agentes y ejecuto workflows por vos.</p>
+        <p class="orch-greet-sub">Sostené tu tecla de voz y hablá, o escribí abajo. Coordino agentes y les reparto el trabajo por vos.</p>
         <!-- Estado de voz: reemplaza al saludo mientras Jarvis escucha/piensa (concepto d4) -->
         <div class="orch-voice" aria-hidden="true">
           <span class="orch-voice-orbit"><i></i><i></i><i></i></span>
@@ -1086,9 +1046,6 @@ class OrchestratorPanel {
     this.$messages.appendChild(div);
 
     this.messages.forEach((m, idx) => this._appendMessage(m, idx));
-
-    // Re-adjuntar workflow cards que deben sobrevivir a limpiezas del chat
-    this._wfCards.forEach(card => this.$messages.appendChild(card));
 
     requestAnimationFrame(() => {
       this.$messages.scrollTop = this.$messages.scrollHeight;
@@ -1127,7 +1084,6 @@ class OrchestratorPanel {
       ? `<span class="orch-msg-badge">${orchEsc(msg.badge)}</span>`
       : '';
     const body    = orchParseContent(msg.content);
-    const card    = msg.actionPlan ? this._buildActionCard(msg.actionPlan) : '';
     const replies = (msg.quickReplies?.length)
       ? `<div class="orch-quick-replies" role="group" aria-label="Respuestas rápidas">
            ${msg.quickReplies.map(r => `
@@ -1153,94 +1109,8 @@ class OrchestratorPanel {
         </div>
       </div>
       <div class="orch-msg-body" data-i18n-skip>${body}</div>
-      ${card}
       ${replies}
     `;
-  }
-
-  _buildActionCard(plan) {
-    // Check con SVG stroke-draw (polyline animada de izquierda a derecha)
-    const checkDrawSVG = `
-      <svg class="orch-step-check" width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <polyline points="2.5,6 5,8.5 9.5,3.5"
-                  stroke-dasharray="14" stroke-dashoffset="0"/>
-      </svg>`;
-    const alertSVG = `
-      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-        <path d="M12 3.5L2.5 20h19L12 3.5zM12 10v4.5M12 17.5v.01"/>
-      </svg>`;
-    const xSVG = `
-      <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true">
-        <path d="M6 6l12 12M18 6L6 18"/>
-      </svg>`;
-
-    // Estados soportados: done | running | pending (legacy = en curso) |
-    // blocked | error | idle. El pip/ícono comunica por color+forma.
-    // Guard: el LLM podría mandar un actionPlan sin 'steps' válido → no romper el render.
-    const steps = Array.isArray(plan.steps) ? plan.steps : [];
-    const rows = steps.map(step => {
-      const status = step.status || 'idle';
-      let iconCls = 'orch-step-idle';
-      let iconInner = '';
-      if (status === 'done') {
-        iconCls   = 'orch-step-done';
-        iconInner = `<span style="color:var(--green)">${checkDrawSVG}</span>`;
-      } else if (status === 'running' || status === 'pending') {
-        iconCls = 'orch-step-running';
-      } else if (status === 'blocked') {
-        iconCls   = 'orch-step-blocked';
-        iconInner = `<span style="color:var(--amber)">${alertSVG}</span>`;
-      } else if (status === 'error') {
-        iconCls   = 'orch-step-error';
-        iconInner = `<span style="color:var(--rose)">${xSVG}</span>`;
-      }
-      const target = step.target
-        ? `<span class="orch-step-target"><mark>${orchEsc(step.target)}</mark></span>`
-        : '';
-      const rolPill = (step.rol && step.rol !== 'builder')
-        ? `<span class="orch-step-rol ${orchEsc(step.rol)}">${orchEsc(step.rol)}</span>` : '';
-      return `
-        <div class="orch-action-row" data-status="${orchEsc(status)}">
-          <div class="orch-step-icon ${iconCls}" aria-hidden="true">${iconInner}</div>
-          <span class="orch-step-label">${orchEsc(step.label)}</span>
-          ${rolPill}
-          ${target}
-        </div>`;
-    }).join('');
-
-    // Progress bar slim (2px) arriba del card: % de pasos done / total.
-    const totalSteps = steps.length || 1;
-    const doneSteps  = steps.filter(s => s.status === 'done').length;
-    const progressPct = Math.round((doneSteps / totalSteps) * 100);
-
-    // Ícono contextual del header (SVG stroke vía ui.js, heurística por título)
-    const iconCtx = (() => {
-      const t = (plan.title || '').toLowerCase();
-      const nombre = t.includes('test')                            ? 'check'
-                   : (t.includes('deploy') || t.includes('publish')) ? 'external-link'
-                   : (t.includes('search') || t.includes('busc'))    ? 'search'
-                   : 'zap';
-      return window.icon ? window.icon(nombre, 11) : '';
-    })();
-
-    // Barra final de completado (reemplaza el viejo '✅ completado' de la .ep-*)
-    const doneBar = plan.done
-      ? `<div class="orch-action-done"><span style="color:var(--green)">${checkDrawSVG}</span> completado</div>`
-      : '';
-
-    return `
-      <div class="orch-action-card" role="list" aria-label="${orchEsc(plan.title)}" data-progress="${progressPct}">
-        <div class="orch-action-progress" aria-hidden="true">
-          <div class="orch-action-progress-fill" style="width: ${progressPct}%"></div>
-        </div>
-        <div class="orch-action-head">
-          <span class="orch-action-icon" aria-hidden="true">${iconCtx}</span>
-          <span class="orch-action-title">${orchEsc(plan.title)}</span>
-          <span class="orch-action-pill">${doneSteps}/${steps.length} STEPS</span>
-        </div>
-        <div class="orch-action-rows">${rows}</div>
-        ${doneBar}
-      </div>`;
   }
 }
 
@@ -1269,7 +1139,7 @@ document.addEventListener('DOMContentLoaded', () => {
       window._orchOnStop?.();
     },
     onHeaderAction(action) {
-      // Bridge → workspace.js: 'history' | 'new-thread' | 'export' | 'workflows' | 'clear-history'
+      // Bridge → workspace.js: 'history' | 'new-thread' | 'export' | 'clear-history'
       window._orchOnHeaderAction?.(action);
     },
   });

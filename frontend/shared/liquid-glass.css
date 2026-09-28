@@ -213,11 +213,6 @@
 :root[data-glass="on"] :is(.orch-hero-chip, .orch-chip, .orch-composer-chip):hover {
   box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-glow);
 }
-:root[data-glass="on"] .orch-action-card {
-  background: var(--lg-gloss), var(--lg-body);
-  border-color: transparent;
-  box-shadow: var(--lg-ring), var(--lg-inset);
-}
 
 /* ── 9 · Tareas (kanban) ────────────────────────────────────── */
 :root[data-glass="on"] .tk-topbar,

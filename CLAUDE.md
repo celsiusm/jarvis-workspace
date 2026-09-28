@@ -62,9 +62,9 @@ No build step, no linter. Tests: pure Node suites (native assert, UMD `_pure` pa
 ## Fixed stack — don't change without asking
 - **Backend**: Python + FastAPI + uvicorn
 - **Frontend**: HTML + CSS + JS vanilla (no frameworks, no npm, no node); xterm.js 5.3 vendored in `frontend/vendor/xterm/`
-- **DB**: SQLite (`data/jarvis.db`, WAL); **12 tables** (created by `init_db`): `projects`, `terminals`, `workflows`, `task_events`, `tasks` (kanban), `project_skills`, `project_notes`, `orquestador_historial`, `orquestador_uso`, `cli_accounts`, `mailbox_msgs`, `memoria_uso`. The Web Builder tables (`wb_*`, `web_pages`, `wb_chats`, `wb_chat_mensajes`) are no longer created: if they're in your DB they're leftovers of the removed section.
+- **DB**: SQLite (`data/jarvis.db`, WAL); **10 tables** (created by `init_db`): `projects`, `terminals` (+ origin columns `origen`/`tarea`/`orquestacion`/`orquestacion_ts`), `task_events`, `project_skills`, `project_notes`, `orquestador_historial`, `orquestador_uso`, `cli_accounts`, `mailbox_msgs`, `memoria_uso`. The Web Builder tables (`wb_*`, `web_pages`, `wb_chats`, `wb_chat_mensajes`) are no longer created, nor are `workflows` and `tasks` (the workflow engine and the manual kanban were removed 2026-09-28): if they're in your DB they're leftovers.
 - **Terminals**: tmux sessions persistent (`jarvis_{terminal_id}`); attach WS via **tmux control-mode** with xterm.js as the only emulator (see tmux section)
-- **Orchestrator**: **SUBSCRIPTION** engine (`ORQUESTADOR_MOTOR=suscripcion`, default): `claude -p` headless with the active OAuth account (`core/orq_cli.py` — `--safe-mode`, stream-json, `--json-schema`, READ-only tools Read/Glob/Grep with cwd=project). Default model `sonnet` (`ORQUESTADOR_MODEL` overrides it). `ORQUESTADOR_MOTOR=api` = escape hatch with `ANTHROPIC_API_KEY` + haiku. Also: multi-turn chat (real history), `[Project map]` block (`core/repo_map.py`), `enviar_prompt` action to live terminals (`es_respuesta` answers a question on screen), reuse of free ones in steps (`terminal_id`) and **auto-intervention** on TASK_BLOCKED/ERROR. **Per-turn context = `core/orq_contexto.py`**: each terminal's live state (phase + for how long, waiting-for-answer, crashed CLI, task sent, files edited, last TASK_* + reason, dev servers, last lines of its pane), git (branch, uncommitted, last commits), the project's CLAUDE.md guide, active workflows step by step, events, kanban and coordination — each block with a size budget; `orq_contexto.es_libre()` is the ONLY definition of a free terminal (enforced in code for `enviar_prompt` and step reuse). The prompt goes to `claude -p` via **stdin** (argv caps at 128 KB).
+- **Orchestrator**: **SUBSCRIPTION** engine (`ORQUESTADOR_MOTOR=suscripcion`, default): `claude -p` headless with the active OAuth account (`core/orq_cli.py` — `--safe-mode`, stream-json, `--json-schema`, READ-only tools Read/Glob/Grep with cwd=project). Default model `sonnet` (`ORQUESTADOR_MODEL` overrides it). `ORQUESTADOR_MOTOR=api` = escape hatch with `ANTHROPIC_API_KEY` + haiku. Also: multi-turn chat (real history), `[Project map]` block (`core/repo_map.py`), `spawn_terminal` with `tarea` (launches an agent and hands it its task) and `enviar_prompt` to live free terminals (`es_respuesta` answers a question on screen). **Per-turn context = `core/orq_contexto.py`**: each terminal's live state (phase + for how long, waiting-for-answer, crashed CLI, task sent, files edited, last TASK_* + reason, dev servers, last lines of its pane), git (branch, uncommitted, last commits), the project's CLAUDE.md guide, events and coordination — each block with a size budget; `orq_contexto.es_libre()` is the ONLY definition of a free terminal (enforced in code for `enviar_prompt`). The prompt goes to `claude -p` via **stdin** (argv caps at 128 KB).
 - **STT**: `STT_MOTOR=groq` sends dictation to whisper-large-v3-turbo on Groq's LPUs (`core/stt_groq.py`; near-zero local CPU/RAM, ~1s, key in `plotspace/.env`, automatic fallback to the local engine if it fails). Local engine: parakeet-tdt-0.6b-v3 int8 (onnx-asr; `STT_MOTOR=whisper` goes back to faster-whisper `small`), on-demand load (PTT sends `/api/voice/prewarm` on press — no-op with Groq) and unloads itself after idle — never resident for fun. **The model lives in a WORKER process** (`core/stt_proc.py`; `STT_WORKER=off` = old in-proc): onnxruntime holds the GIL 5-20s when creating the session and loading it inside the server froze the whole event loop — that was the scroll freeze after "Update now". **TTS**: edge-tts, voice configurable in ⚙ → Voice.
 - **Platform**: Linux / WSL (Ubuntu); on Windows the engine runs inside WSL2 (see `docs/install/windows.md`) and project paths must live under the Linux filesystem; no native file picker (a web one is used).
 
@@ -73,7 +73,7 @@ No build step, no linter. Tests: pure Node suites (native assert, UMD `_pure` pa
 > **The native Windows app and the Rust engine were REMOVED by decision**: the workspace went back to 100% Linux (Python + uvicorn + tmux, the model that always was). Don't reintroduce `desktop/`, alternative terminal engines, or anything of the shell build circuit — if you need the historical detail it's in git and in the `estado: lapida` memories (category `desktop`).
 
 ### Folder structure
-- `plotspace/` — `main.py` (entrypoint), `core/` (domain: database, events, auth, ssrf, mantenimiento, control_mode, agent_live, agent_watch, dev_detect, fe_watch, mailbox, puertos, pane_capture, logs; orchestrator: orq_cli, orq_contexto, repo_map; swarm: swarm_watchdog, sentinel; cuentas: cli_accounts, cli_login, cuenta_watch; memoria: memoria_lint, memoria_recall, memoria_lecciones, memoria_categorias, memoria_global, memoria_endurecimiento), `routers/` (**17**, one per section), `tests/` (pytest + `__main__` scripts). See `plotspace/AGENTS.md`.
+- `plotspace/` — `main.py` (entrypoint), `core/` (domain: database, events, auth, ssrf, mantenimiento, control_mode, agent_live, agent_watch, dev_detect, fe_watch, mailbox, puertos, pane_capture, logs; orchestrator: orq_cli, orq_contexto, repo_map; swarm: sentinel; cuentas: cli_accounts, cli_login, cuenta_watch; memoria: memoria_lint, memoria_recall, memoria_lecciones, memoria_categorias, memoria_global, memoria_endurecimiento), `routers/` (**17**, one per section), `tests/` (pytest + `__main__` scripts). See `plotspace/AGENTS.md`.
 - `frontend/` — `index.html` (home, at `/`), `shell/` (workspace.html + workspace.js, the frame), `shared/` (tokens.css + base.css + ui.js with `icon()/toast()/confirmar()` + i18n), `sections/<x>/` (each section with its .js + .css), `vendor/`. See `frontend/AGENTS.md` and each section's `AGENTS.md`.
 - Sections: `home`, `terminals`, `panel` (dock + strip), `preview` (dev-servers menu), `browser` (Web Preview), `radio`, `editor-slide`, `settings`, `orchestrator`, `editor`, `tasks`, `review`, `mobile-preview`, `memory`.
 - `data/` — local state (gitignored). `.workspace/` is a per-project artifact (gitignored): `STATE.md` (written by Jarvis every 10s, read by agents) + per-terminal logs in `.workspace/logs/terminal_{id}_{name}.log` (useful for debugging terminals).
@@ -93,7 +93,7 @@ Visual detail lives in the memory notes; here, the stable + the rules:
 - **Web Preview** (`sections/browser/browser.js`, exposes `window.WebPreview`): since 2026-09-12 it's a **server-side Chromium** (`core/remote_browser.py`, WebSocket `/ws/browser/{sid}`, screencast frames + forwarded input) — it replaced the old iframe preview (`sections/preview/preview.js` and `GET /preview/probe` no longer exist), so it loads ANY site. Up to 4 tabs with 1/2/3/4-panel layouts (the active tab is always visible). **Search = navigate to the REAL search engine** (`urlBusqueda`): loose text → Google, `yt …` → YouTube. The **"Live localhost" menu** (`#jw-localhosts-btn`, `sections/preview/dev-servers.js`) lives in its toolbar: counter button opening the popover of live dev servers (hidden with 0). The home-made SERP (`serp.html`) stays removed.
 - **Dev-server auto-detection** (`core/dev_detect.py`, 2s poller): scrapes the tmux panes AND scans LISTEN ports (attribution by process), with TCP-check anti false-positive; WS `dev_server_detectado`/`dev_server_caido`; excludes :3000 (Jarvis) and :8081 (Metro). Feeds the `#jw-localhosts-btn` menu (in the Web Preview toolbar) — **careful: its ✕ KILLS the port's process**.
 - **Swarm environmental awareness**: `core/agent_watch.py` (1s poller) detects "was working and went quiet" without keywords → WS `agente_termino`/`agente_espera`/`agente_trabajando` (sounds, toggle `sonidoTareas`) + **aura** on the inactive card (`sections/terminals/terminal-aura.js`).
-- **Settings** (⚙, full-screen overlay): voice-PTT / shortcuts / appearance (theme + language) / accounts / skills&plugins / memory / workflows.
+- **Settings** (⚙, full-screen overlay): voice-PTT / shortcuts / appearance (theme + language) / accounts / skills&plugins / memory.
 - **Unified creation:** the strip's **New workspace** or **Ctrl+T** opens the "Add project" modal (Create/Open modes + folder explorer + CLI grid + distribution, **12 slots** `MAX_TERMINALES`; pure logic in `sections/panel/launcher-state.js`). **Ctrl+\\** opens the quick terminal picker (**9 options**: claude/codex/opencode/qwen/antigravity/grok/cursor/pi/shell).
 - **Shortcuts:** Ctrl+B strip · Ctrl+T new project · Ctrl+\\ quick terminal · Ctrl+P dock (file palette if the editor is visible; Ctrl+Shift+P command palette) · Ctrl+E editor · Ctrl+J jarvis · Ctrl+K search project · Ctrl+1…9 jump to project N · Esc closes/de-maximizes. PTT voice configurable (default: hold AltLeft).
 - **Standalone editor:** `GET /editor?project=N` (`#jw-dock-external`, only on the editor tab).
@@ -110,13 +110,13 @@ Detalle visual completo: [[arquitectura-panel-unico]] · [[rediseno-violeta-2026
 - **Web Preview** (`sections/browser/browser.js`, expone `window.WebPreview`): desde el 2026-09-12 es un **Chromium server-side** (`core/remote_browser.py`, WebSocket `/ws/browser/{sid}`, frames de screencast + input reenviado) — reemplazó al preview por iframe (`sections/preview/preview.js` y `GET /preview/probe` ya no existen), así que carga CUALQUIER sitio. Hasta 4 pestañas con layouts de 1/2/3/4 paneles (la pestaña activa siempre se ve). **Buscar = navegar al buscador REAL** (`urlBusqueda`): texto suelto → Google, `yt …` → YouTube. El **menú de "Localhost activos"** (`#jw-localhosts-btn`, `sections/preview/dev-servers.js`) vive en su toolbar: botón con contador que abre el popover de dev servers vivos (se oculta con 0). El SERP casero (`serp.html`) sigue eliminado. Ver [[preview-pestanas]].
 - **Auto-detección de dev servers** (`core/dev_detect.py`, poller 2s): raspa los panes tmux Y escanea puertos LISTEN (atribución por proceso), con TCP-check anti falso-positivo; WS `dev_server_detectado`/`dev_server_caido`; excluye :3000 (Jarvis) y :8081 (Metro). Alimenta el menú `#jw-localhosts-btn` (en la toolbar del Web Preview) — **ojo: su ✕ MATA el proceso del puerto** ([[preview-pill-cierra-server]]). Ver [[dev-server-autodetect]].
 - **Conciencia ambiental del swarm**: `core/agent_watch.py` (poller 1s) detecta "trabajaba y se quedó quieto" sin keywords → WS `agente_termino`/`agente_espera`/`agente_trabajando` (sonidos, toggle `sonidoTareas`) + **aura** en la card no activa (`sections/terminals/terminal-aura.js`). Ver [[agent-watch-sonidos]] · [[aura-notificacion-cards]].
-- **Configuración** (⚙, overlay full-screen): voz-PTT / atajos / apariencia (tema + idioma) / cuentas / skills&plugins / memoria / workflows.
+- **Configuración** (⚙, overlay full-screen): voz-PTT / atajos / apariencia (tema + idioma) / cuentas / skills&plugins / memoria.
 - **Creación unificada:** el **Nuevo workspace** de la franja o **Ctrl+T** abre el modal "Agregar proyecto" (modos Crear/Abrir + explorador de carpetas + grid de CLIs + distribución, **12 cupos** `MAX_TERMINALES`; lógica pura en `sections/panel/launcher-state.js`). **Ctrl+\\** abre el picker de terminal rápida (**9 opciones**: claude/codex/opencode/qwen/antigravity/grok/cursor/pi/shell). Ver [[launcher-templates-y-grid]].
 - **Atajos:** Ctrl+B franja · Ctrl+T nuevo proyecto · Ctrl+\\ terminal rápida · Ctrl+P dock (palette de archivo si el editor está a la vista; Ctrl+Shift+P palette de comandos) · Ctrl+E editor · Ctrl+J jarvis · Ctrl+K buscar proyecto · Ctrl+1…9 saltar al proyecto N · Esc cierra/des-maximiza. PTT de voz configurable (default: mantener AltLeft).
 - **Editor standalone:** `GET /editor?project=N` (`#jw-dock-external`, solo en la pestaña editor).
 ### Swarm orchestration — subsystems
-- **Swarm watchdog** (`core/swarm_watchdog`, every 20s, threshold 180s, `WATCHDOG=off`): safety net that rescues lost `TASK_*` by re-capturing the full scrollback and emits `paso_estancado`/`paso_rescatado`; relies on the `iniciado_ts` sealed by `orchestrator.py`. (The **Command Deck UI** — Ctrl+Shift+K panel + `routers/deck.py` + `core/swarm_deck.py` — was removed: it wasn't used; swarm awareness covers the "when did it finish/wait".)
-- **Sentinel** (`core/sentinel.py`, every 2s, `SENTINEL=off`): step closure via `.jarvis/signals/terminal_<id>.json` (`{estado, motivo, memorias_usadas}`, one-shot) — the **PRIMARY** closure source; parsing of `TASK_*` from the pane stays as fallback. The `motivo` of a BLOCKED/ERROR **persists** (column in `task_events` + workflow step + broadcasts): it's the raw material of lessons.
+- **Jarvis-launched agents** (the swarm path of the orchestrator chat): for complex orders Jarvis plans N agents with DISJOINT files and emits one `spawn_terminal` per agent with `tarea` + `archivos`; the backend creates the terminal, claims its territory, waits for the CLI to be ready and pastes the task (+ sentinel closure). The origin is recorded on the terminal row (`origen='jarvis'`, `tarea`, `orquestacion` = the order trimmed, `orquestacion_ts`; also set by `enviar_prompt`) and WS `agentes_update` refreshes the **Tasks live monitor** (`routers/tasks.py` + `sections/tasks/`). No dependencies, no reviewer step: sequential work = launch the first part and say what comes next. (The **workflow engine**, its watchdog, auto-intervention and the manual kanban were REMOVED 2026-09-28 — don't reintroduce them. The Command Deck UI was removed earlier.)
+- **Sentinel** (`core/sentinel.py`, every 2s, `SENTINEL=off`): task closure via `.jarvis/signals/terminal_<id>.json` (`{estado, motivo, memorias_usadas}`, one-shot) on EVERY active terminal — the **PRIMARY** closure source; parsing of `TASK_*` from the pane stays as fallback. Both go through `procesar_task_event_interno` (orchestrator.py), which persists the event in `task_events` (with its `motivo` — the raw material of lessons) and broadcasts `task_event`.
 - **Swarm memory — active layers**: `core/memoria_recall.py` injects the relevant memories into each step's prompt AND the orchestrator's planning (deterministic zero-API signals: paths, tags, **BM25** over bodies, category, historical use) · `core/memoria_lint.py` + `GET /api/projects/{id}/memory/salud` (broken links, dead quotes, orphans, admission contract, lapida-vs-vigente clashes, quarantine, save candidates, health per category) · `core/memoria_categorias.py` (10 canonical boxes; grouped INDEX) · `core/memoria_lecciones.py` (wb_gusto pattern: distills reasons → ≤20 rules in `lecciones-del-enjambre.md`, ALWAYS injected between `JARVIS_LECCIONES_*` markers) · `core/memoria_global.py` (environment seed for new projects) · `core/memoria_endurecimiento.py` (lesson recurrence → deterministic save candidates). Frontmatter states: `vigente|obsoleta|lapida|archivo`; the protocol carries the authority hierarchy (code > CLAUDE.md > lápida > newest > verify). The janitor (30 min) regenerates INDEX, distills lessons and evaluates recurrences.
 - **CLI accounts** (`core/cli_accounts.py` + `cli_login.py` + `cuenta_watch.py`, ⚙→Accounts): several accounts per CLI (**claude/codex/grok/qwen/opencode/antigravity**) and instant switch without re-logging in. Secrets 0600 in `data/cli-accounts/<id>/` (never in DB or git); Codex uses isolated homes (`CODEX_HOME` + symlink) to not trigger OpenAI's revocation. **Auto-rotation** (`AUTO_ROTACION`, default ON): agent_watch detects the rate-limit signature in the pane and rotates to the next healthy account alone (WS `cuenta_rotada`/`limite_sin_cuenta`, 10 min cooldown); the manual switch coexists.
 - **Coordination identity:** terminal names are UNIQUE per project (`resolver_nombre_unico`, terminals.py) — the 1-to-1 mailbox and Agents Live ownership depend on that.
@@ -124,34 +124,23 @@ Detalle visual completo: [[arquitectura-panel-unico]] · [[rediseno-violeta-2026
 ### Other backend modules
 - `core/pane_capture.py` — SHARED capture of tmux panes with 0.8s TTL cache (120 lines); dedupes the `tmux capture-pane` of agent_watch/agent_live/dev_detect. The keyword monitor of `terminals.py` stays APART on purpose (don't touch its capture).
 - `core/skills_ia.py` — read-only detector of the skills/commands/agents/rules EVERY AI tool reads in a project (Claude, Codex, Gemini, Antigravity, Cursor, Qwen, OpenCode, Copilot, Windsurf, Cline, Roo): feeds Settings → Extensions via `GET /api/projects/{id}/skills/detectadas`. Only a ≤160-char description leaves it; never home-file contents.
-- `core/idioma_ui.py` — the UI language (es/en) as the server knows it (reported by presence + each chat request, persisted in `data/ui-lang`); `L(es, en)` localizes text the server writes for the user (chat notices, workflow close, orchestrator reply language).
+- `core/idioma_ui.py` — the UI language (es/en) as the server knows it (reported by presence + each chat request, persisted in `data/ui-lang`); `L(es, en)` localizes text the server writes for the user (chat notices, orchestrator reply language).
 - `core/logs.py` — swarm audit trail in JSON-lines (`data/jarvis.log`, rotates at 5MB). `core/mantenimiento.py` — janitor: purges `.workspace/logs` every 30 min + old `task_events` at boot.
 - Routers without their own frontend section: `voice.py` (STT via worker process `core/stt_proc.py` — serialized, one inference at a time — + TTS edge-tts + `/api/voice/translate`), `plugins.py` (plugins/skills per project, table `project_skills`), `live.py` (Agents Live snapshot), `projects_files.py` (Monaco editor backend).
 
-### How work actually happens here (and what is NOT used)
+### How work actually happens here
 
-**The real path: the user opens terminals and pastes them the task.** Everything that
-protects the swarm hangs off the TERMINAL, not off any workflow, so it always works:
-provenance by hook, territory, commit by hunk, collision notices and the `jv` CLI.
-
-**The workflow engine exists, is healthy, and is not the default path.** It ships tested
-end to end as an escape hatch, not as the normal flow. If it's ever called, the flow is:
-```
-Browser → POST /api/orchestrator/chat  (OPTIONAL path, unused by default)
-  → the orchestrator generates JSON {message, actions, workflow?}
-  → ejecutar_workflow() creates terminals + tmux sessions
-  → each step starts with its territory claimed and receives its task as PASTE
-  → step closure: sentinel-file (primary) or TASK_* keyword (fallback)
-  → final step: REVIEWER (starts when nobody else is running, even with
-    blocked steps) → workflow_done over WS
-```
-Don't build on this path assuming it runs: it doesn't by default. What DOES run is everything above.
+**The main path: the user opens terminals and pastes them the task.** Everything that
+protects the swarm hangs off the TERMINAL, so it always works: provenance by hook,
+territory, commit by hunk, collision notices and the `jv` CLI. **Jarvis mode** (the
+orchestrator chat) rides the same rails: it launches agents with `spawn_terminal` +
+`tarea` (or `enviar_prompt` to a free one) and each one closes via the sentinel.
 
 ### WebSocket events (emitted by the broadcaster in `plotspace/core/events.py`)
-`hola` (handshake, carries `boot_id`) · `task_event` · `workflow_update` · `orquestador_mensaje` · `workflow_done` (the only one with TTS) · `agente_termino/espera/trabajando` + `cuenta_rotada`/`limite_sin_cuenta` (agent_watch) · `dev_server_detectado/caido` · `paso_estancado/rescatado` · `conflicto_archivo`/`live_update`/`permiso_*` (Agents Live) · `mailbox_aviso` · `cuentas_update`/`cuenta_agregada`/`cuenta_watch_timeout` · `tasks_update` · `frontend_actualizado`/`codigo_commiteado` (fe_watch). The list grows — grep `broadcaster.broadcast(`. Any backend module can subscribe to EVERYTHING with `broadcaster.escuchar(cb)`.
+`hola` (handshake, carries `boot_id`) · `task_event` · `agentes_update` (Jarvis wrote a terminal's origin/tarea → Tasks live monitor) · `orquestador_mensaje` · `agente_termino/espera/trabajando` + `cuenta_rotada`/`limite_sin_cuenta` (agent_watch) · `dev_server_detectado/caido` · `conflicto_archivo`/`live_update`/`permiso_*` (Agents Live) · `mailbox_aviso` · `cuentas_update`/`cuenta_agregada`/`cuenta_watch_timeout` · `frontend_actualizado`/`codigo_commiteado` (fe_watch). The list grows — grep `broadcaster.broadcast(`. Any backend module can subscribe to EVERYTHING with `broadcaster.escuchar(cb)`.
 
 ### Startup (`plotspace/main.py`, lifespan)
-STT model on demand (preload only with `WHISPER_PRELOAD=on`) → `reconciliar_sesiones_tmux()` → `reanudar_workflows()` → purge task_events → asyncio pollers: STATE.md 10s · mailbox · dev_detect 2s · agent_watch 1s · agent_live 2s · fe_watch 2s · watchdog 20s · sentinel 2s · log purge 30 min.
+STT model on demand (preload only with `WHISPER_PRELOAD=on`) → `reconciliar_sesiones_tmux()` → purge task_events → asyncio pollers: STATE.md 10s · mailbox · dev_detect 2s · agent_watch 1s · agent_live 2s · fe_watch 2s · sentinel 2s · log purge 30 min.
 
 ### In-app updater and automatic versioning (`routers/system.py` + `sections/panel/updater.js`)
 - **`hay_update` = there is a NEW COMMIT since boot** (HEAD moved). Uncommitted edits don't light it. "Update now" banner at the strip bottom; **it does NOT hide while agents work** (`agentes_trabajando` from `/version` is informational, scope = Jarvis project).
@@ -173,46 +162,11 @@ from plotspace.routers.orchestrator import procesar_task_event_interno
 **Keyword detection (false positives):**
 The monitor distinguishes the TASK_DONE Jarvis sent as instruction from the agent's real TASK_DONE with 3 layers: `_ANSI_RE` (strips ANSI) → `_KW_SOLO_RE` (`^[^a-zA-Z]*TASK_DONE[^a-zA-Z]*$`, no letters around) → baseline at monitor start (ignores the pane's prior history). The sentinel-file is the primary closure source today; this stays as fallback.
 
-**TTS:** mutex `ttsActivo` in `workspace.js`; voice only at 3 moments (welcome, workflow accepted, workflow done).
+**TTS:** mutex `ttsActivo` in `workspace.js`; voice only at the welcome (plus the ones the user triggers).
 
 **Cache busting:** when changing JS or CSS, increase `?v=N` in the HTML's `<script src>` and `<link rel>`.
 
 **Paths:** always use `os.path.join()`. The `ANTHROPIC_API_KEY` is excluded from the terminals' PTY environment so agents use their own credentials.
-
-## Workflow system (OPTIONAL path — not the default)
-
-> This section describes a path that is **not the default flow**: its only entry door is the
-> orchestrator chat, and the normal way is open terminals directly. It's healthy and tested end
-> to end in case it's ever wanted; it's not the normal flow and you don't need to read it to work here.
-
-The orchestrator generates this JSON when it detects a complex task:
-```json
-{
-  "message": "confirmation text",
-  "actions": [{"type": "none"}],
-  "workflow": {
-    "nombre": "Workflow name",
-    "objetivo": "description",
-    "pasos": [
-      {
-        "agente": "Claude Code #1",
-        "ia_type": "claude",
-        "rol": "builder",
-        "tarea": "instructions...",
-        "depende_de": null,
-        "archivos": ["src/x.js"]
-      }
-    ]
-  }
-}
-```
-`rol`: `"scout"` = optional step 0 that only explores and leaves memories; `"builder"` = default. `depende_de: null` = starts now (parallelism is implicit). `archivos` = the step's exclusive property (injected into the agent's prompt). The engine adds each task the sentinel's `instruccion_cierre` and appends a **Reviewer** step to every workflow (runs `git diff`, fixes minors and can brake the closure with TASK_BLOCKED).
-
-**Coordination:** `TASK_DONE` → advance | `TASK_BLOCKED` → pause and notify | `TASK_ERROR` → try to reassign the step to a terminal of the same workflow whose step finished `done`; if none, pause. After ANY of the three the engine starts whatever became ready (`_avanzar_workflow`), but only a `TASK_DONE` can close the workflow. The **Reviewer** starts when no other step is in progress — finished, not necessarily successful (steps stuck behind a blocked/errored dependency count as finished): a workflow that ends badly is exactly the one that most needs someone to look at the diff. Events are routed to the workflow that has a step for THAT terminal (never to another step), under a per-workflow `asyncio.Lock` (the steps are one JSON column: read-modify-write). `depende_de` accepts several steps (`"paso_0, paso_1"`) and only earlier steps are kept. A step that can't start (no terminal, no task, failed delivery) ends in `error` with its reason.
-
-**On completion:** NO merge, no auto-commit from the engine — agents/Reviewer commit; the orchestrator notifies (`workflow_done`) and launches the preview if the project has a frontend.
-
-**Guard against duplicate terminals:** with `workflow` present, `spawn_terminal` actions are ignored (`ejecutar_workflow()` creates its own terminals).
 
 ## tmux / terminal engine
 
@@ -232,8 +186,8 @@ API keys / tokens (Anthropic, MCPs, any provider) NEVER go to the repo. `scripts
 ## Environment variables
 
 `plotspace/.env` — `ANTHROPIC_API_KEY` (never commit this file). Flags (default in parentheses):
-- **Swarm:** `WATCHDOG` (on) · `SENTINEL` (on) · `AUTO_ROTACION` (on) · `MAILBOX_ENTREGA_TERMINAL` (off) · `ORQUESTADOR_MOTOR` (`suscripcion` — the orchestrator chat runs with claude -p and the active OAuth account, $0 of API; `api` = escape hatch with key) · `ORQUESTADOR_MODEL` (`sonnet` on subscription / `claude-haiku-4-5` on api) · `ORQ_AUTO_INTERVENCION` (on — on TASK_BLOCKED/ERROR with no exit the orchestrator calls itself and re-instructs; 1× per step, cap 6/h; only on the subscription engine) · `ORQ_CLI_TIMEOUT` (240s wall per orchestrator call) · `MEMORIA_LECCIONES` (on — lesson distiller; `MEMORIA_LECCIONES_MODEL` `claude-haiku-4-5` · `MEMORIA_LECCIONES_UMBRAL` 6) · `MEMORIA_CUARENTENA_DIAS` (60 — active memory without refresh or use → quarantine in health)
-- **Terminals:** `TERMINALES_ARRANQUE` (`shell` — on creating an AI terminal the pane is born as a visible WSL shell and the CLI is typed short (`claude`) when the prompt appears; `limpio` = the CLI starts as the pane's program, with nothing shown. Workflows, resumes and qwen ALWAYS go in clean mode)
+- **Swarm:** `SENTINEL` (on) · `AUTO_ROTACION` (on) · `MAILBOX_ENTREGA_TERMINAL` (off) · `ORQUESTADOR_MOTOR` (`suscripcion` — the orchestrator chat runs with claude -p and the active OAuth account, $0 of API; `api` = escape hatch with key) · `ORQUESTADOR_MODEL` (`sonnet` on subscription / `claude-haiku-4-5` on api) · `ORQ_CLI_TIMEOUT` (240s wall per orchestrator call) · `MEMORIA_LECCIONES` (on — lesson distiller; `MEMORIA_LECCIONES_MODEL` `claude-haiku-4-5` · `MEMORIA_LECCIONES_UMBRAL` 6) · `MEMORIA_CUARENTENA_DIAS` (60 — active memory without refresh or use → quarantine in health)
+- **Terminals:** `TERMINALES_ARRANQUE` (`shell` — on creating an AI terminal the pane is born as a visible WSL shell and the CLI is typed short (`claude`) when the prompt appears; `limpio` = the CLI starts as the pane's program, with nothing shown. Jarvis-launched agents, resumes and qwen ALWAYS go in clean mode)
 - **Voice:** `STT_WORKER` (`on` — the STT model loads and runs in a WORKER process with nice(5), `core/stt_proc.py`; `off` = old in-proc, which freezes the event loop 5-20s from onnxruntime's GIL when creating the session) · `STT_MOTOR` (`parakeet` code default; `groq` = whisper-large-v3-turbo remote on Groq, near-zero local cost, fallback to parakeet — requires `GROQ_API_KEY`; `whisper` = escape hatch) · `GROQ_API_KEY` (free-tier Groq key — ONLY in `plotspace/.env`, never to the repo) · `GROQ_STT_MODEL` (`whisper-large-v3-turbo`; `whisper-large-v3` = more quality, slower) · `WHISPER_MODEL` (`small` — NOT `turbo`: 3.2GB RAM and ~48s per dictation on a modest laptop) · `WHISPER_COMPUTE` (`float32` — int8 via CTranslate2 is SLOWER on CPUs without VNNI; onnx/parakeet int8 doesn't suffer that) · `WHISPER_PRELOAD` (`off`; `on` = resident preload at startup as before) · `WHISPER_IDLE_UNLOAD` (`600` s idle before unloading the model/killing the worker — applies to the active engine; `0`/`off` doesn't unload)
 - **Infra:** `JARVIS_ALLOWED_HOSTS` · `JARVIS_HOST` / `JARVIS_PORT` · `AUTO_PUSH` (on — fe_watch pushes `master` to origin when it detects commits; it's the automatic backup, don't push by hand)
 
@@ -313,11 +267,11 @@ AUTHORITY HIERARCHY (when two sources clash, resolve in this order):
 5. Still ambiguous? **Verify against the code — don't guess.**
 And if a memory **lied to you** (describes something that's no longer true), fixing it or marking it `estado: obsoleta` is PART of your task — the clash you skip, the next agent eats it.
 
-TASK CLOSURE (with or without workflow) — when finishing ANY task, signal closure; it's the telemetry this memory learns from (what worked, what failed). Run:
+TASK CLOSURE — when finishing ANY task, signal closure; it's the telemetry this memory learns from (what worked, what failed). Run:
 
     TID=${JARVIS_TERMINAL_ID:-$(tmux display-message -p '#S' 2>/dev/null | sed 's/^jarvis_//')} && mkdir -p .jarvis/signals && printf '%s' '{"estado":"done","motivo":"","memorias_usadas":[]}' > .jarvis/signals/terminal_${TID}.json
 
-In `memorias_usadas` list the slugs from `.jarvis/memory/` you read and used ([] if none). If you end up `blocked`/`error`, `motivo` is MANDATORY and concrete; in `done` it's optional (one line with the non-obvious approach that worked). In workflows the engine already gives you this instruction with your id — no need to figure it out then.
+In `memorias_usadas` list the slugs from `.jarvis/memory/` you read and used ([] if none). If you end up `blocked`/`error`, `motivo` is MANDATORY and concrete; in `done` it's optional (one line with the non-obvious approach that worked). When Jarvis launched you with a task, the instruction already carries your id — no need to figure it out then.
 <!-- JARVIS_MEMORY_END -->
 
 <!-- JARVIS_MAILBOX_START -->

@@ -12,8 +12,8 @@ El usuario quería volver a VER el shell de WSL al crear una terminal de IA
     --resume tras un reboot sigue apuntando al transcript correcto.
 
 Quedan en el arranque de PROGRAMA del pane (invisible, el de siempre):
-  - workflows del orquestador (comando_cli explícito con flags; además el
-    engine tipea la tarea por send-keys y no puede caer en un bash),
+  - agentes que lanza Jarvis con tarea (comando_cli explícito con flags;
+    además la tarea se pega por tmux y no puede caer en un bash),
   - reanudaciones (reconciliar/attach post-reboot: --resume manda),
   - qwen (necesita --session-id + --chat-recording en la línea; no hay hook),
   - manual/shell (no hay CLI que lanzar),
@@ -52,7 +52,7 @@ def test_no_visible_qwen_manual_ni_desconocido():
         assert term._arranque_visible(t, None, False, 'shell') is False, t
 
 
-def test_no_visible_con_comando_explicito_de_workflow():
+def test_no_visible_con_comando_explicito_de_agente():
     assert term._arranque_visible(
         'claude', 'claude --dangerously-skip-permissions', False, 'shell') is False
 

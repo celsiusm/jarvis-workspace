@@ -7,7 +7,7 @@ verifica que la ruta exista y devuelva el HTML esperado, sin cookie.
 
 Patrón: importamos la app completa (backend.main) con la DB repuntada a un
 tempfile vía fresh_db(). TestClient sin context-manager NO corre los eventos de
-startup (Whisper, tmux, workflows), así que el import es liviano.
+startup (Whisper, tmux, pollers), así que el import es liviano.
 """
 import os
 import sys

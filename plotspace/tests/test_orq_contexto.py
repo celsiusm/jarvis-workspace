@@ -21,7 +21,7 @@ def test_cola_pane_corta_lineas_largas():
     assert len(cola[0]) == 50 and cola[0].endswith('…')
 
 
-def test_es_libre_exige_viva_quieta_sin_pregunta_ni_paso():
+def test_es_libre_exige_viva_quieta_sin_pregunta():
     assert oc.es_libre({'fase': 'idle'})
     assert oc.es_libre({})
     assert not oc.es_libre({'fase': 'trabajando'})
@@ -29,7 +29,6 @@ def test_es_libre_exige_viva_quieta_sin_pregunta_ni_paso():
     assert not oc.es_libre({'fase': 'idle', 'esperando': True})
     assert not oc.es_libre({'fase': 'idle', 'estado': 'caido'})
     assert not oc.es_libre({'fase': 'idle', 'estado': 'sin_sesion'})
-    assert not oc.es_libre({'fase': 'idle', 'paso_activo': {'estado': 'pending'}})
 
 
 def test_motivo_no_libre_explica_el_porque():
@@ -37,7 +36,6 @@ def test_motivo_no_libre_explica_el_porque():
     assert 'caído' in oc.motivo_no_libre({'estado': 'caido'})
     assert 'pregunta' in oc.motivo_no_libre({'esperando': True})
     assert 'trabajando' in oc.motivo_no_libre({'fase': 'trabajando'})
-    assert 'pending' in oc.motivo_no_libre({'paso_activo': {'estado': 'pending'}})
 
 
 def test_terminal_caida_se_marca_y_no_figura_libre():
@@ -87,17 +85,6 @@ def test_guia_desde_markdown_da_intro_e_indice():
     assert 'secciones: Comandos · Reglas' in g
 
 
-def test_formatear_workflows_activos_muestra_pasos_y_motivos():
-    wf = {'nombre': 'Login', 'estado': 'paused', 'objetivo': 'auth',
-          'pasos': [{'estado': 'done', 'agente': 'Back', 'terminal_id': 1},
-                    {'estado': 'blocked', 'agente': 'Front', 'terminal_id': 2,
-                     'depende_de': 'paso_0', 'motivo': 'falta diseño'}]}
-    txt = oc.formatear_workflows_activos([wf])
-    assert "'Login' (paused, 1/2 done)" in txt
-    assert 'paso_1 [blocked] Front (terminal #2) ← paso_0' in txt
-    assert 'motivo: falta diseño' in txt
-
-
 def test_hace_humano():
     assert oc.hace(5) == '5s'
     assert oc.hace(125) == '2 min'
@@ -122,27 +109,27 @@ def _proyecto(tmp_path):
     return ruta
 
 
-def test_infos_terminales_cruza_workflow_eventos_y_envios(tmp_path):
+def test_infos_terminales_cruza_origen_eventos_y_envios(tmp_path):
     _proyecto(tmp_path)
     from datetime import datetime
     from plotspace.core.database import get_db
     conn = get_db()
-    pasos = [{'agente': 'Back', 'estado': 'running', 'terminal_id': 11, 'tarea': 'API de login'}]
-    conn.execute("INSERT INTO workflows (id,project_id,nombre,objetivo,estado,pasos,"
-                 "paso_actual,created_at) VALUES ('w',1,'Login','',?,?,0,?)",
-                 ('running', json.dumps(pasos), '2026-01-01T00:00:00'))
     conn.execute("INSERT INTO task_events (terminal_id,project_id,event,timestamp,motivo) "
                  "VALUES (12,1,'TASK_BLOCKED',?,'no hay mock')", (datetime.now().isoformat(),))
     conn.commit()
     conn.close()
+    oc._envios.pop(11, None)
     oc.registrar_envio(12, 'arreglá el header')
-    ts = [{'id': 11, 'nombre': 'Back', 'tipo_ia': 'claude'},
+    ts = [{'id': 11, 'nombre': 'Back', 'tipo_ia': 'claude', 'origen': 'jarvis',
+           'tarea': 'API de login', 'orquestacion': 'Login',
+           'orquestacion_ts': datetime.now().isoformat()},
           {'id': 12, 'nombre': 'Front', 'tipo_ia': 'claude'}]
     infos = oc.infos_terminales(1, ts, con_live=False)
-    assert infos[11]['paso_activo']['estado'] == 'running'
-    assert infos[11]['tarea']['texto'] == 'API de login'
-    assert not oc.es_libre(infos[11])
+    assert infos[11]['tarea']['texto'] == 'API de login'      # persistida en la fila
+    assert infos[11]['origen']['orquestacion'] == 'Login'
+    assert oc.es_libre(infos[11])        # sin fase viva ni pregunta: libre
     assert infos[12]['tarea']['texto'] == 'arreglá el header'
+    assert 'origen' not in infos[12]
     assert infos[12]['ultimo_evento']['motivo'] == 'no hay mock'
 
 
@@ -173,11 +160,6 @@ def test_construir_bloques_arma_todo_y_degrada_sin_tmux(tmp_path, monkeypatch):
     async def falso(tid, ttl=0):
         return f'salida de {tid}\n'
     monkeypatch.setattr(pane_capture, 'capturar', falso)
-    from plotspace.core.database import get_db
-    conn = get_db()
-    conn.execute("INSERT INTO tasks (project_id,titulo,estado) VALUES (1,'Dark mode','backlog')")
-    conn.commit()
-    conn.close()
     ts = [{'id': 11, 'nombre': 'Back', 'tipo_ia': 'claude'}]
     bloques = asyncio.run(oc.construir_bloques({'id': 1, 'nombre': 'P', 'ruta': str(ruta)}, ts))
     txt = '\n\n'.join(bloques)
@@ -185,7 +167,7 @@ def test_construir_bloques_arma_todo_y_degrada_sin_tmux(tmp_path, monkeypatch):
     assert '| salida de 11' in txt
     assert '[Proyecto]' in txt and 'CLAUDE.md' in txt
     assert '[Guía del proyecto]' in txt and 'Usá pytest.' in txt
-    assert '[Tablero de tareas]' in txt and 'Dark mode' in txt
+    assert '[Tablero de tareas]' not in txt and '[Workflows activos]' not in txt
 
 
 # ─── Integración con el orquestador ──────────────────────────────────────────
@@ -219,17 +201,6 @@ def test_el_prompt_del_orquestador_lleva_el_contexto_completo(tmp_path, monkeypa
     assert txt.rstrip().endswith('revisá main.py')
 
 
-def test_infos_con_workflows_explicitos_ignora_los_excluidos(tmp_path):
-    """ejecutar_workflow valida el reuso SIN su propio workflow (ya guardado con
-    pasos pending): si no, la terminal pedida siempre figuraba ocupada."""
-    _proyecto(tmp_path)
-    ts = [{'id': 11, 'nombre': 'Back', 'tipo_ia': 'claude'}]
-    propio = {'id': 'nuevo', 'nombre': 'N', 'estado': 'running',
-              'pasos': [{'terminal_id': 11, 'estado': 'pending', 'tarea': 't'}]}
-    assert not oc.es_libre(oc.infos_terminales(1, ts, [propio], [], con_live=False)[11])
-    assert oc.es_libre(oc.infos_terminales(1, ts, [], [], con_live=False)[11])
-
-
 def test_titulos_contexto_para_mostrar_que_vio():
     from plotspace.routers.orchestrator import _titulos_contexto
     msg = ('[Estado actual]\nx\n\n[Proyecto]\ny\n\n[Memoria relevante al pedido — '
@@ -261,7 +232,7 @@ def test_stream_sse_emite_contexto_progreso_reinicio_y_done(tmp_path, monkeypatc
 
     async def procesar(*a, **k):
         return {'response': 'listo', 'actions': [], 'created_terminals': [],
-                'closed_all': False, 'workflow_card': None}
+                'closed_all': False}
     monkeypatch.setattr(orch, '_procesar_respuesta_orquestador', procesar)
 
     async def correr():

@@ -360,10 +360,6 @@ async def _startup():
     except Exception as e:
         print(f'[startup] no pude instalar los adaptadores de CLI: {e}')
 
-    # 4. Reanudar workflows que estaban corriendo antes del reinicio
-    #    (marca los zombies viejos como 'error' en vez de revivir sus monitores)
-    _bg_tasks.append(asyncio.create_task(orchestrator.reanudar_workflows()))
-
     # 4.1 Acotar task_events (insert-only, antes crecía sin techo)
     try:
         from plotspace.core.database import purgar_task_events
@@ -404,12 +400,7 @@ async def _startup():
     from plotspace.core.fe_watch import poller_frontend
     _bg_tasks.append(asyncio.create_task(poller_frontend()))
 
-    # 10. Watchdog del swarm: rescata el TASK_DONE perdido y avisa pasos colgados
-    #     (red de seguridad para dejar el swarm corriendo desatendido)
-    from plotspace.core.swarm_watchdog import poller_watchdog
-    _bg_tasks.append(asyncio.create_task(poller_watchdog()))
-
-    # 11. Sentinel-file: cierre estructurado de pasos (determinista, multi-CLI)
+    # 10. Sentinel-file: cierre estructurado de tareas (determinista, multi-CLI)
     from plotspace.core.sentinel import poller_sentinel
     _bg_tasks.append(asyncio.create_task(poller_sentinel()))
 
@@ -745,7 +736,7 @@ async def manifest():
 @app.websocket("/ws/events/{project_id}")
 async def ws_events(websocket: WebSocket, project_id: int):
     """Canal de eventos en tiempo real para el workspace.
-    Broadcasts: task_event, workflow_update, orquestador_mensaje."""
+    Broadcasts: task_event, agentes_update, orquestador_mensaje, …"""
     # El middleware http NO corre para websockets: Origin anti CSWSH.
     if not jarvis_auth.origen_permitido(websocket.headers.get('origin'), jarvis_auth.hosts_extra()):
         await websocket.close(code=4403)

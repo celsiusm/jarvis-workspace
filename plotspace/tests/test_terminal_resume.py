@@ -141,7 +141,7 @@ def test_cli_arranca_como_programa_del_pane_sin_eco():
 
 
 def test_comando_explicito_gana_sobre_autocomputado():
-    """comando_cli explícito (workflow: --dangerously-skip-permissions) tiene
+    """comando_cli explícito (agente de Jarvis: --dangerously-skip-permissions) tiene
     prioridad sobre el que se computa de la fila."""
     explicito = "claude --session-id z9 --dangerously-skip-permissions"
     ns = _argv_new_session(999, comando_cli=explicito,

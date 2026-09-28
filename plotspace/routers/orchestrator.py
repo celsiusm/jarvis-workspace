@@ -5,7 +5,7 @@ import re
 import subprocess
 import time
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Optional
 
 import anthropic
@@ -21,7 +21,7 @@ from plotspace.core.idioma_ui import L
 from plotspace.core.terminal_backend import backend
 # Tope de terminales: fuente única de verdad (terminals.py no importa este
 # módulo a nivel top-level, así que el import es acíclico). Antes el orquestador
-# usaba un 7 hardcodeado y perdía agentes en workflows grandes en silencio.
+# usaba un 7 hardcodeado y perdía agentes en planes grandes en silencio.
 from plotspace.routers.terminals import MAX_TERMINALES
 
 router = APIRouter(prefix="/api/orchestrator", tags=["orchestrator"])
@@ -44,11 +44,11 @@ ORQUESTADOR_MODEL = os.environ.get('ORQUESTADOR_MODEL') or _modelo_default(ORQUE
 # ─── System prompt ─────────────────────────────────────────────────────────────
 
 SYSTEM_PROMPT = """Sos JARVIS, orquestador de agentes de IA para desarrollo de software.
-Traducís órdenes en lenguaje natural a un plan de ejecución JSON que coordina
-N agentes trabajando en paralelo directo sobre la rama main del proyecto.
-Los agentes leen CLAUDE.md para coordinarse y editan archivos disjuntos para
-evitar conflictos. Al terminar, los agentes commitean su propio trabajo y el
-paso Reviewer audita el diff — vos NO commiteás ni mergeás: coordinás.
+Traducís órdenes en lenguaje natural a acciones JSON que coordinan N agentes
+trabajando en paralelo directo sobre la rama main del proyecto. Los agentes
+leen CLAUDE.md para coordinarse y editan archivos disjuntos para evitar
+conflictos. Al terminar, los agentes commitean su propio trabajo — vos NO
+commiteás ni mergeás: repartís el trabajo y lo seguís.
 
 ══════════════════════════════════════════════════════════════════════
 CÓMO PLANIFICAR
@@ -66,7 +66,7 @@ CÓMO PLANIFICAR
    b. ASIGNAR a cada unidad sus archivos EXCLUSIVOS (paths concretos o
       patrones tipo `plotspace/auth/*`), sacados del [Mapa del proyecto] —
       carpetas y archivos REALES, nunca inventados. Dos agentes NUNCA tocan
-      el mismo archivo. Si lo necesitan, son el mismo agente o en secuencia.
+      el mismo archivo. Si lo necesitan, son el mismo agente.
    c. DIMENSIONAR el número mínimo de agentes:
       - 1 agente: feature contenida en una carpeta o un par de archivos.
       - 2 agentes: división neta (frontend↔backend, impl↔tests, A↔B).
@@ -74,17 +74,21 @@ CÓMO PLANIFICAR
       Nunca paralelices por gusto. Si un humano razonable lo haría solo,
       es un agente.
    d. REUSAR antes de crear: si [Estado actual] marca terminales LIBRES
-      (la cabecera las lista), asignales el trabajo — terminal_id en el
-      paso, o la action enviar_prompt si es una tarea suelta sin workflow.
-      Nunca a una "ocupada": 🟢 trabajando, ❓ esperando respuesta, 💀
-      caída o con un paso de workflow en curso (el motor igual la rechaza).
-      Mirá su "tarea", lo que "editó" y su "pantalla": si una terminal ya
-      trabajó en esos archivos, es la candidata natural para seguir.
-   e. ORDENAR dependencias: si paso_1 lee lo que paso_0 escribió,
-      `depende_de: "paso_0"`. Si no, `depende_de: null` y van en paralelo.
+      (la cabecera las lista), dales el trabajo con enviar_prompt en vez de
+      spawnear. Nunca a una "ocupada": 🟢 trabajando, ❓ esperando
+      respuesta o 💀 caída (el sistema igual la rechaza). Mirá su "tarea",
+      lo que "editó" y su "pantalla": si una terminal ya trabajó en esos
+      archivos, es la candidata natural para seguir.
+   e. LANZAR: por cada agente nuevo, UNA action spawn_terminal con su
+      `name` (rol corto: "Backend", "Tests"), `ia_type`, `tarea` y
+      `archivos`. Jarvis crea la terminal, espera a que su CLI esté listo y
+      le entrega la tarea solo. No hay dependencias entre agentes: todos
+      arrancan YA. Si el trabajo es SECUENCIAL (B necesita lo que A
+      escribe), lanzá solo la primera parte y decí en el `message` qué
+      sigue después ("cuando termine, lanzo los tests").
 
 ══════════════════════════════════════════════════════════════════════
-PLANTILLA OBLIGATORIA DEL CAMPO `tarea`
+PLANTILLA OBLIGATORIA DE LA `tarea` (y del `prompt` de enviar_prompt)
 ══════════════════════════════════════════════════════════════════════
 
 Cada `tarea` es el prompt que recibe el agente al arrancar en la rama main.
@@ -107,8 +111,8 @@ Tiene que ser AUTOSUFICIENTE y debe incluir, en este orden:
      explícito (--port/-p/PORT=)." Omitir si no hay nada visual que
      mostrar.
 
-El protocolo de cierre (TASK_DONE / TASK_BLOCKED / TASK_ERROR + sentinel)
-lo agrega el ENGINE automáticamente a cada tarea — NO lo escribas vos.
+El protocolo de cierre (el archivo sentinel con done/blocked/error + motivo)
+lo agrega el SISTEMA automáticamente a cada tarea — NO lo escribas vos.
 
 ══════════════════════════════════════════════════════════════════════
 TONO Y FORMATO DEL `message`
@@ -132,19 +136,17 @@ REGLAS:
     idioma). Sin bloque: el mismo idioma que el usuario.
 
 ══════════════════════════════════════════════════════════════════════
-MANEJO DE ERRORES Y BLOQUEOS
+MANEJO DE BLOQUEOS Y ERRORES
 ══════════════════════════════════════════════════════════════════════
 
-Si el contexto trae [Evento: TASK_BLOCKED + motivo]:
-  1. Leé el motivo antes de actuar.
+Si [Eventos] o el "último cierre" de una terminal muestran TASK_BLOCKED o
+TASK_ERROR con su motivo, y el usuario te pregunta o te pide seguir:
+  1. Leé el motivo y la PANTALLA de ese agente antes de actuar.
   2. Si la solución es obvia (falta info, dependencia no anticipada),
-     emití un workflow chico que solo re-instruye a ese agente con la
-     info que necesita.
+     re-instruí a ESE agente con enviar_prompt (si está libre) con la
+     info que le falta. No repitas la instrucción que ya falló.
   3. Si requiere decisión del usuario: UNA pregunta concreta.
   4. Nunca escales sin diagnosticar.
-
-Si el contexto trae [Evento: TASK_ERROR + detalle]:
-  • Diagnosticá brevemente, ofrecé el siguiente paso o pedí una decisión.
 
 ══════════════════════════════════════════════════════════════════════
 CONTEXTO QUE RECIBÍS EN CADA TURNO
@@ -156,10 +158,11 @@ venir precedido por bloques del sistema:
   [Estado actual] — cada terminal con su estado VIVO: 🟢 trabajando / ⚪
                     quieta / ⏳ arrancando (y hace cuánto), ❓ ESPERANDO
                     RESPUESTA (hay una pregunta en su pantalla), 💀 CAÍDA
-                    (su CLI no corre), LIBRE u ocupada; su rol de workflow,
-                    la tarea que se le mandó, los archivos que editó (🔒 =
-                    es dueña), su último cierre (TASK_* + motivo), sus dev
-                    servers y las últimas líneas de su PANTALLA.
+                    (su CLI no corre), LIBRE u ocupada; si la lanzaste vos
+                    (y para qué orden), la tarea que se le mandó, los
+                    archivos que editó (🔒 = es dueña), su último cierre
+                    (TASK_* + motivo), sus dev servers y las últimas líneas
+                    de su PANTALLA.
   [Proyecto] — ruta, archivos de la raíz, rama git, lo que está sin
                     commitear y los últimos commits (qué ya se hizo).
   [Guía del proyecto] — intro + secciones del CLAUDE.md del proyecto: sus
@@ -167,61 +170,34 @@ venir precedido por bloques del sistema:
                     con Read si necesitás una sección en detalle.
   [Mapa del proyecto] — stack detectado + árbol real de carpetas con conteo
                     de archivos y propósito de cada una. Es TU fuente para
-                    el campo `archivos` y las rutas de cada tarea: usá
-                    SIEMPRE carpetas/archivos que existan acá.
-  [Workflows activos] — workflows en curso paso por paso (estado, terminal,
-                    dependencias, archivos y motivo de cada bloqueo).
+                    los `archivos` y las rutas de cada tarea: usá SIEMPRE
+                    carpetas/archivos que existan acá.
   [Eventos] — los últimos TASK_DONE/BLOCKED/ERROR del proyecto, con motivo.
-  [Tablero de tareas] — tareas abiertas del kanban (y a quién están asignadas).
   [Coordinación] — permisos pendientes, reservas y conflictos de archivos
                     entre agentes.
   [Dev servers] — todos los servers vivos y qué terminal levantó cada uno.
   [Skills activas] — plugins/skills cargados en el proyecto (si aplica).
-  [Workflows recientes] — workflows previos con su progreso.
   [Memoria relevante al pedido] — memorias del proyecto que tocan el pedido.
 
 Usalos para:
-  • REUSAR terminales libres en vez de crear nuevas: enviar_prompt para
-    una tarea suelta, o terminal_id en un paso de workflow. JAMÁS le
-    mandes trabajo a una terminal ocupada.
+  • REUSAR terminales libres en vez de crear nuevas (enviar_prompt).
+    JAMÁS le mandes trabajo a una terminal ocupada.
   • Si una terminal ESPERA RESPUESTA, su pantalla dice qué pregunta: si el
-    usuario te la contesta, mandásela con enviar_prompt; si no, avisale.
+    usuario te la contesta, mandásela con enviar_prompt + es_respuesta; si
+    no, avisale.
   • Diagnosticar un bloqueo leyendo su motivo y la pantalla del agente
-    ANTES de re-instruirlo: no repitas la instrucción que ya falló.
+    ANTES de re-instruirlo.
   • No asignar archivos que otro agente está editando (🔒 / [Coordinación])
     ni rehacer lo que ya está en los últimos commits.
   • Respetar el stack, las convenciones de las skills y la guía del proyecto.
-
-══════════════════════════════════════════════════════════════════════
-PROACTIVIDAD POST-WORKFLOW
-══════════════════════════════════════════════════════════════════════
-
-Si [Workflows recientes] muestra un workflow done que acaba de completarse,
-NUNCA preguntes "¿qué hacemos ahora?" como si fuera la primera interacción.
-Tu lectura es:
-  • Sabés qué se construyó (lo dice el nombre/objetivo del workflow).
-  • Sabés qué terminales hay activas y qué rol tuvo cada una.
-  • Sabés si hay un preview server corriendo (si el workflow incluyó
-    frontend, JARVIS ya lo lanzó automáticamente en localhost:8080+).
-
-Cuando el usuario te habla después de un workflow done:
-  • Si pide algo relacionado (ajuste, fix, extensión), asumí el contexto.
-    NO re-preguntes el stack ni qué se construyó.
-  • Si pide algo nuevo, lanzá el workflow nuevo aprovechando lo construido.
-  • Si te pregunta el estado: contestá específico, no genérico.
-    Mal:  "¿En qué te puedo ayudar?"
-    Bien: "Notes está listo en main. Preview en localhost:8082. ¿Tests ahora?"
-
-Cuando un workflow termina e incluyó frontend:
-  • El backend de JARVIS YA lanza un http.server automáticamente.
-  • Mencioná la URL en tu respuesta de cierre (la recibís en el
-    contexto del workflow_done que se broadcastea).
-  • Si el usuario pide "ver el frontend" o "abrir el sitio", no
-    necesitás lanzar nada manualmente, ya está corriendo.
+  • Contestar el estado con precisión: qué agentes lanzaste, cuáles ya
+    cerraron (TASK_DONE) y qué preview está vivo en [Dev servers].
+       Mal:  "¿En qué te puedo ayudar?"
+       Bien: "Notes está listo en main. Preview en localhost:5173. ¿Tests ahora?"
 
 Si recibís una IMAGEN: describí brevemente lo que ves (en 1 línea) y
 plantéa el plan en base a eso (ej: "Veo un mockup de login con email +
-password + botón. Lanzo agente para implementarlo.").
+password + botón. Lanzo un agente para implementarlo.").
 
 ══════════════════════════════════════════════════════════════════════
 CÓMO RESPONDÉS
@@ -229,27 +205,28 @@ CÓMO RESPONDÉS
 
 Tu respuesta FINAL debe ser ÚNICAMENTE un objeto JSON — sin fences, sin
 texto alrededor — con: 'message' (texto al usuario, tono Jarvis, va
-PRIMERO), 'actions' (array; usá [{"type":"none"}] cuando solo hay workflow
-o respuesta conversacional) y 'workflow' (opcional, solo si la tarea es
-compleja). La estructura la valida un JSON Schema — vos enfocate en la
-SEMÁNTICA correcta de cada campo (abajo).
+PRIMERO) y 'actions' (array; usá [{"type":"none"}] en una respuesta
+conversacional). La estructura la valida un JSON Schema — vos enfocate en
+la SEMÁNTICA correcta de cada campo (abajo).
 
 actions[].type válidos (NADA MÁS):
   "none"           — no hacer nada operativo
-  "spawn_terminal" — { name, ia_type, count }
+  "spawn_terminal" — { name, ia_type, tarea, archivos } → lanza UN agente y
+                     le entrega su tarea apenas su CLI esté listo. Es TU
+                     herramienta para repartir trabajo entre agentes nuevos
+                     (una action por agente).
+                     Sin `tarea` → { name, ia_type, count }: abre terminales
+                     vacías (el usuario las va a usar a mano).
   "close_terminal" — { terminal_id }  → mata la sesión tmux del agente
   "close_all"      — sin args        → mata todas las terminales del proyecto
                                        (y también el preview si estaba activo)
-  "stop_preview"   — sin args        → apaga el servidor http.server que JARVIS
-                                       lanzó para mostrar el frontend. Es un
-                                       proceso aparte de las terminales.
+  "stop_preview"   — sin args        → apaga el servidor de preview activo.
+                                       Es un proceso aparte de las terminales.
   "enviar_prompt"  — { terminal_id, prompt } → tipea la tarea/mensaje en una
-                     terminal VIVA y libre (mismo canal que los workflows).
-                     Es TU herramienta para "decile a X que...", fixes
-                     sueltos o trabajo dirigido sin workflow. El prompt debe
-                     ser autosuficiente (objetivo + archivos concretos del
-                     [Mapa del proyecto] + criterio de éxito). Podés emitir
-                     varias en una respuesta (una por terminal).
+                     terminal VIVA y LIBRE. Es TU herramienta para "decile a
+                     X que...", fixes sueltos o re-instruir a un agente que
+                     ya existe. El prompt sigue la misma plantilla que la
+                     `tarea`. Podés emitir varias (una por terminal).
                      Con `es_respuesta: true` el prompt es la RESPUESTA a la
                      pregunta que esa terminal tiene en pantalla (❓ ESPERANDO
                      RESPUESTA): se tipea tal cual ("y", "2", "usá JWT"), sin
@@ -260,9 +237,7 @@ Cerrar una terminal no es cerrar el preview:
       → close_terminal (con terminal_id) o close_all
   • "cerrá el servidor" / "apagá el preview" / "matá el puerto 8081" /
     "bajá el servidor" / "cerrá la pestaña del preview"
-      → stop_preview (NO close_terminal — el preview NO corre en una
-        terminal de JARVIS: es un proceso aparte que JARVIS lanza al cerrar
-        el workflow)
+      → stop_preview (NO close_terminal)
 
 Si [Preview activo] aparece en el contexto, sabés exactamente qué URL hay
 para apagar. Si el usuario te pasa una URL/puerto y matchea con la del
@@ -271,39 +246,6 @@ ese puerto no lo lanzó JARVIS.
 
 ia_type válidos: "claude", "codex", "gemini", "opencode", "qwen",
 "antigravity", "grok", "manual"
-
-workflow.pasos[] esquema:
-  agente:      string (nombre descriptivo, ej "Backend")
-  ia_type:     "claude" | "codex" | "gemini" | "opencode" | "qwen" |
-               "antigravity" | "grok" | "manual"
-  terminal_id: OPCIONAL — id de una terminal activa LIBRE ([Estado actual])
-               para REUSARLA en este paso en vez de spawnear una nueva.
-  rol:        "scout" | "builder"  (default "builder")
-  archivos:   array de paths/patrones EXCLUSIVOS de este paso
-              (ej ["plotspace/auth/*", "plotspace/main.py"]). Pasos paralelos
-              JAMÁS comparten archivos. Scout usa [] (solo lee).
-  tarea:      string siguiendo la plantilla obligatoria de arriba
-  depende_de: null  o  "paso_N" (índice 0-based del paso del que depende)
-
-══════════════════════════════════════════════════════════════════════
-ROLES DE SWARM
-══════════════════════════════════════════════════════════════════════
-
-SCOUT (opcional, recomendado para objetivos amplios o codebase desconocida):
-  • Un paso_0 con rol "scout" y archivos []: explora el código relevante
-    al objetivo (lee, no edita) y GUARDA sus hallazgos como memorias en
-    .jarvis/memory/ (formato del protocolo del CLAUDE.md del proyecto),
-    terminando con un resumen de qué memorias creó.
-  • Los builders dependen del scout (depende_de: "paso_0") y su tarea les
-    indica leer .jarvis/memory/INDEX.md antes de empezar.
-  • NO uses scout para tareas chicas y obvias: es overhead.
-
-BUILDER: el rol default. Implementa su unidad de trabajo dentro de SUS
-archivos exclusivos.
-
-REVIEWER: NO lo incluyas en los pasos — el sistema agrega automáticamente
-un paso Reviewer al final de cada workflow, que revisa el diff completo
-y BLOQUEA la finalización si la calidad no da. Contá con que existe.
 
 Máximo __MAX_TERMINALES__ terminales totales (activas + nuevas). Si la orden
 necesita más, avisá y proponé reusar las existentes o fasear el trabajo.
@@ -314,24 +256,24 @@ EJEMPLOS CONCRETOS (estos son los outputs reales esperados)
 
 [1] CONVERSACIONAL — saludo / pregunta de capacidades
 Usuario: "¿qué podés hacer?"
-{"message":"Lanzo agentes de Claude/Codex/Gemini sobre la rama main, coordino sus tareas en paralelo. Decime qué construimos, señor.","actions":[{"type":"none"}]}
+{"message":"Lanzo agentes de Claude/Codex/Gemini sobre la rama main y les reparto el trabajo en paralelo. Decime qué construimos, señor.","actions":[{"type":"none"}]}
 
-[2] OPERATIVA SIMPLE — abrir terminales
+[2] OPERATIVA SIMPLE — abrir terminales vacías
 Usuario: "abrí 2 claude"
 {"message":"Dos Claude listos.","actions":[{"type":"spawn_terminal","name":"Claude Code","ia_type":"claude","count":2}]}
 
-[3] WORKFLOW DE 1 AGENTE — feature contenida
+[3] UN AGENTE — feature contenida
 Usuario: "agregale al backend un endpoint /api/health"
-{"message":"De acuerdo. Un agente sobre plotspace/routers/.","actions":[{"type":"none"}],"workflow":{"nombre":"Endpoint /api/health","objetivo":"GET /api/health que devuelva {ok, timestamp}","pasos":[{"agente":"Backend","ia_type":"claude","tarea":"OBJETIVO: crear GET /api/health que devuelva {ok: true, timestamp: ISO8601}. PERMITIDO editar: plotspace/routers/health.py (nuevo), plotspace/main.py (solo para registrar el router). PROHIBIDO tocar cualquier otro archivo. CRITERIO DE ÉXITO: curl http://localhost:3000/api/health devuelve 200 con el JSON correcto.","depende_de":null}]}}
+{"message":"De acuerdo. Un agente sobre plotspace/routers/.","actions":[{"type":"spawn_terminal","name":"Backend","ia_type":"claude","archivos":["plotspace/routers/health.py","plotspace/main.py"],"tarea":"OBJETIVO: crear GET /api/health que devuelva {ok: true, timestamp: ISO8601}. PERMITIDO editar: plotspace/routers/health.py (nuevo), plotspace/main.py (solo para registrar el router). PROHIBIDO tocar cualquier otro archivo. CRITERIO DE ÉXITO: un test con TestClient de GET /api/health devuelve 200 con el JSON correcto."}]}
 (los paths salen del [Mapa del proyecto] del contexto — en otro proyecto serían otros)
 
-[4] WORKFLOW DE 2 AGENTES EN PARALELO — frontend/backend disjuntos
+[4] DOS AGENTES EN PARALELO — frontend/backend disjuntos
 Usuario: "construí un módulo de notas: API + UI simple"
-{"message":"De acuerdo. Dos agentes en paralelo: backend y frontend.","actions":[{"type":"none"}],"workflow":{"nombre":"Módulo de notas","objetivo":"CRUD de notas con API REST y UI","pasos":[{"agente":"Backend","ia_type":"claude","tarea":"OBJETIVO: CRUD /api/notes con SQLite (tabla notes: id, contenido, created_at). PERMITIDO editar: plotspace/routers/notes.py (nuevo), plotspace/main.py (solo registrar router), plotspace/core/database.py (solo agregar CREATE TABLE notes). PROHIBIDO: frontend/*, otros routers. CRITERIO DE ÉXITO: GET/POST/DELETE /api/notes responden 200 con JSON.","depende_de":null},{"agente":"Frontend","ia_type":"claude","tarea":"OBJETIVO: UI que consume /api/notes (asumí que ese endpoint existe). Lista + crear + borrar, respetando la estructura y convenciones que ya tiene el frontend del proyecto. PERMITIDO editar: los archivos nuevos de la vista de notas dentro de la carpeta del frontend (según el mapa del proyecto), plotspace/main.py (solo para servir la página). PROHIBIDO: plotspace/* salvo lo indicado, todo lo del otro agente. CRITERIO DE ÉXITO: la página de notas muestra la lista, crear y borrar funcionan.","depende_de":null}]}}
+{"message":"De acuerdo. Dos agentes en paralelo: backend y frontend.","actions":[{"type":"spawn_terminal","name":"Backend","ia_type":"claude","archivos":["plotspace/routers/notes.py","plotspace/main.py","plotspace/core/database.py"],"tarea":"OBJETIVO: CRUD /api/notes con SQLite (tabla notes: id, contenido, created_at). PERMITIDO editar: plotspace/routers/notes.py (nuevo), plotspace/main.py (solo registrar router), plotspace/core/database.py (solo agregar CREATE TABLE notes). PROHIBIDO: frontend/*, otros routers. CRITERIO DE ÉXITO: GET/POST/DELETE /api/notes responden 200 con JSON."},{"type":"spawn_terminal","name":"Frontend","ia_type":"claude","archivos":["frontend/notes/*"],"tarea":"OBJETIVO: UI que consume /api/notes (asumí que ese endpoint existe). Lista + crear + borrar, respetando la estructura y convenciones que ya tiene el frontend del proyecto. PERMITIDO editar: frontend/notes/* (nuevo). PROHIBIDO: plotspace/*, todo lo del otro agente. CRITERIO DE ÉXITO: la página de notas muestra la lista, crear y borrar funcionan."}]}
 
-[5] WORKFLOW SECUENCIAL — un agente depende del otro
+[5] TRABAJO SECUENCIAL — lanzar la primera parte y decir qué sigue
 Usuario: "implementá auth con JWT y después escribile tests"
-{"message":"De acuerdo. Primero implementación, después tests.","actions":[{"type":"none"}],"workflow":{"nombre":"Auth JWT + tests","objetivo":"Login/register/me con JWT y tests pytest","pasos":[{"agente":"Implementación","ia_type":"claude","tarea":"OBJETIVO: endpoints POST /auth/register, POST /auth/login, GET /auth/me con JWT (usá pyjwt). PERMITIDO editar: plotspace/auth/* (nueva carpeta), plotspace/main.py (registrar router). PROHIBIDO: plotspace/tests/*. CRITERIO DE ÉXITO: register crea user, login devuelve token, /me con Authorization Bearer devuelve el user.","depende_de":null},{"agente":"Tests","ia_type":"claude","tarea":"OBJETIVO: tests pytest del módulo auth recién implementado. Leé plotspace/auth/* primero (vive en main, en este mismo directorio). PERMITIDO editar: plotspace/tests/test_auth.py (nuevo), plotspace/tests/conftest.py (si no existe). PROHIBIDO modificar la implementación en plotspace/auth/*. CRITERIO DE ÉXITO: cubrir happy path de register/login/me + token inválido + user duplicado. pytest sin fallos.","depende_de":"paso_0"}]}}
+{"message":"De acuerdo. Arranco la implementación; cuando cierre, lanzo los tests.","actions":[{"type":"spawn_terminal","name":"Auth","ia_type":"claude","archivos":["plotspace/auth/*","plotspace/main.py"],"tarea":"OBJETIVO: endpoints POST /auth/register, POST /auth/login, GET /auth/me con JWT (usá pyjwt). PERMITIDO editar: plotspace/auth/* (nueva carpeta), plotspace/main.py (registrar router). PROHIBIDO: plotspace/tests/*. CRITERIO DE ÉXITO: register crea user, login devuelve token, /me con Authorization Bearer devuelve el user."}]}
 
 [6] PETICIÓN AMBIGUA — preguntar UNA cosa
 Usuario: "agregá login"
@@ -339,18 +281,19 @@ Usuario: "agregá login"
 
 [7] FALTA INFO PERO ES ASUMIBLE — avisar la asunción
 Usuario: "ponele tests al módulo de pagos"
-{"message":"De acuerdo. Asumo pytest. Decime si querés otro framework.","actions":[{"type":"none"}],"workflow":{"nombre":"Tests módulo pagos","objetivo":"Tests pytest sobre plotspace/payments/","pasos":[{"agente":"Tests","ia_type":"claude","tarea":"OBJETIVO: tests pytest cubriendo plotspace/payments/*. Leé los archivos primero. PERMITIDO editar: plotspace/tests/test_payments.py (nuevo), plotspace/tests/conftest.py (si no existe). PROHIBIDO modificar plotspace/payments/*. CRITERIO DE ÉXITO: ≥70% coverage del módulo y pytest verde.","depende_de":null}]}}
+{"message":"De acuerdo. Asumo pytest. Decime si querés otro framework.","actions":[{"type":"spawn_terminal","name":"Tests","ia_type":"claude","archivos":["plotspace/tests/test_payments.py"],"tarea":"OBJETIVO: tests pytest cubriendo plotspace/payments/*. Leé los archivos primero. PERMITIDO editar: plotspace/tests/test_payments.py (nuevo). PROHIBIDO modificar plotspace/payments/*. CRITERIO DE ÉXITO: happy path + errores de cada función pública, pytest verde."}]}
 
 [8] CERRAR PREVIEW SERVER (NO confundir con cerrar terminal)
 Contexto: [Preview activo]\n  Servidor de preview corriendo en http://localhost:8081/
 Usuario: "cerrá el servidor del frontend" o "matá el puerto 8081"
 {"message":"Preview cerrado.","actions":[{"type":"stop_preview"}]}
 
-[9] RESPONDIENDO A TASK_BLOCKED
-Contexto: [Evento: TASK_BLOCKED en paso_0 motivo: necesito saber si la tabla users ya existe o la creo]
-{"message":"Le doy la info al agente.","actions":[{"type":"none"}],"workflow":{"nombre":"Resume auth con tabla users","objetivo":"Continuar paso_0 con la info que falta","pasos":[{"agente":"Implementación","ia_type":"claude","tarea":"CONTINUACIÓN del trabajo anterior: la tabla users no existe, creala vos en plotspace/database.py con columnas id, email UNIQUE, password_hash, created_at. Después seguí con auth como estabas. PERMITIDO: plotspace/auth/*, plotspace/database.py (solo agregar tabla users), plotspace/main.py. PROHIBIDO: plotspace/tests/*.","depende_de":null}]}}
+[9] DESTRABAR UN AGENTE BLOQUEADO
+Contexto: [Estado actual]\n  - ID 42: Auth (claude) — ⚪ quieta hace 2 min — LIBRE\n    último cierre: TASK_BLOCKED hace 2 min: necesito saber si la tabla users ya existe o la creo
+Usuario: "la tabla no existe, que la cree"
+{"message":"Le paso la info a Auth.","actions":[{"type":"enviar_prompt","terminal_id":42,"prompt":"CONTINUACIÓN: la tabla users no existe — creala vos en plotspace/database.py con columnas id, email UNIQUE, password_hash, created_at. Después seguí con auth como estabas. PERMITIDO: plotspace/auth/*, plotspace/database.py (solo agregar la tabla), plotspace/main.py. PROHIBIDO: plotspace/tests/*."}]}
 
-[10] PROMPT DIRECTO A UNA TERMINAL VIVA — sin workflow
+[10] PROMPT DIRECTO A UNA TERMINAL VIVA
 Contexto: [Estado actual]\n  - ID 151: Claude Code #2 (claude) — ⚪ quieta hace 12 min — LIBRE
 Usuario: "decile a la claude libre que pula el diseño de la landing"
 {"message":"Le mando la tarea a Claude Code #2.","actions":[{"type":"enviar_prompt","terminal_id":151,"prompt":"OBJETIVO: pulir el diseño de la landing. Trabajá sobre los archivos de la landing que muestra el mapa del proyecto (HTML + CSS). CRITERIO DE ÉXITO: jerarquía tipográfica consistente, espaciado uniforme y paleta cohesiva, sin romper el layout existente."}]}
@@ -360,9 +303,9 @@ RECORDATORIO FINAL
 ══════════════════════════════════════════════════════════════════════
 
 Tu ÚLTIMO mensaje es SIEMPRE el objeto JSON de respuesta, con
-'message' primero en tono Jarvis. Antes de llamarla, revisá mentalmente:
+'message' primero en tono Jarvis. Antes de emitirlo, revisá mentalmente:
 tono Jarvis, archivos disjuntos y sacados del mapa real, terminales libres
-reusadas antes de spawnear.
+reusadas antes de spawnear, una tarea autosuficiente por agente.
 """.replace('__MAX_TERMINALES__', str(MAX_TERMINALES))
 
 # ─── Modelos ───────────────────────────────────────────────────────────────────
@@ -530,52 +473,15 @@ async def eliminar_thread(project_id: int, thread_id: str):
         conn.close()
 
 
-# ─── Endpoints: workflows del proyecto ────────────────────────────────────────
-
-@router.get("/workflows/{project_id}")
-async def listar_workflows(project_id: int):
-    """Lista los workflows del proyecto (running + completados)."""
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            'SELECT id, nombre, objetivo, estado, pasos, paso_actual, created_at '
-            'FROM workflows WHERE project_id = ? ORDER BY created_at DESC',
-            (project_id,)
-        )
-        rows = cursor.fetchall()
-    finally:
-        conn.close()
-
-    resultado = []
-    for r in rows:
-        try:
-            pasos = json.loads(r['pasos'])
-        except (json.JSONDecodeError, TypeError):
-            pasos = []
-        resultado.append({
-            'id':          r['id'],
-            'nombre':      r['nombre'],
-            'objetivo':    r['objetivo'],
-            'estado':      r['estado'],
-            'paso_actual': r['paso_actual'],
-            'total_pasos': len(pasos),
-            # FIX task board: los pasos se parseaban solo para contarlos y se
-            # DESCARTABAN — el kanban no podía reconstruir el historial al
-            # recargar (las cards solo vivían de los eventos WS en vivo).
-            'pasos':       pasos,
-            'created_at':  r['created_at'],
-        })
-    return resultado
-
-
 # ─── Endpoints: chat ──────────────────────────────────────────────────────────
 
-# Schema de la respuesta del orquestador: {message, actions, workflow?}. Lo usan
-# los DOS motores — el CLI con --json-schema y la API con structured outputs
+# Schema de la respuesta del orquestador: {message, actions}. Lo usan los DOS
+# motores — el CLI con --json-schema y la API con structured outputs
 # (output_config.format), que garantiza JSON válido sin forzar una tool. El schema
-# es laxo a propósito (no garantiza pasos en workflow); _sanitizar_respuesta queda
-# como red de 2do nivel. 'message' va PRIMERO para que el stream lo entregue antes.
+# es laxo a propósito; _sanitizar_respuesta queda como red de 2do nivel.
+# 'message' va PRIMERO para que el stream lo entregue antes.
+_IA_TYPES = ["claude", "codex", "gemini", "opencode", "qwen", "antigravity", "grok", "manual"]
+
 RESPONDER_SCHEMA = {
     "type": "object",
     "properties": {
@@ -585,7 +491,7 @@ RESPONDER_SCHEMA = {
         },
         "actions": {
             "type": "array",
-            "description": "Acciones operativas. Usá [{\"type\":\"none\"}] si solo hay workflow o respuesta conversacional. Si hay workflow, los spawn_terminal se ignoran (el workflow crea sus terminales).",
+            "description": "Acciones operativas. Usá [{\"type\":\"none\"}] en una respuesta conversacional. Para trabajo de código: un spawn_terminal CON tarea por agente, o enviar_prompt a una terminal LIBRE.",
             "items": {
                 "type": "object",
                 "properties": {
@@ -593,40 +499,17 @@ RESPONDER_SCHEMA = {
                         "type": "string",
                         "enum": ["none", "spawn_terminal", "close_terminal", "close_all", "stop_preview", "enviar_prompt"],
                     },
-                    "name": {"type": "string", "description": "Solo spawn_terminal: nombre de la terminal."},
-                    "ia_type": {"type": "string", "enum": ["claude", "codex", "gemini", "opencode", "qwen", "antigravity", "grok", "manual"], "description": "Solo spawn_terminal."},
-                    "count": {"type": "integer", "description": "Solo spawn_terminal: cuántas terminales."},
+                    "name": {"type": "string", "description": "Solo spawn_terminal: nombre de la terminal (ej 'Backend')."},
+                    "ia_type": {"type": "string", "enum": _IA_TYPES, "description": "Solo spawn_terminal."},
+                    "count": {"type": "integer", "description": "Solo spawn_terminal SIN tarea: cuántas terminales vacías. Con tarea se ignora (1 agente por action)."},
+                    "tarea": {"type": "string", "description": "Solo spawn_terminal: prompt AUTOSUFICIENTE del agente siguiendo la PLANTILLA (OBJETIVO, ARCHIVOS PERMITIDOS/PROHIBIDOS, CRITERIO DE ÉXITO, PREVIEW si aplica). Jarvis se lo entrega apenas su CLI esté listo. El cierre (sentinel) lo agrega el sistema: no lo incluyas."},
+                    "archivos": {"type": "array", "items": {"type": "string"}, "description": "Solo spawn_terminal con tarea: paths/patrones EXCLUSIVOS de este agente (del [Mapa del proyecto]). Dos agentes JAMÁS comparten archivos."},
                     "terminal_id": {"type": "integer", "description": "close_terminal: id a cerrar. enviar_prompt: id de la terminal destino."},
                     "prompt": {"type": "string", "description": "Solo enviar_prompt: la tarea/mensaje que se tipea en esa terminal. Autosuficiente, con archivos/carpetas concretos del [Mapa del proyecto]."},
                     "es_respuesta": {"type": "boolean", "description": "Solo enviar_prompt: true si el prompt RESPONDE la pregunta que la terminal tiene en pantalla (❓ ESPERANDO RESPUESTA) — se tipea tal cual."},
                 },
                 "required": ["type"],
             },
-        },
-        "workflow": {
-            "type": "object",
-            "description": "Solo si la tarea es compleja (construir, implementar, feature, refactor, tests). Omitir en conversacional/operativa simple.",
-            "properties": {
-                "nombre": {"type": "string"},
-                "objetivo": {"type": "string"},
-                "pasos": {
-                    "type": "array",
-                    "items": {
-                        "type": "object",
-                        "properties": {
-                            "agente": {"type": "string", "description": "Nombre descriptivo, ej 'Backend'."},
-                            "ia_type": {"type": "string", "enum": ["claude", "codex", "gemini", "opencode", "qwen", "antigravity", "grok", "manual"]},
-                            "terminal_id": {"type": "integer", "description": "OPCIONAL: id de una terminal activa LIBRE ([Estado actual]) para REUSARLA en este paso en vez de crear una nueva. Omitir para spawnear."},
-                            "rol": {"type": "string", "enum": ["scout", "builder"], "description": "Default 'builder'. 'scout' explora y guarda memorias, archivos []."},
-                            "archivos": {"type": "array", "items": {"type": "string"}, "description": "Paths/patrones EXCLUSIVOS de este paso. Scout usa []."},
-                            "tarea": {"type": "string", "description": "Prompt autosuficiente siguiendo la PLANTILLA: OBJETIVO, ARCHIVOS PERMITIDOS/PROHIBIDOS, CRITERIO DE ÉXITO. El protocolo de cierre (TASK_* + sentinel) lo agrega el engine: no lo incluyas."},
-                            "depende_de": {"type": ["string", "null"], "description": "null (paralelo) o 'paso_N' (índice 0-based del paso del que depende)."},
-                        },
-                        "required": ["agente", "ia_type", "tarea"],
-                    },
-                },
-            },
-            "required": ["nombre", "objetivo", "pasos"],
         },
     },
     "required": ["message", "actions"],
@@ -682,37 +565,40 @@ def _extraer_message_parcial(texto: str) -> str:
 
 def _sanitizar_respuesta(parsed, raw_text):
     """Defiende la ejecución de una respuesta del LLM MAL FORMADA: el modelo a veces devuelve
-    actions=null, workflow={}, tipos equivocados, o ni siquiera un dict. Devuelve SIEMPRE una
-    tripleta segura (message:str, actions:list[dict con 'type' str], workflow:dict-con-pasos|None)
-    → el resto del pipeline (ejecutar actions/workflow) nunca crashea por forma inválida. Pura/testeable."""
+    actions=null, tipos equivocados, o ni siquiera un dict. Devuelve SIEMPRE un par seguro
+    (message:str, actions:list[dict con 'type' str]) → el resto del pipeline nunca crashea por
+    forma inválida. En spawn_terminal una `tarea` que no es string no vacío se descarta (queda
+    una terminal vacía, sin `archivos`) y con tarea `archivos` se normaliza a lista de strings.
+    Pura/testeable."""
     if not isinstance(parsed, dict):
         return ((raw_text if isinstance(raw_text, str) and raw_text.strip() else "Procesado."),
-                [{"type": "none"}], None)
+                [{"type": "none"}])
     msg = parsed.get("message")
     if not isinstance(msg, str) or not msg.strip():
         msg = raw_text if isinstance(raw_text, str) and raw_text.strip() else "Procesado."
     acts = parsed.get("actions")
     if not isinstance(acts, list):
         acts = []
-    acts = [a for a in acts if isinstance(a, dict) and isinstance(a.get("type"), str)]
+    acts = [dict(a) for a in acts if isinstance(a, dict) and isinstance(a.get("type"), str)]
+    for a in acts:
+        if a["type"] != "spawn_terminal":
+            continue
+        tarea = a.get("tarea")
+        if not (isinstance(tarea, str) and tarea.strip()):
+            a.pop("tarea", None)
+            a.pop("archivos", None)     # sin tarea no hay territorio que reclamar
+            continue
+        a["tarea"] = tarea.strip()
+        archivos = a.get("archivos")
+        a["archivos"] = ([x.strip() for x in archivos if isinstance(x, str) and x.strip()]
+                         if isinstance(archivos, list) else [])
     if not acts:
         acts = [{"type": "none"}]
-    wf = parsed.get("workflow")
-    if isinstance(wf, dict) and isinstance(wf.get("pasos"), list):
-        # Descartar pasos INVÁLIDOS (sin 'tarea' string no vacía): con tool-use, una respuesta
-        # truncada por max_tokens deja el ÚLTIMO paso a medias (el SDK parsea el tool input en
-        # modo parcial) → ejecutarlo crashearía (KeyError 'tarea'). Antes el truncado fallaba el
-        # parse entero y se descartaba el workflow; acá replicamos esa degradación segura por paso.
-        pasos_ok = [p for p in wf["pasos"]
-                    if isinstance(p, dict) and isinstance(p.get("tarea"), str) and p.get("tarea").strip()]
-        wf = {**wf, "pasos": pasos_ok} if pasos_ok else None
-    else:
-        wf = None
-    return (msg, acts, wf)
+    return (msg, acts)
 
 
 async def _procesar_respuesta_orquestador(raw_text, usage, project, req, terminals_activas, stop_reason=None):
-    """Parsea la respuesta del modelo (JSON), ejecuta actions/workflow, registra el uso
+    """Parsea la respuesta del modelo (JSON), ejecuta las actions, registra el uso
     y actualiza STATE.md. Devuelve el dict de respuesta. COMPARTIDO por /chat y
     /chat-stream → fuente ÚNICA de la lógica de ejecución (sin drift)."""
     try:
@@ -728,7 +614,7 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
     # Con tool-use el raw es JSON PURO (re-serializado del tool input) → parsear DIRECTO.
     # NO strippear fences acá: si 'message' contiene un ``` de código (Jarvis explicándole
     # código a un dev), el split partiría el JSON serializado → json.loads falla → se perdería
-    # el mensaje + actions/workflow. El de-fence queda SOLO como fallback si el parse directo
+    # el mensaje + actions. El de-fence queda SOLO como fallback si el parse directo
     # falla (compat con un eventual fallback de texto crudo legacy).
     try:
         parsed = json.loads(raw_text)
@@ -751,38 +637,56 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
                     parsed = None
 
     # Saneo defensivo: el LLM puede mandar JSON con tipos equivocados o incompleto →
-    # nunca dejar que rompa la ejecución de actions/workflow.
-    jarvis_message, actions, workflow_data = _sanitizar_respuesta(parsed, raw_text)
+    # nunca dejar que rompa la ejecución de las actions.
+    jarvis_message, actions = _sanitizar_respuesta(parsed, raw_text)
 
-    # Si el modelo se cortó por longitud, el workflow casi seguro quedó truncado → NO ejecutar
-    # un plan a medias: descartarlo y pedir que repita. (El sanitizer ya dropeó los pasos sin
-    # 'tarea', pero podrían faltar pasos enteros que no llegaron a aparecer.)
-    if stop_reason == "max_tokens" and workflow_data:
-        workflow_data = None
-        jarvis_message = (jarvis_message + L(
-            " (me corté por longitud, señor — repetime la orden más acotada).",
-            " (I got cut off by length, sir — give me the order again, narrower).")).strip()
+    # Si el modelo se cortó por longitud, las tareas casi seguro quedaron truncadas → NO
+    # lanzar agentes con un plan a medias: descartar lo que entrega trabajo y pedir que repita.
+    if stop_reason == "max_tokens":
+        antes = len(actions)
+        actions = [a for a in actions
+                   if not (a['type'] == 'enviar_prompt'
+                           or (a['type'] == 'spawn_terminal' and a.get('tarea')))]
+        if len(actions) != antes:
+            actions = actions or [{"type": "none"}]
+            jarvis_message = (jarvis_message + L(
+                " (me corté por longitud, señor — repetime la orden más acotada).",
+                " (I got cut off by length, sir — give me the order again, narrower).")).strip()
 
     created_terminals = []
     closed_all        = False
-    workflow_card     = None
+    # Objetivo corto de esta orden: agrupa en el monitor de Tasks a los agentes
+    # que Jarvis lanzó (o re-instruyó) por el mismo pedido.
+    orquestacion = _objetivo_orquestacion(req.message)
+    orquestacion_ts = datetime.now().isoformat(timespec='seconds')
+    origen_escrito = False
 
-    # ── Ejecutar acciones simples ──────────────────────────────────────────────
-    # Si hay un workflow, ignorar spawn_terminal — el workflow crea sus propias terminales.
+    # ── Ejecutar acciones ──────────────────────────────────────────────────────
     for action in actions:
         atype = action.get("type", "none")
 
         if atype == "spawn_terminal":
-            if workflow_data:
-                continue
             count_actual = len(terminals_activas) + len(created_terminals)
+            tarea = action.get("tarea")
             nuevas = await _spawn_terminales(
                 project_id   = req.project_id,
                 name         = action.get("name", "Terminal"),
                 ia_type      = action.get("ia_type", "manual"),
-                count        = max(1, _entero(action.get("count"), 1)),
+                # Con tarea: UN agente por action (cada agente lleva su tarea).
+                count        = 1 if tarea else max(1, _entero(action.get("count"), 1)),
                 count_actual = count_actual,
             )
+            if tarea and nuevas:
+                await _lanzar_agente_con_tarea(
+                    req.project_id, nuevas[0], tarea, action.get("archivos") or [],
+                    orquestacion, orquestacion_ts)
+                origen_escrito = True
+            elif tarea:
+                jarvis_message = (jarvis_message + L(
+                    f" ⚠️ No lancé a {action.get('name') or 'un agente'}: tope de "
+                    f"{MAX_TERMINALES} terminales.",
+                    f" ⚠️ I didn't launch {action.get('name') or 'an agent'}: "
+                    f"{MAX_TERMINALES}-terminal limit reached.")).strip()
             created_terminals.extend(nuevas)
 
         elif atype == "close_all":
@@ -812,20 +716,14 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
             _detener_preview_si_existe(req.project_id)
 
         elif atype == "enviar_prompt":
-            # Las manos que faltaban: mandarle una tarea a una terminal VIVA
-            # (send_to_agent, el mismo canal de los workflows) sin spawnear nada.
+            # Mandarle una tarea (o la respuesta a una pregunta en pantalla) a
+            # una terminal VIVA sin spawnear nada.
             activas_ids = {t['id'] for t in terminals_activas}
-            conn = get_db()
-            try:
-                ocupadas = _terminales_ocupadas(conn.cursor(), req.project_id)
-            finally:
-                conn.close()
-            tid, motivo = _validar_enviar_prompt(action, activas_ids, ocupadas)
+            tid, motivo = _validar_enviar_prompt(action, activas_ids)
             es_respuesta = action.get('es_respuesta') is True
             if not motivo:
-                # La regla "nunca a una ocupada" era solo texto del prompt: el
-                # código miraba únicamente los pasos running. Ahora decide el
-                # estado VIVO (trabajando, pregunta en pantalla, CLI caído).
+                # La regla "nunca a una ocupada" la decide el estado VIVO
+                # (trabajando, pregunta en pantalla, CLI caído).
                 try:
                     from plotspace.core import orq_contexto
                     fila = next(t for t in terminals_activas if t['id'] == tid)
@@ -854,15 +752,14 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
                     _logs.evento('prompt_directo', terminal_id=tid,
                                  project_id=req.project_id,
                                  respuesta=es_respuesta)
+                    if not es_respuesta:
+                        # Desde ahora es un agente de Jarvis con esta tarea.
+                        await asyncio.to_thread(_registrar_origen, tid, texto,
+                                                orquestacion, orquestacion_ts)
+                        origen_escrito = True
 
-    # ── Ejecutar workflow si lo hay ────────────────────────────────────────────
-    if workflow_data:
-        count_base = len(terminals_activas) + len(created_terminals)
-        wf_card, wf_terminals = await ejecutar_workflow(
-            workflow_data, req.project_id, count_base
-        )
-        workflow_card = wf_card
-        created_terminals.extend(wf_terminals)
+    if origen_escrito:
+        await _avisar_agentes(req.project_id)
 
     await _actualizar_state_md(project, req.project_id)
 
@@ -871,17 +768,8 @@ async def _procesar_respuesta_orquestador(raw_text, usage, project, req, termina
         "actions":           actions,
         "created_terminals": created_terminals,
         "closed_all":        closed_all,
-        "workflow_card":     workflow_card,
     }
 
-
-# Auto-intervención (Etapa 5): ante TASK_BLOCKED (o TASK_ERROR sin reasignación
-# posible) el orquestador se llama SOLO y re-instruye al agente. Solo en motor
-# suscripción (cero API paga). Flag global + guardas anti-loop abajo.
-ORQ_AUTO_INTERVENCION = (os.environ.get('ORQ_AUTO_INTERVENCION', 'on')
-                         .strip().lower() not in ('off', '0', 'false', 'no'))
-_AUTO_INTERV_TOPE_HORA = 6
-_auto_intervenciones: list = []   # timestamps de intervenciones (ventana móvil)
 
 # Referencias FUERTES a las tareas en background: el event loop solo guarda
 # referencias débiles, así que un `asyncio.create_task` suelto puede ser
@@ -896,84 +784,6 @@ def _en_fondo(coro) -> asyncio.Task:
     return tarea
 
 
-def _puede_auto_intervenir(paso: dict, habilitado: bool, recientes: list,
-                           ahora: float, tope: int = _AUTO_INTERV_TOPE_HORA) -> bool:
-    """Guarda PURA anti-loop: flag prendido + este paso nunca intervenido +
-    menos de `tope` intervenciones en la última hora (en todo el server)."""
-    if not habilitado:
-        return False
-    if paso.get('auto_intervencion_ts'):
-        return False
-    en_ventana = sum(1 for t in recientes if (ahora - t) < 3600)
-    return en_ventana < tope
-
-
-def _mensaje_auto_intervencion(evento: str, paso_idx: int, wf_nombre: str,
-                               motivo: str, term_nombre: str) -> str:
-    """El mensaje sintético con el que el orquestador se llama a sí mismo.
-    PURA — es la sección de manejo de errores del prompt, pero ejercitada."""
-    return (
-        f"[Evento: {evento} en paso_{paso_idx} del workflow '{wf_nombre}' — "
-        f"agente {term_nombre}. Motivo: {motivo or 'sin motivo reportado'}]\n"
-        f"Antes de decidir, leé en [Estado actual] la PANTALLA y los archivos "
-        f"de {term_nombre}: el motivo resume, la pantalla muestra qué pasó.\n"
-        "AUTO-INTERVENCIÓN (el usuario NO está mirando este chat ahora): si el "
-        "bloqueo se resuelve con información que tenés o una decisión técnica "
-        "razonable, resolvelo YA re-instruyendo al agente — un workflow chico "
-        "con la info que falta, o enviar_prompt si alcanza con un empujón. "
-        "SOLO si genuinamente requiere una decisión del usuario (producto, "
-        "datos que no existen), tu 'message' debe ser UNA pregunta concreta "
-        'para él y actions [{"type":"none"}].'
-    )
-
-
-async def _auto_intervenir(project_id: int, wf_nombre: str, paso_idx: int,
-                           evento: str, motivo: str, term_nombre: str):
-    """Corre en background tras el broadcast del bloqueo: consulta al motor
-    suscripción con el contexto del evento y ejecuta lo que decida (workflow
-    chico / enviar_prompt / pregunta al usuario). Best-effort: cualquier error
-    se loguea y el flujo manual de siempre sigue disponible."""
-    from plotspace.core.events import broadcaster
-    try:
-        req = ChatRequest(project_id=project_id,
-                          message=_mensaje_auto_intervencion(
-                              evento, paso_idx, wf_nombre, motivo, term_nombre))
-        project, terminals_activas, mensajes, _cli = await _preparar_contexto_chat(req)
-        raw, usage, stop = await _consultar_cli(mensajes, project)
-        res = await _procesar_respuesta_orquestador(
-            raw, usage, project, req, terminals_activas, stop_reason=stop)
-        await broadcaster.broadcast(project_id, {
-            "type":    "orquestador_mensaje",
-            "message": L("🤖 Auto-intervención: ", "🤖 Auto-intervention: ") + res['response'],
-        })
-        _logs.evento('auto_intervencion', project_id=project_id, paso=paso_idx,
-                     evento=evento, workflow=wf_nombre)
-    except Exception as e:
-        print(f'[auto-intervención] falló (paso_{paso_idx} de {wf_nombre}): {e}')
-
-
-def _lanzar_auto_intervencion(wf: dict, pasos: list, paso_idx: int,
-                              project_id: int, evento: str, motivo: str,
-                              term_nombre: str):
-    """Sella el paso + registra la ventana y dispara la intervención en
-    background. Centraliza las guardas para BLOCKED y ERROR."""
-    if ORQUESTADOR_MOTOR == 'api':
-        return                      # con API paga no se gasta solo
-    if not (0 <= paso_idx < len(pasos)):
-        return
-    ahora = time.time()
-    _auto_intervenciones[:] = [t for t in _auto_intervenciones if ahora - t < 3600]
-    if not _puede_auto_intervenir(pasos[paso_idx], ORQ_AUTO_INTERVENCION,
-                                  _auto_intervenciones, ahora):
-        return
-    pasos[paso_idx]['auto_intervencion_ts'] = ahora
-    _auto_intervenciones.append(ahora)
-    _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
-    _en_fondo(_auto_intervenir(
-        project_id, wf.get('nombre') or 'Workflow', paso_idx, evento,
-        motivo or '', term_nombre))
-
-
 def _entero(valor, default):
     """int() tolerante para campos que escribe el modelo ("2", 2.0, "dos"):
     un ValueError a mitad de las acciones cortaba el resto, y el frontend
@@ -984,10 +794,11 @@ def _entero(valor, default):
         return default
 
 
-def _validar_enviar_prompt(action: dict, activas_ids: set, ocupadas: set):
+def _validar_enviar_prompt(action: dict, activas_ids: set):
     """Guarda de la action enviar_prompt. Devuelve (terminal_id, None) si el
     envío es válido, o (None, motivo legible) si no. PURA — el caller junta
-    activas_ids (terminales del proyecto) y ocupadas (pasos running)."""
+    activas_ids (terminales del proyecto); el estado VIVO (ocupada, pregunta
+    en pantalla, CLI caído) lo decide después _motivo_rechazo_envio."""
     tid = action.get('terminal_id')
     if not isinstance(tid, int):
         try:
@@ -1001,9 +812,6 @@ def _validar_enviar_prompt(action: dict, activas_ids: set, ocupadas: set):
     if tid not in activas_ids:
         return None, L(f'la terminal #{tid} no está activa en este proyecto',
                        f'terminal #{tid} is not active in this project')
-    if tid in ocupadas:
-        return None, L(f'la terminal #{tid} está ocupada con un paso de workflow en curso',
-                       f'terminal #{tid} is busy with a running workflow step')
     return tid, None
 
 
@@ -1025,22 +833,20 @@ def _motivo_rechazo_envio(info: dict, es_respuesta: bool) -> str:
 
 
 def _cierre_prompt_directo(terminal_id: int) -> str:
-    """Cierre estructurado para una tarea suelta: el sentinel lo registra y el
-    orquestador lo ve en [Eventos] / 'último cierre' en el próximo turno."""
+    """Cierre estructurado de toda tarea que entrega Jarvis (spawn_terminal con
+    tarea o enviar_prompt): el sentinel lo registra y el orquestador lo ve en
+    [Eventos] / 'último cierre' en el próximo turno. Pide el post-mortem
+    mínimo: motivo OBLIGATORIO al fallar (materia prima de las lecciones) y
+    memorias_usadas (medición de lectura de la memoria compartida)."""
     return (
         "\n\nAl terminar, señalá tu cierre: "
         f"mkdir -p .jarvis/signals && printf '%s' '{{\"estado\":\"done\",\"motivo\":\"\","
         f"\"memorias_usadas\":[]}}' > .jarvis/signals/terminal_{terminal_id}.json "
-        "(estado blocked o error si no pudiste, con un motivo concreto)."
+        "(estado blocked o error si no pudiste — el motivo es OBLIGATORIO y concreto; "
+        "en memorias_usadas listá los slugs de .jarvis/memory/ que te sirvieron; si "
+        "el tropiezo se podía prevenir con una regla corta, guardá además una "
+        "memoria con tags [leccion])."
     )
-
-
-def _terminal_reusable(tid, activas_ids: set, ocupadas: set, reclamadas: set) -> bool:
-    """¿El paso puede REUSAR la terminal `tid` en vez de spawnear una nueva?
-    Solo si es un id real de terminal activa, libre (sin paso running) y no
-    reclamada ya por otro paso de este mismo workflow. PURA."""
-    return (isinstance(tid, int) and tid in activas_ids
-            and tid not in ocupadas and tid not in reclamadas)
 
 
 _HISTORIAL_MAX_TURNOS = 12    # turnos previos que viajan a la API por mensaje
@@ -1113,7 +919,7 @@ OJOS PROPIOS (tools de lectura)
 
 Tenés Read/Glob/Grep sobre la carpeta del proyecto (SOLO lectura — jamás
 edites, crees ni ejecutes nada). Usalos ÚNICAMENTE cuando el pedido lo
-amerite: diseñar un workflow sobre código que no conocés, verificar que un
+amerite: planificar agentes sobre código que no conocés, verificar que un
 archivo exista antes de asignarlo, o entender una estructura que el
 [Mapa del proyecto] no alcanza a mostrar. Cada lectura suma latencia al chat:
 leé solo lo que cambia el plan, y para saludos/preguntas simples respondé
@@ -1163,7 +969,7 @@ def _cliente_anthropic(api_key: str):
 
 def _bloque_memoria_para_orden(project_ruta: str, mensaje: str) -> str:
     """Memorias relevantes al PEDIDO del usuario, para que el orquestador
-    diseñe el workflow esquivando los errores conocidos (la memoria entra al
+    planifique los agentes esquivando los errores conocidos (la memoria entra al
     planning, no solo al prompt del agente). Determinista, cero API. '' si no
     hay proyecto o nada relevante — degrada sin romper el chat."""
     if not project_ruta:
@@ -1248,7 +1054,7 @@ async def _preparar_contexto_chat(req):
 
     # Armado del contexto: la foto COMPLETA del enjambre y del proyecto
     # (core/orq_contexto): estado vivo de cada terminal con su pantalla, git,
-    # guía del proyecto, workflows, eventos, tablero y coordinación.
+    # guía del proyecto, eventos y coordinación.
     try:
         from plotspace.core import orq_contexto
         bloques = await orq_contexto.construir_bloques(project, terminals_activas)
@@ -1283,10 +1089,6 @@ async def _preparar_contexto_chat(req):
     skills_str = _formatear_skills_activas(req.project_id)
     if skills_str:
         bloques.append(f"[Skills activas]\n{skills_str}")
-
-    workflows_str = _formatear_workflows_recientes(req.project_id)
-    if workflows_str:
-        bloques.append(f"[Workflows recientes]\n{workflows_str}")
 
     mem_str = _bloque_memoria_para_orden(project.get('ruta'), req.message)
     if mem_str:
@@ -1409,7 +1211,7 @@ async def _consultar_cli(mensajes: list, project: dict):
 
 @router.post("/chat")
 async def chat_orquestador(req: ChatRequest):
-    """Procesa mensaje del usuario, llama a Claude y ejecuta acciones/workflows."""
+    """Procesa mensaje del usuario, llama a Claude y ejecuta sus acciones."""
     project, terminals_activas, mensajes, client = await _preparar_contexto_chat(req)
 
     if ORQUESTADOR_MOTOR != 'api':
@@ -1436,7 +1238,7 @@ async def chat_orquestador(req: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=502, detail=L("Error de la API de Claude: ", "Claude API error: ") + str(e))
 
-    # Post-procesado (parse JSON + ejecutar actions/workflow + uso + STATE.md) en un
+    # Post-procesado (parse JSON + ejecutar actions + uso + STATE.md) en un
     # helper COMPARTIDO con /chat-stream, así no hay drift en la lógica crítica.
     return await _procesar_respuesta_orquestador(
         raw_text, getattr(response, 'usage', None), project, req, terminals_activas,
@@ -1446,7 +1248,7 @@ async def chat_orquestador(req: ChatRequest):
 @router.post("/chat-stream")
 async def chat_orquestador_stream(req: ChatRequest):
     """Igual que /chat pero STREAMEA el 'message' token a token (SSE) para que la
-    respuesta aparezca en vivo. Las actions/workflow se ejecutan AL FINAL con el
+    respuesta aparezca en vivo. Las actions se ejecutan AL FINAL con el
     MISMO helper que /chat (cero drift). Si el front falla con esto, cae a /chat."""
     project, terminals_activas, mensajes, client = await _preparar_contexto_chat(req)
 
@@ -1500,7 +1302,7 @@ async def chat_orquestador_stream(req: ChatRequest):
                                         output_tokens=resultado['output_tokens'])
             try:
                 # Blindado: si el usuario cancela o se corta la conexión a mitad
-                # de las acciones, un workflow a medio spawnear queda peor que
+                # de las acciones, un enjambre a medio spawnear queda peor que
                 # uno terminado — las acciones se completan igual.
                 res = await asyncio.shield(_en_fondo(_procesar_respuesta_orquestador(
                     resultado['texto'], usage_cli, project, req,
@@ -1514,7 +1316,7 @@ async def chat_orquestador_stream(req: ChatRequest):
         raw = ""
         emitido = 0          # nº de chars del 'message' ya enviados al cliente
         usage = None
-        stop = None          # stop_reason del modelo (para descartar workflow truncado)
+        stop = None          # stop_reason del modelo (para descartar tareas truncadas)
         try:
             async with client.messages.stream(
                 model=ORQUESTADOR_MODEL,
@@ -1542,7 +1344,7 @@ async def chat_orquestador_stream(req: ChatRequest):
             yield sse({"type": "error", "detail": L("Error de la API de Claude: ", "Claude API error: ") + str(e)})
             return
 
-        # Ejecutar actions/workflow + uso + STATE.md (idéntico a /chat).
+        # Ejecutar actions + uso + STATE.md (idéntico a /chat).
         try:
             resultado = await asyncio.shield(_en_fondo(_procesar_respuesta_orquestador(
                 raw, usage, project, req, terminals_activas, stop_reason=stop)))
@@ -1779,173 +1581,7 @@ async def detener_preview(project_id: int, body: Optional[StopPreviewBody] = Non
     return {'ok': True, 'mensaje': 'No había preview activo'}
 
 
-# (Definición duplicada de GET /workflows/{project_id} ELIMINADA: FastAPI
-#  matcheaba la primera (línea ~422) y esta quedaba muerta — la divergencia
-#  entre ambas causó el bug del task board sin historial.)
-
-
-# ─── Lógica de workflows ────────────────────────────────────────────────────────
-
-def _dep_indice(dep) -> Optional[int]:
-    """Parse 'paso_3' → 3. Devuelve None si dep es null o no parseable."""
-    if not dep:
-        return None
-    try:
-        return int(str(dep).replace('paso_', '').strip())
-    except (ValueError, AttributeError):
-        return None
-
-
-def _deps_indices(dep) -> list:
-    """Todas las dependencias de un paso como índices: 'paso_2' → [2],
-    'paso_0, paso_1' → [0, 1], ['paso_0', 'paso_3'] → [0, 3]. Antes solo se
-    leía una y lo no parseable se ignoraba: el paso corría en paralelo cuando
-    debía esperar."""
-    if dep is None or dep == '' or dep is False:
-        return []
-    if isinstance(dep, bool):
-        return []
-    if isinstance(dep, int):
-        return [dep]
-    partes = dep if isinstance(dep, (list, tuple)) else [dep]
-    out = []
-    for parte in partes:
-        for n in re.findall(r'\d+', str(parte)):
-            if int(n) not in out:
-                out.append(int(n))
-    return out
-
-
-def _sanear_dependencias(pasos: list) -> list:
-    """Deja en cada paso solo las dependencias hacia un paso ANTERIOR. Eso
-    elimina de raíz los ciclos, la auto-dependencia y el paso que espera algo
-    que no existe — tres formas de dejar un paso pending para siempre.
-    Muta `pasos`; devuelve los avisos (uno por paso corregido)."""
-    avisos = []
-    for i, paso in enumerate(pasos):
-        crudo = paso.get('depende_de')
-        if crudo in (None, ''):
-            continue
-        deps = _deps_indices(crudo)
-        validas = [d for d in deps if 0 <= d < i]
-        if validas == deps and deps:
-            continue
-        paso['depende_de'] = ', '.join(f'paso_{d}' for d in validas) or None
-        avisos.append(f'paso_{i}: depende_de {crudo!r} → {paso["depende_de"]!r}')
-    return avisos
-
-
-def _paso_reviewer(nombre: str, objetivo: str) -> dict:
-    """Paso Reviewer que el engine agrega al final de cada workflow:
-    la compuerta de calidad antes de declarar el workflow completado."""
-    tarea = (
-        f"Sos el REVIEWER del workflow \"{nombre}\""
-        + (f" (objetivo: {objetivo})" if objetivo else "") + ".\n\n"
-        "Los builders ya terminaron su trabajo en main. Sos la compuerta de "
-        "calidad: nada se declara completado sin tu aprobación.\n\n"
-        "1. Corré `git status` y `git diff HEAD` (y `git log --oneline -10`) "
-        "para ver TODO lo que cambió.\n"
-        "2. Evaluá contra esta barra:\n"
-        "   a. ¿Los cambios cumplen el objetivo del workflow?\n"
-        "   b. ¿Nada evidentemente roto? (sintaxis, imports, referencias a "
-        "archivos/funciones que no existen)\n"
-        "   c. ¿Sin secretos/credenciales/keys en el diff?\n"
-        "   d. ¿Consistente con las convenciones del proyecto (CLAUDE.md) "
-        "y con lo que dice .jarvis/memory/INDEX.md?\n"
-        "3. Problemas MENORES (typo, import faltante, detalle de estilo): "
-        "arreglalos vos directamente.\n"
-        "4. Si descubriste algo que los próximos agentes deban saber, "
-        "guardalo en .jarvis/memory/ según el protocolo.\n\n"
-        "VEREDICTO (obligatorio, una línea sola al final):\n"
-        "• Si la calidad está OK → escribí TASK_DONE\n"
-        "• Si hay problemas serios → escribí TASK_BLOCKED seguido del motivo "
-        "concreto (qué archivo, qué problema, qué habría que hacer)\n\n"
-        "No agregues features ni refactorices por gusto: sos revisor, no builder."
-    )
-    return {
-        'agente':     'Reviewer',
-        'ia_type':    'claude',
-        'rol':        'reviewer',
-        'archivos':   [],
-        'tarea':      tarea,
-        'depende_de': None,  # el gating real es el special-case del engine
-    }
-
-
-_ESTADOS_TERMINALES = ('done', 'blocked', 'error')
-
-
-def _pasos_varados(pasos: list) -> set:
-    """Pasos pending que ya NUNCA van a arrancar: alguna dependencia terminó
-    blocked/error (o quedó varada a su vez), o apunta a un paso inexistente.
-    Sin esto esperaban para siempre, y con ellos el Reviewer y el cierre."""
-    varados: set = set()
-    cambio = True
-    while cambio:
-        cambio = False
-        for i, p in enumerate(pasos):
-            if i in varados or p.get('estado') != 'pending' or p.get('rol') == 'reviewer':
-                continue
-            for d in _deps_indices(p.get('depende_de')):
-                if (not (0 <= d < len(pasos)) or d == i or d in varados
-                        or pasos[d].get('estado') in ('blocked', 'error')):
-                    varados.add(i)
-                    cambio = True
-                    break
-    return varados
-
-
-def _pasos_listos_para_arrancar(pasos: list) -> list:
-    """Devuelve los índices de pasos en estado='pending' cuyas dependencias
-    están resueltas (sin depende_de, o TODOS los pasos de los que dependen
-    están 'done').
-
-    Special-case REVIEWER: arranca cuando ningún otro paso sigue en marcha —
-    TERMINADOS (o varados detrás de uno que falló), no necesariamente
-    exitosos. Un workflow que termina mal igual necesita que alguien mire el
-    diff."""
-    varados = _pasos_varados(pasos)
-    listos = []
-    for i, p in enumerate(pasos):
-        if p.get('estado') != 'pending' or i in varados:
-            continue
-        if p.get('rol') == 'reviewer':
-            otros = [j for j in range(len(pasos)) if j != i]
-            if otros and all(pasos[j].get('estado') in _ESTADOS_TERMINALES
-                             or j in varados for j in otros):
-                listos.append(i)
-            continue
-        deps = _deps_indices(p.get('depende_de'))
-        if all(0 <= d < len(pasos) and pasos[d].get('estado') == 'done' for d in deps):
-            listos.append(i)
-    return listos
-
-
-def _workflow_terminado(pasos: list) -> bool:
-    """True si ningún paso está running ni puede arrancar. Los blocked/error
-    cuentan como terminales (no van a avanzar solos), y también los pending
-    varados detrás de uno de ellos."""
-    varados = _pasos_varados(pasos)
-    return all(p.get('estado') in _ESTADOS_TERMINALES or i in varados
-               for i, p in enumerate(pasos))
-
-
-def _paso_de_terminal(pasos: list, terminal_id: int) -> Optional[int]:
-    """Qué paso cierra un evento de esta terminal: el running; si no hay, uno
-    blocked/error (el agente se destrabó y reporta). NUNCA un paso ajeno: el
-    viejo fallback a paso_actual hacía que el TASK_DONE de una terminal manual
-    marcara como terminado el paso de otro agente."""
-    for estados in (('running',), ('blocked', 'error')):
-        for i, p in enumerate(pasos):
-            if p.get('terminal_id') == terminal_id and p.get('estado') in estados:
-                return i
-    return None
-
-
-def _progreso_workflow(pasos: list) -> int:
-    """Cantidad de pasos completados (done). Útil para paso_actual de la UI."""
-    return sum(1 for p in pasos if p.get('estado') == 'done')
-
+# ─── Entrega de tareas a los agentes ─────────────────────────────────────────
 
 def listo_segun_fase(estado) -> bool:
     """¿El CLI ya está para recibir una tarea, según la máquina de agent_watch?
@@ -2044,57 +1680,41 @@ async def _esperar_agente_listo(terminal_id: int, timeout: float = 30.0) -> bool
     return False
 
 
-def _tarea_engine_para_terminal(paso: dict, terminal_id: int,
-                                project_ruta: str = None,
-                                pasos_workflow: list = None) -> str:
-    """Agrega instrucciones garantizadas por el engine al prompt del paso."""
-    from plotspace.core import sentinel
+def _objetivo_orquestacion(mensaje, tope: int = 120) -> str:
+    """Etiqueta corta del objetivo de una orden (la orden del chat en UNA línea,
+    recortada): agrupa en el monitor de Tasks a los agentes lanzados por ella. PURA."""
+    t = ' '.join(str(mensaje or '').split())
+    return t if len(t) <= tope else t[:tope - 1].rstrip() + '…'
 
-    tarea = paso.get('tarea') or ''
-    archivos = paso.get('archivos') or []
-    if archivos and paso.get('rol') != 'reviewer':
-        tarea += ("\n\nARCHIVOS DE TU PROPIEDAD EXCLUSIVA (no toques nada "
-                  f"fuera de esto): {', '.join(archivos)}. Si necesitás "
-                  "modificar otro archivo, escribí TASK_BLOCKED explicando cuál y por qué.")
-    # Retrieval activo de memoria: el engine inyecta las memorias relevantes al
-    # paso (match determinista por rutas/tags, cero API) — la lectura deja de
-    # depender de que el agente vaya solo al INDEX. El reviewer recibe la unión
-    # de archivos del workflow (revisa el diff completo).
+
+def _tarea_para_agente(tarea: str, archivos: list, terminal_id: int,
+                       project_ruta: str = None) -> str:
+    """El prompt que recibe un agente que Jarvis lanzó con tarea: la tarea del
+    plan + su territorio exclusivo + las memorias relevantes (recall
+    determinista, cero API) + sus mensajes pendientes del mailbox + el cierre
+    estructurado (sentinel). Cada agregado degrada a nada si falla."""
+    texto = (tarea or '').strip()
+    if archivos:
+        texto += ("\n\nARCHIVOS DE TU PROPIEDAD EXCLUSIVA (no toques nada fuera de "
+                  f"esto): {', '.join(archivos)}. Si necesitás modificar otro archivo, "
+                  "cerrá como blocked explicando cuál y por qué.")
     if project_ruta:
         try:
             from plotspace.core.memoria_recall import bloque_relevantes
-            archivos_recall = archivos
-            if paso.get('rol') == 'reviewer' and pasos_workflow:
-                archivos_recall = sorted({a for p in pasos_workflow
-                                          for a in (p.get('archivos') or [])})
-            tarea += bloque_relevantes(project_ruta, archivos_recall, tarea,
+            texto += bloque_relevantes(project_ruta, archivos, texto,
                                        terminal_id=terminal_id)
         except Exception as e:
-            print(f'[workflow] recall de memorias falló (sigo sin bloque): {e}')
-    # Mailbox v2: los mensajes pendientes de esta terminal viajan en el prompt
-    # de la tarea (frontera natural de entrega — quedan marcados entregados).
+            print(f'[agente] recall de memorias falló (sigo sin bloque): {e}')
     try:
         from plotspace.core.mailbox import bloque_pendientes_para_tarea
-        tarea += bloque_pendientes_para_tarea(terminal_id)
+        texto += bloque_pendientes_para_tarea(terminal_id)
     except Exception as e:
-        print(f'[workflow] mailbox pendientes falló (sigo sin bloque): {e}')
-    # Protocolo de cierre del pane: fuente ÚNICA = el engine (antes lo escribía
-    # el LLM en cada tarea → tokens duplicados y riesgo de drift). Solo si la
-    # tarea no lo trae ya (el Reviewer define su propio veredicto TASK_*).
-    if 'TASK_DONE' not in tarea:
-        tarea += ("\n\nPROTOCOLO DE CIERRE: cuando termines escribí TASK_DONE "
-                  "en una línea sola. Si te trabás, escribí TASK_BLOCKED "
-                  "seguido del motivo en la misma línea. Si hubo error, "
-                  "TASK_ERROR seguido del detalle.")
-    # Cierre estructurado (sentinel-file): además del TASK_DONE en el pane, el
-    # agente escribe un archivo — detección determinista y agnóstica al CLI.
-    tarea += sentinel.instruccion_cierre(terminal_id)
-    return tarea
+        print(f'[agente] mailbox pendientes falló (sigo sin bloque): {e}')
+    return texto + _cierre_prompt_directo(terminal_id)
 
 
 def _ruta_proyecto_o_none(project_id: int):
-    """Ruta del proyecto (para el recall de memorias). None si falla — el
-    engine degrada a prompt sin bloque de memorias, jamás rompe el arranque."""
+    """Ruta del proyecto. None si falla — el caller degrada, jamás rompe."""
     try:
         conn = get_db()
         try:
@@ -2106,463 +1726,106 @@ def _ruta_proyecto_o_none(project_id: int):
         return None
 
 
-def _terminal_libre_del_workflow(pasos: list, project_id: int) -> Optional[int]:
-    """Una terminal del workflow cuyo paso terminó 'done', que no tenga otro
-    paso running o pending, y siga activa. Para el Reviewer sin terminal."""
-    ocupadas = {p.get('terminal_id') for p in pasos
-                if p.get('estado') in ('running', 'pending') and p.get('terminal_id')}
-    candidatas = []
-    for p in pasos:
-        t = p.get('terminal_id')
-        if t and p.get('estado') == 'done' and t not in ocupadas and t not in candidatas:
-            candidatas.append(t)
-    if not candidatas:
-        return None
-    conn = get_db()
+def _registrar_origen(terminal_id: int, tarea: str, orquestacion: str,
+                      ts: str = None) -> None:
+    """Marca la terminal como agente de Jarvis: origen='jarvis' + la tarea que
+    se le entregó + el objetivo de la orden. Lo lee el monitor de Tasks.
+    Best-effort (un fallo de DB no frena la entrega)."""
+    ts = ts or datetime.now().isoformat(timespec='seconds')
     try:
-        for t in reversed(candidatas):            # la que terminó último, primero
-            f = conn.execute('SELECT activa FROM terminals WHERE id = ? AND project_id = ?',
-                             (t, project_id)).fetchone()
-            if f and f['activa']:
-                return t
-    finally:
-        conn.close()
-    return None
-
-
-async def _arrancar_pasos(pasos: list, indices: list, project_id: int, workflow_id: str):
-    """Pone los pasos indicados en estado='running', les manda la tarea, e
-    inicia el monitor de keywords de cada uno.
-
-    Un paso que NO puede arrancar queda en 'error' con su motivo — antes se
-    salteaba en silencio y quedaba pending para siempre (y con él el cierre
-    del workflow). El Reviewer sin terminal (tope de terminales) reusa la de
-    un builder que ya terminó bien."""
-    if not indices:
-        return
-    from plotspace.routers.terminals import iniciar_monitor
-    ruta = await asyncio.to_thread(_ruta_proyecto_o_none, project_id)
-    for i in indices:
-        paso = pasos[i]
-        tid  = paso.get('terminal_id')
-        if not tid and paso.get('rol') == 'reviewer':
-            tid = await asyncio.to_thread(_terminal_libre_del_workflow, pasos, project_id)
-            if tid:
-                paso['terminal_id'] = tid
-                print(f'[workflow] paso_{i} (reviewer) reusa la terminal #{tid}')
-        if not tid:
-            print(f'[workflow] paso_{i} sin terminal_id — error')
-            paso['estado'] = 'error'
-            paso['motivo'] = ('no arrancó: no hubo terminal disponible (tope de '
-                              f'{MAX_TERMINALES} terminales o spawn fallido)')
-            continue
-        tarea = paso.get('tarea')   # acceso seguro: un paso truncado podría no tenerla
-        if not tarea:
-            print(f'[workflow] paso_{i} sin tarea — error')
-            paso['estado'] = 'error'
-            paso['motivo'] = 'no arrancó: el plan no traía tarea para este paso'
-            continue
-        paso['estado'] = 'running'
-        paso['iniciado_ts'] = time.time()   # sello para el watchdog (sobrevive al restart)
-        from plotspace.core import logs
-        logs.evento('workflow_paso', workflow_id=workflow_id, paso=i, terminal_id=tid,
-                    rol=paso.get('rol', 'builder'), agente=paso.get('agente'))
-        # El paso arranca con su TERRITORIO ya tomado: los archivos que el plan
-        # le asignó quedan reclamados a su nombre antes de la primera línea. Es
-        # el momento más barato para evitar un choque — cuando todavía no
-        # existe. Lo libre se concede; lo ajeno se informa y se sigue igual (el
-        # reparto es una guía, no un candado que frene el workflow).
-        archivos_paso = paso.get('archivos') or []
-        if archivos_paso:
-            try:
-                from plotspace.core import territorio
-                r = territorio.reclamar(project_id, tid, paso.get('agente') or '',
-                                        archivos_paso)
-                if r['ocupados']:
-                    print(f'[workflow] paso_{i}: ya tienen dueño → '
-                          + ', '.join(f"{o['patron']} ({o['de']})" for o in r['ocupados']))
-            except Exception as e:
-                print(f'[workflow] no pude reclamar el territorio del paso {i}: {e}')
-
-        tarea = _tarea_engine_para_terminal(paso, tid, project_ruta=ruta,
-                                            pasos_workflow=pasos)
-        if (await send_to_agent(tid, tarea)) is False:
-            # Sin esto el paso figuraba 'running' hasta que el watchdog avisara
-            # (y solo avisa): nadie iba a cerrarlo nunca.
-            paso['estado'] = 'error'
-            paso['motivo'] = (f'no se pudo entregar la tarea a la terminal #{tid} '
-                              '(sesión tmux inexistente o pegado fallido)')
-            continue
-        iniciar_monitor(tid, project_id)
-    _actualizar_workflow_db(
-        workflow_id, estado='running', pasos=pasos,
-        paso_actual=_progreso_workflow(pasos),
-    )
-
-    # Avisar al frontend que hay pasos corriendo (execution plan card + actividad
-    # del mobile preview). Mismo shape que los workflow_update de task events.
-    from plotspace.core.events import broadcaster
-    await broadcaster.broadcast(project_id, {
-        "type":        "workflow_update",
-        "workflow_id": workflow_id,
-        "paso_actual": _progreso_workflow(pasos),
-        "total_pasos": len(pasos),
-        "estado":      "running",
-        "pasos":       pasos,
-    })
-
-
-async def ejecutar_workflow(workflow_data: dict, project_id: int, count_base: int) -> tuple:
-    """Crea el workflow en DB, spawnea agentes y envía la primera tarea.
-    Devuelve (workflow_card_dict, lista_terminales_creadas)."""
-    workflow_id = uuid.uuid4().hex[:10]
-    pasos       = workflow_data.get("pasos", [])
-    nombre      = workflow_data.get("nombre", "Workflow")
-    objetivo    = workflow_data.get("objetivo", "")
-    ahora       = datetime.now().isoformat()
-
-    # ── QUALITY GATE: paso Reviewer agregado por el ENGINE (no por el LLM,
-    #    así la compuerta está garantizada). Arranca recién cuando TODOS los
-    #    builders están done (special-case en _pasos_listos_para_arrancar) y
-    #    el workflow solo se declara completado si el Reviewer da TASK_DONE.
-    if pasos:
-        pasos = list(pasos) + [_paso_reviewer(nombre, objetivo)]
-    for aviso in _sanear_dependencias(pasos):
-        print(f'[workflow] dependencia inválida corregida — {aviso}')
-
-    print(f'[workflow] Iniciando {workflow_id}: {nombre} ({len(pasos)} pasos, reviewer incluido)')
-
-    # Obtener ruta del proyecto
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        cursor.execute('SELECT ruta FROM projects WHERE id = ?', (project_id,))
-        project_row  = cursor.fetchone()
-        project_path = project_row['ruta'] if project_row else ''
-    finally:
-        conn.close()
-
-    print(f'[workflow] Proyecto ruta: {project_path}')
-
-    # Enriquecer pasos con estado inicial y terminal_id vacío
-    for paso in pasos:
-        paso.setdefault("estado", "pending")
-        paso.setdefault("terminal_id", None)
-
-    # Guardar en DB (sin terminal_ids aún)
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            'INSERT INTO workflows (id, project_id, nombre, objetivo, estado, pasos, paso_actual, created_at) '
-            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            (workflow_id, project_id, nombre, objetivo, 'running', json.dumps(pasos), 0, ahora)
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-    # Log sesiones tmux actuales antes de spawnear (async: subprocess.run
-    # síncrono clavaba el event loop dentro de esta corutina — auditoría perf).
-    tmux_antes = await _tmux_listar_sesiones()
-    print(f'[workflow] Sesiones tmux antes: {tmux_antes or "(ninguna)"}')
-
-    # Lazy imports para preparar proyecto/sesión tmux sin circular dependency
-    from plotspace.routers.terminals import _preparar_proyecto, _crear_sesion_tmux
-
-    # Asegurar proyecto + skills inyectadas en CLAUDE.md una sola vez
-    await _preparar_proyecto(project_path, project_id=project_id)
-
-    # Terminales reusables: un paso puede traer terminal_id para mandarle la
-    # tarea a una terminal viva LIBRE en vez de spawnear otra. Guardas: activa,
-    # sin paso running, y no reclamada dos veces en este workflow.
-    conn = get_db()
-    try:
-        cur = conn.cursor()
-        activas = [dict(r) for r in cur.execute(
-            'SELECT id, nombre, tipo_ia FROM terminals WHERE project_id = ? AND activa = 1',
-            (project_id,)).fetchall()]
-        activas_ids = {t['id'] for t in activas}
-        ocupadas = _terminales_ocupadas(cur, project_id)
-    finally:
-        conn.close()
-    # Reusar solo una terminal libre DE VERDAD (quieta, sin pregunta en
-    # pantalla y con el CLI vivo), no solo "sin paso running".
-    pedidas = {p.get('terminal_id') for p in pasos if isinstance(p.get('terminal_id'), int)}
-    if pedidas & activas_ids:
+        conn = get_db()
         try:
-            from plotspace.core import orq_contexto
-            # Sin ESTE workflow: ya está en la DB con sus pasos pending, y la
-            # terminal pedida figuraría "con paso activo" por su propio paso.
-            otros_wfs = [w for w in await asyncio.to_thread(
-                orq_contexto.workflows_del_proyecto, project_id)
-                if w['id'] != workflow_id]
-            infos = await asyncio.to_thread(
-                orq_contexto.infos_terminales, project_id,
-                [t for t in activas if t['id'] in pedidas], otros_wfs)
-            ocupadas = ocupadas | {tid for tid, i in infos.items()
-                                   if not orq_contexto.es_libre(i)}
-        except Exception as e:
-            print(f'[workflow] sin estado vivo para validar reusos: {e}')
-
-    # Spawnear un terminal por cada paso: DB row + sesión tmux + lanzar IA.
-    # Todos los agentes trabajan directo en project_path (sin worktrees);
-    # coordinan leyendo CLAUDE.md y cada uno recibe su tarea por send-keys.
-    created_terminals = []
-    reclamadas: set = set()
-    nuevos = 0
-    for i, paso in enumerate(pasos):
-        tid_pedido = paso.get('terminal_id')
-        if _terminal_reusable(tid_pedido, activas_ids, ocupadas, reclamadas):
-            reclamadas.add(tid_pedido)
-            print(f'[workflow] paso_{i} REUSA la terminal #{tid_pedido} (sin spawn)')
-            continue
-        paso['terminal_id'] = None   # pedido inválido/ausente → spawn normal
-        if count_base + nuevos >= MAX_TERMINALES:
-            break
-        nuevas = await _spawn_terminales(
-            project_id   = project_id,
-            name         = paso.get("agente", f"Agent #{i+1}"),
-            ia_type      = paso.get("ia_type", "claude"),
-            count        = 1,
-            count_actual = count_base + nuevos,
-        )
-        if not nuevas:
-            continue
-
-        terminal_info = nuevas[0]
-        tid           = terminal_info["id"]
-        paso["terminal_id"] = tid
-        created_terminals.append(terminal_info)
-        nuevos += 1
-        print(f'[workflow] Terminal DB creada: id={tid}, nombre={terminal_info["nombre"]}')
-
-        # Comando del CLI computado ANTES de crear la sesión, para lanzarlo como
-        # PROGRAMA del pane (SIN eco): ni el --session-id ni la línea larga se ven
-        # tipeados en la terminal. claude se ata a su session_uuid → transcript
-        # determinista <uuid>.jsonl → REVIVE con su contexto tras un corte de luz
-        # (reconciliar recrea la sesión ya corriendo --resume; ver
-        # terminals._comando_lanzamiento) + --dangerously-skip-permissions (agente
-        # autónomo). Sin esto el claude del swarm corría con id aleatorio y su
-        # conversación se perdía en el reboot.
-        ia_type = paso.get("ia_type", "claude")
-        # Mantener alineado con terminals._COMANDOS_CLI (qwen SIN --session-id
-        # acá: el workflow arranca en frío y --chat-recording alcanza para que
-        # grabe; claude suma --dangerously-skip-permissions por ser autónomo).
-        ia_cmds = {
-            "claude":      "claude --dangerously-skip-permissions",
-            "codex":       "codex",
-            "gemini":      "gemini",
-            "opencode":    "opencode",
-            "qwen":        "qwen --chat-recording",
-            "antigravity": "agy",
-            "grok":        "grok",
-        }
-        ia_cmd = ia_cmds.get(ia_type)
-        if ia_cmd and ia_type == "claude":
-            conn = get_db()
-            try:
-                r = conn.execute(
-                    'SELECT session_uuid FROM terminals WHERE id = ?', (tid,)
-                ).fetchone()
-            finally:
-                conn.close()
-            su = r["session_uuid"] if r else None
-            if su:
-                ia_cmd = f"claude --session-id {su} --dangerously-skip-permissions"
-
-        # Crear la sesión YA corriendo el CLI (sin eco). La espera de "agente listo"
-        # (_esperar_agente_listo, más abajo) gatea la inyección de la tarea, así que
-        # ya no hace falta el viejo sleep(3.5) + send-keys de lanzamiento visible.
-        await _crear_sesion_tmux(tid, project_path, comando_cli=ia_cmd)
-        print(f'[workflow] Sesión tmux jarvis_{tid} lista (CLI={ia_type or "shell"}) en {project_path}')
-
-    # Log sesiones tmux después de spawnear (async, ver _tmux_listar_sesiones)
-    tmux_despues = await _tmux_listar_sesiones()
-    print(f'[workflow] Sesiones tmux después: {tmux_despues or "(ninguna)"}')
-
-    # Guardar pasos con terminal_ids
-    _actualizar_workflow_db(workflow_id, estado='running', pasos=pasos, paso_actual=0)
-
-    # Esperar en paralelo a que cada agente esté listo (detecta y auto-acepta
-    # el trust prompt de Claude Code). Antes era un sleep(5) ciego que mandaba
-    # la tarea durante el trust prompt y se perdía.
-    if created_terminals:
-        print(f'[workflow] Esperando a que las IAs estén listas...')
-        await asyncio.gather(*[
-            _esperar_agente_listo(t['id'], timeout=25.0) for t in created_terminals
-        ])
-
-    # Disparar TODOS los pasos sin dependencias en paralelo.
-    # Los que tienen depende_de='paso_N' arrancan cuando ese paso termine.
-    print(f'[workflow] Pasos listos al inicio (paralelo): {_pasos_listos_para_arrancar(pasos)}')
-    wf_ctx = {'id': workflow_id, 'nombre': nombre, 'estado': 'running'}
-    async with _lock_workflow(workflow_id):
-        await _avanzar_workflow(wf_ctx, pasos, project_id)
-
-    workflow_card = {
-        "id":          workflow_id,
-        "nombre":      nombre,
-        "objetivo":    objetivo,
-        "pasos":       pasos,
-        "paso_actual": 0,
-        "estado":      "running",
-    }
-    return workflow_card, created_terminals
-
-
-async def procesar_task_event_interno(terminal_id: int, event: str, project_id: int,
-                                      motivo: str = ''):
-    """Procesa un task event: avanza el workflow, notifica al frontend.
-
-    `motivo` (del sentinel-file) es el "por qué" de un BLOCKED/ERROR: se guarda
-    en el paso del workflow y viaja en los broadcasts — antes se perdía."""
-    from plotspace.core.events import broadcaster
-
-    # Task board: si esta terminal tenía tareas manuales asignadas (kanban),
-    # el evento las resuelve (TASK_DONE → done, BLOCKED/ERROR → blocked).
-    try:
-        from plotspace.routers.tasks import resolver_tasks_por_evento
-        await resolver_tasks_por_evento(terminal_id, event, project_id)
+            conn.execute(
+                "UPDATE terminals SET origen = 'jarvis', tarea = ?, orquestacion = ?, "
+                "orquestacion_ts = ? WHERE id = ?",
+                ((tarea or '').strip(), orquestacion or '', ts, terminal_id))
+            conn.commit()
+        finally:
+            conn.close()
     except Exception as e:
-        print(f'[tasks] error resolviendo tareas por evento: {e}')
+        print(f'[agente] no pude registrar el origen de #{terminal_id}: {e}')
 
-    term_nombre = await asyncio.to_thread(_nombre_terminal, terminal_id)
 
-    # Broadcast del raw event — el frontend lo usa solo para la card, NO para el chat
-    await broadcaster.broadcast(project_id, {
-        "type":            "task_event",
-        "event":           event,
-        "terminal_id":     terminal_id,
-        "terminal_nombre": term_nombre,
-        "motivo":          (motivo or '')[:300],
-    })
+async def _avisar_agentes(project_id: int) -> None:
+    """WS `agentes_update`: el monitor en vivo de Tasks re-lee los agentes."""
+    try:
+        from plotspace.core.events import broadcaster
+        await broadcaster.broadcast(project_id, {"type": "agentes_update"})
+    except Exception as e:
+        print(f'[agente] broadcast agentes_update falló: {e}')
 
-    # El evento va al workflow que tiene un paso de ESTA terminal — no al más
-    # nuevo del proyecto (con dos workflows vivos, los eventos del viejo caían
-    # en el nuevo) y nunca a paso_actual (una terminal manual marcaba como
-    # terminado el paso de otro agente).
-    wf_id = await asyncio.to_thread(_workflow_id_de_terminal, project_id, terminal_id)
-    if not wf_id:
-        return
 
-    # Los pasos viven en UNA columna JSON que se lee, modifica y reescribe con
-    # awaits en el medio: sin este lock dos eventos simultáneos se pisaban.
-    async with _lock_workflow(wf_id):
-        wf, pasos = await asyncio.to_thread(_leer_workflow, wf_id)
-        if wf is None or wf['estado'] not in ('running', 'paused'):
-            return
-        paso_idx = _paso_de_terminal(pasos, terminal_id)
-        if paso_idx is None:
-            return
+def _comando_cli_agente(ia_type: str, session_uuid: str = None):
+    """Comando del CLI de un agente autónomo, lanzado como PROGRAMA del pane
+    (sin eco): claude/qwen con su id determinista (revive con su contexto tras
+    un reboot) y claude con --dangerously-skip-permissions (nadie aprueba
+    permisos de un agente que trabaja solo). None para manual/shell. PURA."""
+    from plotspace.routers.terminals import _comando_lanzamiento
+    cmd = _comando_lanzamiento(ia_type, session_uuid, False, False)
+    if cmd and ia_type == 'claude':
+        cmd += ' --dangerously-skip-permissions'
+    return cmd
 
-        if event == "TASK_DONE":
-            pasos[paso_idx]["estado"] = "done"
-            _actualizar_workflow_db(
-                wf['id'], estado=wf['estado'], pasos=pasos,
-                paso_actual=_progreso_workflow(pasos),
-            )
 
-        elif event == "TASK_BLOCKED":
-            pasos[paso_idx]["estado"] = "blocked"
-            if motivo:
-                pasos[paso_idx]["motivo"] = motivo
-            wf['estado'] = 'paused'
-            _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
-            detalle = f": {motivo[:300]}" if motivo else ""
+async def _lanzar_agente_con_tarea(project_id: int, terminal: dict, tarea: str,
+                                   archivos: list, orquestacion: str,
+                                   orquestacion_ts: str = None) -> None:
+    """spawn_terminal CON tarea: registra el origen, reclama el territorio,
+    crea la sesión tmux ya corriendo el CLI y deja en background la entrega
+    de la tarea (espera a que el CLI esté listo y la pega)."""
+    tid = terminal['id']
+    await asyncio.to_thread(_registrar_origen, tid, tarea, orquestacion, orquestacion_ts)
+    ruta = await asyncio.to_thread(_ruta_proyecto_o_none, project_id)
+
+    # El agente arranca con su TERRITORIO ya tomado: el momento más barato para
+    # evitar un choque es cuando todavía no existe. Lo ajeno se informa y se
+    # sigue igual (el reparto es una guía, no un candado).
+    if archivos:
+        try:
+            from plotspace.core import territorio
+            r = territorio.reclamar(project_id, tid, terminal.get('nombre') or '', archivos)
+            if r['ocupados']:
+                print(f'[agente] #{tid}: ya tienen dueño → '
+                      + ', '.join(f"{o['patron']} ({o['de']})" for o in r['ocupados']))
+        except Exception as e:
+            print(f'[agente] no pude reclamar el territorio de #{tid}: {e}')
+
+    try:
+        from plotspace.routers.terminals import _preparar_proyecto, _crear_sesion_tmux
+        if ruta:
+            await _preparar_proyecto(ruta, project_id=project_id)
+        cmd = _comando_cli_agente(terminal.get('tipo_ia') or '', terminal.get('session_uuid'))
+        await _crear_sesion_tmux(tid, ruta or '', comando_cli=cmd)
+    except Exception as e:
+        print(f'[agente] no pude crear la sesión de #{tid}: {e}')
+
+    texto = _tarea_para_agente(tarea, archivos, tid, project_ruta=ruta)
+    _en_fondo(_entregar_tarea_cuando_listo(project_id, tid, terminal.get('nombre') or '',
+                                           texto))
+    _logs.evento('tarea_jarvis', terminal_id=tid, project_id=project_id,
+                 archivos=len(archivos or []))
+
+
+async def _entregar_tarea_cuando_listo(project_id: int, terminal_id: int,
+                                       nombre: str, texto: str) -> bool:
+    """Espera a que el CLI esté listo (auto-acepta el trust prompt) y le pega
+    la tarea. Si no llega, avisa en el chat. Devuelve si se entregó."""
+    await _esperar_agente_listo(terminal_id, timeout=30.0)
+    ok = (await send_to_agent(terminal_id, texto)) is not False
+    if not ok:
+        try:
+            from plotspace.core.events import broadcaster
             await broadcaster.broadcast(project_id, {
-                "type":    "orquestador_mensaje",
-                "message": L(f"⚠️ {term_nombre} está bloqueado en el paso {paso_idx + 1}{detalle}. ¿Cómo continuamos?",
-                             f"⚠️ {term_nombre} is blocked at step {paso_idx + 1}{detalle}. How do we proceed?"),
+                "type": "orquestador_mensaje",
+                "message": L(f"⚠️ No pude entregarle la tarea a {nombre or f'#{terminal_id}'} "
+                             "(su sesión no responde).",
+                             f"⚠️ I couldn't deliver the task to {nombre or f'#{terminal_id}'} "
+                             "(its session isn't responding)."),
             })
-            # Etapa 5: en vez de quedar esperando al humano, el orquestador se
-            # llama solo con el motivo y re-instruye (guardas anti-loop adentro).
-            _lanzar_auto_intervencion(wf, pasos, paso_idx, project_id,
-                                      'TASK_BLOCKED', motivo, term_nombre)
-
-        elif event == "TASK_ERROR":
-            ia_type = pasos[paso_idx].get("ia_type", "claude")
-            pasos[paso_idx]["estado"] = "error"
-            if motivo:
-                pasos[paso_idx]["motivo"] = motivo
-            # Solo terminales del PROPIO workflow cuyo paso ya TERMINÓ bien: una
-            # ajena podía ser la claude personal del usuario, y una con su paso
-            # todavía pending recibía dos tareas.
-            otro = await _buscar_agente_disponible(
-                project_id, terminal_id, ia_type,
-                permitidas={p.get("terminal_id") for p in pasos
-                            if p.get("terminal_id") and p.get("estado") == "done"},
-            )
-            entregado = False
-            if otro:
-                pasos[paso_idx]["terminal_id"] = otro
-                pasos[paso_idx]["estado"]       = "running"
-                pasos[paso_idx]["iniciado_ts"]  = time.time()   # re-sello para el watchdog
-                ruta_reasig = await asyncio.to_thread(_ruta_proyecto_o_none, project_id)
-                entregado = (await send_to_agent(otro, _tarea_engine_para_terminal(
-                    pasos[paso_idx], otro, project_ruta=ruta_reasig,
-                    pasos_workflow=pasos))) is not False
-                if entregado:
-                    wf['estado'] = 'running'
-                    _actualizar_workflow_db(wf['id'], estado='running', pasos=pasos,
-                                            paso_actual=paso_idx)
-                    from plotspace.routers.terminals import iniciar_monitor
-                    iniciar_monitor(otro, project_id)
-                    detalle = (L(" Motivo: ", " Reason: ") + f"{motivo[:300]}.") if motivo else ""
-                    await broadcaster.broadcast(project_id, {
-                        "type":    "orquestador_mensaje",
-                        "message": L(f"⚡ Error en {term_nombre}.{detalle} Tarea reasignada al agente #{otro}.",
-                                     f"⚡ Error in {term_nombre}.{detalle} Task reassigned to agent #{otro}."),
-                    })
-                else:
-                    pasos[paso_idx]["estado"] = "error"
-            if not entregado:
-                wf['estado'] = 'paused'
-                _actualizar_workflow_db(wf['id'], estado='paused', pasos=pasos, paso_actual=paso_idx)
-                detalle = (L(" Motivo: ", " Reason: ") + f"{motivo[:300]}.") if motivo else ""
-                await broadcaster.broadcast(project_id, {
-                    "type":    "orquestador_mensaje",
-                    "message": L(f"❌ Error en {term_nombre} y no hay otro agente disponible.{detalle} Workflow pausado.",
-                                 f"❌ Error in {term_nombre} and no other agent is available.{detalle} Workflow paused."),
-                })
-                # Etapa 5: sin agente para reasignar → que decida el orquestador
-                # (re-instruir con workflow chico, o preguntar UNA cosa).
-                _lanzar_auto_intervencion(wf, pasos, paso_idx, project_id,
-                                          'TASK_ERROR', motivo, term_nombre)
-        else:
-            return
-
-        # Después de CUALQUIER cierre (no solo del done): arrancar lo que quedó
-        # listo — el Reviewer también arranca tras un bloqueo — y cerrar el
-        # workflow si ya no queda nada que pueda avanzar. Antes solo la rama
-        # del TASK_DONE lo evaluaba: un último builder bloqueado colgaba todo.
-        # Solo un DONE cierra: un BLOCKED/ERROR deja el workflow en pausa
-        # esperando una decisión (humana o de la auto-intervención) — y el
-        # Reviewer frena el cierre justamente con un TASK_BLOCKED.
-        await _avanzar_workflow(wf, pasos, project_id,
-                                puede_cerrar=(event == "TASK_DONE"))
-
-
-# ─── Concurrencia y avance del workflow ──────────────────────────────────────
-
-# Un lock por (event loop, workflow): asyncio.Lock queda atado al loop donde
-# espera por primera vez, y los tests corren un loop nuevo por asyncio.run.
-_locks_workflow: dict = {}
-
-
-def _lock_workflow(workflow_id: str) -> asyncio.Lock:
-    clave = (id(asyncio.get_running_loop()), workflow_id)
-    lock = _locks_workflow.get(clave)
-    if lock is None:
-        lock = _locks_workflow[clave] = asyncio.Lock()
-    return lock
-
-
-def _soltar_locks_workflow(workflow_id: str) -> None:
-    for clave in [c for c in _locks_workflow if c[1] == workflow_id]:
-        lock = _locks_workflow[clave]
-        if not lock.locked():
-            _locks_workflow.pop(clave, None)
+        except Exception:
+            pass
+    await _avisar_agentes(project_id)
+    return ok
 
 
 def _nombre_terminal(terminal_id: int) -> str:
@@ -2575,137 +1838,40 @@ def _nombre_terminal(terminal_id: int) -> str:
         conn.close()
 
 
-def _workflow_id_de_terminal(project_id: int, terminal_id: int) -> Optional[str]:
-    """El workflow activo del proyecto con un paso de esta terminal (el más
-    nuevo primero), o None si la terminal no está en ninguno."""
+def _insertar_task_event(terminal_id: int, event: str, project_id: int,
+                         motivo: str = '') -> None:
     conn = get_db()
     try:
-        filas = conn.execute(
-            "SELECT id, pasos FROM workflows WHERE project_id = ? AND estado IN "
-            "('running', 'paused') ORDER BY created_at DESC", (project_id,)).fetchall()
+        conn.execute(
+            'INSERT INTO task_events (terminal_id, project_id, event, timestamp, motivo) '
+            'VALUES (?, ?, ?, ?, ?)',
+            (terminal_id, project_id, event, datetime.now().isoformat(), (motivo or None)))
+        conn.commit()
     finally:
         conn.close()
-    for f in filas:
-        try:
-            pasos = json.loads(f['pasos'] or '[]')
-        except (ValueError, TypeError):
-            continue
-        if _paso_de_terminal(pasos, terminal_id) is not None:
-            return f['id']
-    return None
 
 
-def _leer_workflow(workflow_id: str):
-    """(wf_dict, pasos) frescos de la DB — siempre DENTRO del lock."""
-    conn = get_db()
-    try:
-        f = conn.execute('SELECT * FROM workflows WHERE id = ?', (workflow_id,)).fetchone()
-    finally:
-        conn.close()
-    if not f:
-        return None, []
-    wf = dict(f)
-    try:
-        pasos = json.loads(wf.get('pasos') or '[]')
-    except (ValueError, TypeError):
-        pasos = []
-    return wf, pasos
-
-
-async def sellar_pasos_sin_inicio(workflow_id: str, ahora: float) -> None:
-    """Sella `iniciado_ts` a los pasos running legacy que no lo tienen. Lo usa
-    el watchdog: re-lee DENTRO del lock en vez de reescribir su copia vieja de
-    los pasos (que pisaba un done recién guardado)."""
-    async with _lock_workflow(workflow_id):
-        wf, pasos = await asyncio.to_thread(_leer_workflow, workflow_id)
-        if wf is None:
-            return
-        cambio = False
-        for p in pasos:
-            if p.get('estado') == 'running' and p.get('iniciado_ts') is None:
-                p['iniciado_ts'] = ahora
-                cambio = True
-        if cambio:
-            _actualizar_workflow_db(workflow_id, estado=wf['estado'], pasos=pasos,
-                                    paso_actual=wf.get('paso_actual') or 0)
-
-
-async def _avanzar_workflow(wf: dict, pasos: list, project_id: int,
-                            puede_cerrar: bool = True) -> None:
-    """Arranca todo lo que quedó listo y, si `puede_cerrar`, cierra el
-    workflow cuando ya no queda nada que pueda avanzar. Llamar con el lock
-    del workflow tomado."""
+async def procesar_task_event_interno(terminal_id: int, event: str, project_id: int,
+                                      motivo: str = ''):
+    """Un cierre de tarea (TASK_DONE/BLOCKED/ERROR) de una terminal: lo PERSISTE
+    en task_events (con su motivo — la materia prima de las lecciones) y lo
+    broadcastea como `task_event` (el monitor de Tasks y los avisos del front).
+    Lo llaman el monitor de keywords (terminals.py) y el sentinel."""
     from plotspace.core.events import broadcaster
-    intentados: set = set()
-    for _ in range(len(pasos) + 1):
-        listos = [i for i in _pasos_listos_para_arrancar(pasos) if i not in intentados]
-        if not listos:
-            break
-        intentados.update(listos)
-        print(f'[workflow] {wf["id"]}: disparando pasos listos {listos}')
-        await _arrancar_pasos(pasos, listos, project_id, wf['id'])
-        wf['estado'] = 'running'
-
-    terminado = puede_cerrar and _workflow_terminado(pasos)
+    try:
+        await asyncio.to_thread(_insertar_task_event, terminal_id, event, project_id, motivo)
+    except Exception as e:
+        print(f'[task_event] no pude persistir {event} de #{terminal_id}: {e}')
+    try:
+        term_nombre = await asyncio.to_thread(_nombre_terminal, terminal_id)
+    except Exception:
+        term_nombre = f'Terminal #{terminal_id}'
     await broadcaster.broadcast(project_id, {
-        "type":        "workflow_update",
-        "workflow_id": wf['id'],
-        "paso_actual": _progreso_workflow(pasos),
-        "total_pasos": len(pasos),
-        "estado":      "done" if terminado else wf.get('estado', 'running'),
-        "pasos":       pasos,
-    })
-    if terminado:
-        await _cerrar_workflow(wf, pasos, project_id)
-
-
-async def _cerrar_workflow(wf: dict, pasos: list, project_id: int) -> None:
-    """Todos los pasos terminaron (done/blocked/error, o varados detrás de uno
-    que falló): se persiste el cierre, se lanza el preview y se avisa."""
-    from plotspace.core.events import broadcaster
-    for i in _pasos_varados(pasos):
-        pasos[i]['estado'] = 'blocked'
-        pasos[i].setdefault('motivo', 'no arrancó: depende de un paso que quedó '
-                                      'bloqueado o con error')
-    _actualizar_workflow_db(
-        wf['id'], estado='done', pasos=pasos,
-        paso_actual=_progreso_workflow(pasos),
-    )
-    _soltar_locks_workflow(wf['id'])
-
-    # Los agentes trabajan directo en main: no hay merge que hacer.
-    # Solo lanzamos preview si el proyecto tiene frontend.
-    project_path = await asyncio.to_thread(_ruta_proyecto_o_none, project_id)
-    preview_url = None
-    if project_path:
-        # A un thread: _detectar_y_lanzar_preview es SYNC y espera hasta ~1s
-        # (time.sleep + bind-check del http.server) → si corriera en el event
-        # loop congelaría terminales/WS/pollers ese segundo. (audit latencia)
-        preview_url = await asyncio.to_thread(
-            _detectar_y_lanzar_preview, project_id, project_path)
-
-    # Honestidad del cierre: "completado" solo si TODOS los pasos
-    # están done (incluido el Reviewer = review aprobada).
-    todos_ok    = all(p.get('estado') == 'done' for p in pasos)
-    hubo_review = any(p.get('rol') == 'reviewer' for p in pasos)
-    if todos_ok:
-        msg_final = L(f"Señor, {wf['nombre']} completado en main.",
-                      f"Sir, {wf['nombre']} is complete on main.")
-        if hubo_review:
-            msg_final += L(" Review de calidad: APROBADA.", " Quality review: APPROVED.")
-    else:
-        fallidos = sum(1 for p in pasos if p.get('estado') in ('blocked', 'error'))
-        msg_final = L(f"Señor, {wf['nombre']} terminó con {fallidos} paso(s) "
-                      "bloqueado(s)/con error — revisá el board de tareas antes de dar por bueno el resultado.",
-                      f"Sir, {wf['nombre']} finished with {fallidos} blocked/failed step(s) — "
-                      "check the task board before trusting the result.")
-    if preview_url:
-        msg_final += L(f" Preview en {preview_url}", f" Preview at {preview_url}")
-
-    await broadcaster.broadcast(project_id, {
-        "type":        "workflow_done",
-        "message":     msg_final,
-        "preview_url": preview_url,
+        "type":            "task_event",
+        "event":           event,
+        "terminal_id":     terminal_id,
+        "terminal_nombre": term_nombre,
+        "motivo":          (motivo or '')[:300],
     })
 
 
@@ -2780,9 +1946,9 @@ async def send_to_agent(terminal_id: int, mensaje: str, crudo: bool = False) -> 
             ).fetchone()
             pid = fila['project_id'] if fila else 0
             conn.execute(
-                'INSERT INTO task_events (terminal_id, project_id, event, timestamp, workflow_id) '
-                'VALUES (?, ?, ?, ?, ?)',
-                (terminal_id, pid, 'SENT', ahora, None)
+                'INSERT INTO task_events (terminal_id, project_id, event, timestamp) '
+                'VALUES (?, ?, ?, ?)',
+                (terminal_id, pid, 'SENT', ahora)
             )
             conn.commit()
         finally:
@@ -2792,127 +1958,10 @@ async def send_to_agent(terminal_id: int, mensaje: str, crudo: bool = False) -> 
     return True
 
 
-async def _sesion_tmux_viva(terminal_id: int) -> bool:
-    """True si la sesión tmux jarvis_{terminal_id} existe."""
-    try:
-        return backend().existe(terminal_id)
-    except Exception:
-        return False
-
-
-# Un workflow 'running'/'paused' más viejo que esto es un zombie: el agente ya
-# murió y nadie va a escribir TASK_DONE. Los agentes no corren un workflow 12h.
-_WORKFLOW_STALE_HORAS = 12
-
-
-async def reanudar_workflows():
-    """Al arrancar, reinicia los monitores de los workflows en curso.
-    Corre como background task — no bloquea el startup.
-
-    Reconciliación 'hacia abajo': antes revivía el monitor de CUALQUIER
-    workflow 'running'/'paused' en cada boot, incluidos zombies de semanas
-    atrás → pollers fantasma sobre sesiones muertas para siempre. Ahora los
-    stale (viejos o sin sesión tmux viva) se marcan 'error' y no se reaniman."""
-    # DB SIEMPRE fuera del event loop (deep work 2026-07-11): esto corre al
-    # boot, en paralelo con el re-attach de N terminales — un SELECT/UPDATE
-    # síncrono acá puede colisionar con otro writer y clavar el ÚNICO loop
-    # hasta el busy_timeout de 5s (= scroll congelado en TODAS las terminales).
-    def _leer_workflows_pendientes():
-        conn = get_db()
-        try:
-            cursor = conn.cursor()
-            cursor.execute("SELECT * FROM workflows WHERE estado IN ('running', 'paused')")
-            return [dict(r) for r in cursor.fetchall()]
-        finally:
-            conn.close()
-
-    try:
-        rows = await asyncio.to_thread(_leer_workflows_pendientes)
-
-        ahora = datetime.now()
-        for wf in rows:
-            pasos    = json.loads(wf['pasos'])
-            paso_idx = wf['paso_actual']
-
-            # ¿Demasiado viejo para seguir vivo?
-            try:
-                creado = datetime.fromisoformat(wf['created_at'])
-                viejo  = (ahora - creado) > timedelta(hours=_WORKFLOW_STALE_HORAS)
-            except Exception:
-                viejo = False
-
-            # Re-armar el monitor de CADA paso 'running' (no solo paso_actual): en workflows
-            # con pasos PARALELOS (varios builders a la vez) solo se re-monitoreaba uno → los
-            # otros nunca detectaban su TASK_DONE y el workflow se colgaba tras un reinicio.
-            running = [p for p in pasos if p.get('estado') == 'running' and p.get('terminal_id')]
-            if not running and paso_idx < len(pasos) and pasos[paso_idx].get('terminal_id'):
-                running = [pasos[paso_idx]]   # compat: workflows viejos sin 'estado' por paso
-
-            vivos = []
-            for p in running:
-                if await _sesion_tmux_viva(p['terminal_id']):
-                    vivos.append(p)
-
-            if viejo or not vivos:
-                # UPDATE en to_thread: es un writer — en el loop podía bloquear
-                # hasta 5s (busy_timeout) si colisionaba con otro writer al boot.
-                await asyncio.to_thread(_actualizar_workflow_db, wf['id'],
-                                        estado='error', pasos=pasos,
-                                        paso_actual=paso_idx)
-                print(f'[startup] Workflow zombie {wf["id"]} → error (no se reanima)')
-                continue
-
-            from plotspace.routers.terminals import iniciar_monitor
-            for p in vivos:
-                iniciar_monitor(p['terminal_id'], wf['project_id'])
-                print(f'[startup] Reanudando monitor: workflow {wf["id"]}, terminal {p["terminal_id"]}')
-    except Exception as e:
-        print(f'[startup] Error en reanudar_workflows: {e}')
-
-
 # ─── Preview server (auto-launch cuando hay frontend) ─────────────────────────
 
 # Registro: project_id → (subprocess.Popen, url)
 _preview_servers: dict = {}
-
-
-def _puertos_ocupados_por_jarvis() -> set:
-    """Puertos que JARVIS ya asignó a otros proyectos (aunque el bind real
-    del http.server todavía no haya ocurrido por la race entre check y Popen)."""
-    from urllib.parse import urlparse
-    ocupados = set()
-    for proc, url in _preview_servers.values():
-        # Si el proc murió, no contar
-        if proc.poll() is not None:
-            continue
-        try:
-            p = urlparse(url).port
-            if p: ocupados.add(p)
-        except Exception:
-            continue
-    return ocupados
-
-
-def _puerto_libre(start: int, end: int, excluir: set = None) -> Optional[int]:
-    """Busca un puerto TCP libre en [start, end). Excluye puertos que
-    JARVIS ya asignó a OTROS previews del registry — eso evita la race
-    entre el check del socket y el lanzamiento del Popen del http.server.
-    `excluir` agrega puertos que ya se intentaron y fallaron en este lanzamiento
-    (sin esto, el reintento podía reelegir el mismo puerto que recién falló)."""
-    import socket
-    ocupados_jarvis = _puertos_ocupados_por_jarvis()
-    excluir = excluir or set()
-    for p in range(start, end):
-        if p in ocupados_jarvis or p in excluir:
-            continue
-        try:
-            s = socket.socket()
-            s.bind(('127.0.0.1', p))
-            s.close()
-            return p
-        except OSError:
-            continue
-    return None
 
 
 def _preview_url_activo(project_id: int) -> Optional[str]:
@@ -2946,163 +1995,7 @@ def _detener_preview_si_existe(project_id: int) -> Optional[str]:
     return url
 
 
-def _detectar_y_lanzar_preview(project_id: int, project_path: str) -> Optional[str]:
-    """Si el proyecto tiene HTML al root o en frontend/, lanza http.server en
-    background y devuelve la URL. Reusa el server si ya existe uno para este
-    proyecto. Devuelve None si no hay nada que servir."""
-    # ¿Ya hay uno corriendo para este proyecto?
-    existing = _preview_servers.get(project_id)
-    if existing:
-        proc, url = existing
-        if proc.poll() is None:
-            return url
-        _preview_servers.pop(project_id, None)
-
-    # Buscar el directorio que tiene HTML
-    candidatos = [project_path, os.path.join(project_path, 'frontend')]
-    preview_root = None
-    for ruta in candidatos:
-        if not os.path.isdir(ruta):
-            continue
-        try:
-            archivos = os.listdir(ruta)
-        except OSError:
-            continue
-        if any(a.endswith('.html') for a in archivos):
-            preview_root = ruta
-            break
-
-    if not preview_root:
-        return None
-
-    import socket, time
-    # Reintento ACOTADO (antes era recursión sin tope: en un host con contención
-    # de puertos 8080-8120 podía encadenar recursiones → RecursionError y dejar
-    # http.server zombies). Hasta 5 puertos distintos, marcando los que ya
-    # fallaron para no reelegirlos en este mismo intento.
-    ya_intentados: set = set()
-    for _ in range(5):
-        puerto = _puerto_libre(8080, 8120, excluir=ya_intentados)
-        if not puerto:
-            print('[preview] No hay puertos libres en 8080-8120')
-            return None
-        ya_intentados.add(puerto)
-        try:
-            proc = subprocess.Popen(
-                ['python3', '-m', 'http.server', str(puerto), '--bind', '127.0.0.1'],
-                cwd=preview_root,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-            )
-        except Exception as e:
-            print(f'[preview] Error lanzando http.server: {e}')
-            return None
-
-        # Esperar a que el http.server haya bindeado. Si otro proceso agarró el
-        # puerto entre el bind-check y el Popen, nuestro http.server crashea
-        # silencioso → lo detectamos y probamos otro puerto.
-        bindeado = False
-        for _ in range(20):  # hasta 1s en steps de 50ms
-            time.sleep(0.05)
-            if proc.poll() is not None:
-                break  # el proceso murió, no se pudo bindear
-            try:
-                s = socket.socket()
-                s.settimeout(0.1)
-                s.connect(('127.0.0.1', puerto))
-                s.close()
-                bindeado = True
-                break
-            except OSError:
-                continue
-
-        if not bindeado:
-            try: proc.terminate()
-            except Exception: pass
-            print(f'[preview] http.server no bindeó {puerto} — probando otro puerto')
-            continue
-
-        url = f"http://localhost:{puerto}/"
-        _preview_servers[project_id] = (proc, url)
-        print(f'[preview] http.server lanzado en {preview_root} → {url}')
-        return url
-
-    print('[preview] No pude bindear ningún puerto tras 5 intentos')
-    return None
-
-
 # ─── Helpers internos ──────────────────────────────────────────────────────────
-
-async def _tmux_listar_sesiones() -> str:
-    """`tmux list-sessions` async con timeout (diagnóstico). Antes era
-    subprocess.run síncrono dentro de la corutina del workflow → clavaba el
-    event loop. Devuelve el stdout strip-eado, o '' si no hay sesiones/falla."""
-    try:
-        out = '\n'.join(sorted(
-            await asyncio.to_thread(backend().listar_sesiones))).encode()
-    except Exception:
-        try: proc.kill()      # timeout → matar el subprocess tmux para no dejarlo huérfano
-        except Exception: pass
-        return ''
-    return out.decode(errors='replace').strip() if out else ''
-
-
-def _actualizar_workflow_db(workflow_id: str, estado: str, pasos: list, paso_actual: int):
-    conn = get_db()
-    try:
-        conn.execute(
-            'UPDATE workflows SET estado = ?, pasos = ?, paso_actual = ? WHERE id = ?',
-            (estado, json.dumps(pasos), paso_actual, workflow_id)
-        )
-        conn.commit()
-    finally:
-        conn.close()
-
-
-def _terminales_ocupadas(cursor, project_id: int) -> set:
-    """IDs de terminales asignadas a un paso 'running' de algún workflow activo.
-    Reasignar a una de ellas pisaba dos tareas a la vez."""
-    ocupadas: set = set()
-    cursor.execute(
-        "SELECT pasos FROM workflows WHERE project_id = ? AND estado IN ('running', 'paused')",
-        (project_id,)
-    )
-    for r in cursor.fetchall():
-        try:
-            for p in json.loads(r['pasos']):
-                if p.get('estado') == 'running' and p.get('terminal_id'):
-                    ocupadas.add(p['terminal_id'])
-        except (json.JSONDecodeError, TypeError):
-            continue
-    return ocupadas
-
-
-async def _buscar_agente_disponible(project_id: int, excluir_id: int, ia_type: str,
-                                    permitidas=None) -> Optional[int]:
-    """`permitidas` (set de terminal_ids) acota la búsqueda a las terminales del
-    PROPIO workflow: la reasignación de un TASK_ERROR no puede caer en una
-    terminal ajena — p.ej. la sesión claude PERSONAL del usuario, a la que
-    send_to_agent le tipearía la tarea + un Enter ciego encima de lo que tenga
-    en pantalla (auditoría 2026-07-02). None = sin restricción (compat)."""
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        ocupadas = _terminales_ocupadas(cursor, project_id)
-        cursor.execute(
-            'SELECT id FROM terminals WHERE project_id = ? AND tipo_ia = ? AND activa = 1 AND id != ?',
-            (project_id, ia_type, excluir_id)
-        )
-        # Primera terminal del tipo correcto que NO esté ocupada en otro paso.
-        for row in cursor.fetchall():
-            if row['id'] in ocupadas:
-                continue
-            if permitidas is not None and row['id'] not in permitidas:
-                continue
-            return row['id']
-        return None
-    finally:
-        conn.close()
-
 
 def _formatear_skills_activas(project_id: int) -> str:
     """Skills + plugins activos del proyecto, formateados como bullet list.
@@ -3134,40 +2027,6 @@ def _formatear_skills_activas(project_id: int) -> str:
     return "\n".join(lineas)
 
 
-def _formatear_workflows_recientes(project_id: int, limite: int = 3) -> str:
-    """Últimos N workflows del proyecto con su estado. Útil para que Haiku
-    sepa qué se hizo antes y no duplique trabajo."""
-    conn = get_db()
-    try:
-        cursor = conn.cursor()
-        cursor.execute(
-            'SELECT nombre, objetivo, estado, pasos, paso_actual, created_at '
-            'FROM workflows WHERE project_id = ? '
-            'ORDER BY created_at DESC LIMIT ?',
-            (project_id, limite)
-        )
-        rows = cursor.fetchall()
-    finally:
-        conn.close()
-    if not rows:
-        return ""
-    lineas = []
-    for r in rows:
-        try:
-            pasos = json.loads(r['pasos'])
-        except (json.JSONDecodeError, TypeError):
-            pasos = []
-        total = len(pasos)
-        hechos = sum(1 for p in pasos if p.get('estado') == 'done')
-        objetivo = (r['objetivo'] or '')[:80]
-        fecha = (r['created_at'] or '')[:16].replace('T', ' ')
-        lineas.append(
-            f"  - [{r['estado']}] {r['nombre']} ({hechos}/{total} pasos) — "
-            f"{objetivo} ({fecha})"
-        )
-    return "\n".join(lineas)
-
-
 async def _spawn_terminales(project_id: int, name: str, ia_type: str,
                              count: int, count_actual: int) -> list:
     # Lazy import (circular orchestrator ↔ terminals, patrón documentado).
@@ -3176,7 +2035,8 @@ async def _spawn_terminales(project_id: int, name: str, ia_type: str,
     # y nacían homónimas ("Claude Code #3" ×2): el mailbox y los permisos
     # de Agents Live resuelven por nombre, así que la coordinación entera
     # quedaba ambigua.
-    from plotspace.routers.terminals import resolver_nombre_unico, _nombres_activos
+    from plotspace.routers.terminals import (resolver_nombre_unico, _nombres_activos,
+                                             _session_uuid_para)
 
     # Alineado con los CLIs reales del producto (terminals._COMANDOS_CLI):
     # antes antigravity/opencode/qwen caían a "manual" y el pane nacía SIN CLI.
@@ -3198,9 +2058,12 @@ async def _spawn_terminales(project_id: int, name: str, ia_type: str,
             nombre = resolver_nombre_unico(nombres, deseado)
             nombres.append(nombre)
             ahora  = datetime.now().isoformat()
+            # session_uuid como crear_terminal: claude/qwen con id determinista
+            # (revive con su conversación tras un reboot).
             cursor.execute(
-                'INSERT INTO terminals (project_id, nombre, tipo_ia, activa, fecha_creacion) VALUES (?, ?, ?, 1, ?)',
-                (project_id, nombre, ia_type, ahora),
+                'INSERT INTO terminals (project_id, nombre, tipo_ia, activa, fecha_creacion, session_uuid) '
+                'VALUES (?, ?, ?, 1, ?, ?)',
+                (project_id, nombre, ia_type, ahora, _session_uuid_para(ia_type)),
             )
             conn.commit()
             tid = cursor.lastrowid
@@ -3210,7 +2073,7 @@ async def _spawn_terminales(project_id: int, name: str, ia_type: str,
         conn.close()
 
     # Push instantáneo a Agents Live: los agentes que spawnea el orquestador
-    # (workflows / spawn_terminal) aparecen YA en la pestaña Live, sin esperar
+    # (spawn_terminal) aparecen YA en la pestaña Live, sin esperar
     # el backstop de 2s ni a que toquen un archivo. Fire-and-forget (no propaga).
     if creadas:
         from plotspace.core import agent_live

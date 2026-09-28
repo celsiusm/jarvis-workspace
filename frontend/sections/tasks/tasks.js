@@ -1,362 +1,486 @@
-// JARVIS — Task Board (kanban conectado a los workflows del orquestador).
-// Dos fuentes de cards:
-//  · Tareas MANUALES (tabla tasks): CRUD + drag entre columnas + "asignar a
-//    agente" → la tarea viaja por tmux y el monitor de TASK_DONE la resuelve.
-//  · Pasos de WORKFLOWS del orquestador (read-only): proyectados en vivo
-//    desde los workflow_update del WebSocket — el board ES la vista kanban
-//    de lo que JARVIS está orquestando.
-// Expone window.JarvisTasks = { init, show, onProjectChanged,
-//                               onTasksUpdate, onWorkflowUpdate }.
+// JARVIS — «Tareas»: monitor EN VIVO de los agentes del proyecto.
+//
+// Cada terminal activa (la abra el usuario o la lance Jarvis como enjambre)
+// con su nombre, CLI, qué está haciendo (título vivo del pane + tarea) y UN
+// estado: esperando tu respuesta · trabajando · arrancando · terminó · quieto ·
+// caído. Fuente única: GET /api/projects/{id}/agentes (plotspace/routers/tasks.py).
+//
+//  · Pollea cada 2s SOLO con la pestaña a la vista; además refresca (debounced)
+//    ante los WS de agentes (onAgentEvent), también con la pestaña oculta, para
+//    levantar el badge del dock cuando un agente pasa a «esperando».
+//  · Render por CLAVE (grupos y filas persistentes): el poll no re-crea el DOM
+//    → las animaciones de estado no se reinician y el foco del teclado se queda.
+//  · Click / Enter en un agente → enfoca su card de terminal en el workspace.
+//
+// Expone window.JarvisTasks = { init, show, onProjectChanged, onAgentEvent, _pure }
 
-(() => {
+(function (root) {
+  'use strict';
+
+  /* ══ Lógica pura (testeada en __tests__/tasks.test.js) ═══════════ */
+
+  const ESTADOS = ['esperando', 'trabajando', 'arrancando', 'termino', 'quieto', 'caido'];
+
+  // Texto de la píldora de estado (español canónico; el i18n lo traduce).
+  const ETIQUETA = {
+    esperando:  'Te necesita',
+    trabajando: 'Trabajando',
+    arrancando: 'Arrancando',
+    termino:    'Terminó',
+    quieto:     'Quieto',
+    caido:      'Caído',
+  };
+
+  // Conteos: «{n} …» con singular/plural en español.
+  const CONTEO = {
+    esperando:  ['esperando', 'esperando'],
+    trabajando: ['trabajando', 'trabajando'],
+    arrancando: ['arrancando', 'arrancando'],
+    termino:    ['terminó', 'terminaron'],
+    quieto:     ['quieto', 'quietos'],
+    caido:      ['caído', 'caídos'],
+  };
+
+  const EVENTO = {
+    TASK_DONE:    'Cerró como hecha',
+    TASK_BLOCKED: 'Bloqueado',
+    TASK_ERROR:   'Error',
+  };
+
+  function normEstado(e) { return ESTADOS.includes(e) ? e : 'quieto'; }
+
+  function claseEstado(e) { return 'tk-st-' + normEstado(e); }
+
+  function textoConteo(estado, n) {
+    const par = CONTEO[normEstado(estado)];
+    return `${n} ${n === 1 ? par[0] : par[1]}`;
+  }
+
+  // [{estado, n, texto}] en el orden canónico, sin ceros.
+  function partesResumen(resumen) {
+    const r = resumen || {};
+    return ESTADOS.filter(e => (r[e] | 0) > 0)
+      .map(e => ({ estado: e, n: r[e] | 0, texto: textoConteo(e, r[e] | 0) }));
+  }
+
+  function contar(agentes) {
+    const out = {};
+    for (const a of agentes || []) { const e = normEstado(a.estado); out[e] = (out[e] | 0) + 1; }
+    return out;
+  }
+
+  // Duración compacta y neutra de idioma: 8s · 12 min · 3 h · 2 d.
+  function fmtDur(seg) {
+    if (seg == null || !isFinite(seg)) return '';
+    const s = Math.max(0, Math.floor(seg));
+    if (s < 60) return `${s}s`;
+    if (s < 3600) return `${Math.floor(s / 60)} min`;
+    if (s < 86400) return `${Math.floor(s / 3600)} h`;
+    return `${Math.floor(s / 86400)} d`;
+  }
+
+  // Esperando arriba (es lo que pide acción); el resto en orden de creación
+  // (estable: las filas no bailan con cada cambio de estado).
+  function ordenar(agentes) {
+    return (agentes || []).slice().sort((a, b) => {
+      const wa = normEstado(a.estado) === 'esperando' ? 0 : 1;
+      const wb = normEstado(b.estado) === 'esperando' ? 0 : 1;
+      return wa - wb || (a.id - b.id);
+    });
+  }
+
+  // {grupos:[{clave, tipo:'jarvis'|'usuario', titulo, resumen, agentes}]}
+  // Jarvis primero (una tarjeta por objetivo, en el orden del backend = más
+  // reciente primero), después «Tus terminales».
+  function agrupar(data) {
+    const agentes = (data && data.agentes) || [];
+    const porId = new Map(agentes.map(a => [a.id, a]));
+    const grupos = [];
+    const usados = new Set();
+    for (const o of (data && data.orquestaciones) || []) {
+      const lista = (o.agentes || []).map(id => porId.get(id)).filter(Boolean);
+      if (!lista.length) continue;
+      lista.forEach(a => usados.add(a.id));
+      grupos.push({
+        clave: 'j:' + (o.objetivo || ''),
+        tipo: 'jarvis',
+        titulo: o.objetivo || '',
+        resumen: contar(lista),
+        agentes: ordenar(lista),
+      });
+    }
+    // Agentes de origen jarvis que el backend no agrupó (defensivo).
+    const sueltosJ = agentes.filter(a => !usados.has(a.id) && a.origen === 'jarvis');
+    if (sueltosJ.length) {
+      sueltosJ.forEach(a => usados.add(a.id));
+      grupos.push({ clave: 'j:', tipo: 'jarvis', titulo: '', resumen: contar(sueltosJ), agentes: ordenar(sueltosJ) });
+    }
+    const tuyos = agentes.filter(a => !usados.has(a.id));
+    if (tuyos.length) {
+      grupos.push({ clave: 'u', tipo: 'usuario', titulo: 'Tus terminales', resumen: contar(tuyos), agentes: ordenar(tuyos) });
+    }
+    return { grupos, resumen: contar(agentes), total: agentes.length };
+  }
+
+  // IDs que ENTRARON a «esperando» respecto del snapshot previo (Map id→estado).
+  function nuevosEsperando(prev, agentes) {
+    const out = [];
+    for (const a of agentes || []) {
+      if (normEstado(a.estado) === 'esperando' && (!prev || prev.get(a.id) !== 'esperando')) out.push(a.id);
+    }
+    return out;
+  }
+
+  function basename(p) { const s = String(p || ''); const i = s.lastIndexOf('/'); return i >= 0 ? s.slice(i + 1) : s; }
+
+  function hostDe(url) {
+    try { const u = new URL(url); return u.host || url; } catch (_) { return String(url || ''); }
+  }
+
+  // Firma de lo que se ve de una fila EXCEPTO el tiempo (que se parchea aparte).
+  function firmaAgente(a) {
+    return JSON.stringify([a.nombre, a.tipo_ia, normEstado(a.estado), a.titulo || '',
+      a.tarea ? a.tarea.texto : '', (a.archivos || []).map(f => f.path + ':' + f.writes),
+      a.dev_servers || [], a.ultimo_evento ? [a.ultimo_evento.event, a.ultimo_evento.motivo] : null]);
+  }
+
+  const _pure = {
+    ESTADOS, ETIQUETA, normEstado, claseEstado, textoConteo, partesResumen, contar,
+    fmtDur, ordenar, agrupar, nuevosEsperando, basename, hostDe, firmaAgente,
+  };
+
+  if (typeof module !== 'undefined' && module.exports) module.exports = _pure;
+  if (typeof document === 'undefined') return;   // Node: solo la lógica pura
+
+  /* ══ DOM ══════════════════════════════════════════════════════════ */
+
+  const POLL_MS = 2000;
   let _projectId = null;
-  let _tasks     = [];        // tareas manuales (API)
-  let _workflows = new Map(); // workflow_id → { nombre, pasos[] } (en vivo)
-  let _visible   = false;
-  let _montado   = false;
-  let _picker        = null;  // { el, taskId } del picker de asignar abierto
-  let _pickerPending = null;  // taskId que se está abriendo (fetch en vuelo)
-  let _pickerGen     = 0;     // invalida aperturas viejas (doble click / cierre)
+  let _montado = false;
+  let _timer = null;
+  let _deb = null;
+  let _gen = 0;                      // invalida fetch de un proyecto anterior
+  let _enVuelo = false;
+  let _prevEstados = null;           // Map id → estado del último snapshot
+  let _data = null;
+  let _sigResumen = '';
+  const _grupos = new Map();         // clave → { el, sig }
+  const _filas = new Map();          // id → { el, sig }
 
   const $ = (id) => document.getElementById(id);
-  const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const _t = (s) => (root.JarvisI18n && root.JarvisI18n.t) ? root.JarvisI18n.t(s) : s;
+  const ic = (n, s) => (typeof root.icon === 'function' ? root.icon(n, s) : '');
+  const logo = (tipo, s) => (typeof root.cliLogo === 'function' ? root.cliLogo(tipo, s) : '');
+  const tituloVisible = (t) => (root.JarvisTitulosI18n && root.JarvisTitulosI18n.mostrar)
+    ? root.JarvisTitulosI18n.mostrar(t) : t;
 
-  const _t = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
+  function _visible() {
+    if (document.hidden) return false;
+    const dock = root.JarvisDock;
+    if (dock && typeof dock.activeTab === 'function') return dock.activeTab() === 'tasks';
+    const pane = document.querySelector('.jw-pane[data-pane="tasks"]');
+    return !!(pane && !pane.hidden);
+  }
 
-  const COLS = [
-    { id: 'backlog', nombre: 'Backlog' },
-    { id: 'running', nombre: 'En curso' },
-    { id: 'blocked', nombre: 'Bloqueado' },
-    { id: 'done',    nombre: 'Hecho' },
-  ];
-  // estado de paso de workflow → columna
-  const COL_DE_PASO = { pending: 'backlog', running: 'running', blocked: 'blocked', error: 'blocked', done: 'done' };
-
-  /* ── Montaje ───────────────────────────────────────────────── */
+  /* ── Montaje ─────────────────────────────────────────────────── */
   function _montar() {
     const panel = $('tasks-panel');
     if (!panel || _montado) return;
     _montado = true;
     panel.innerHTML = `
       <div class="tk-root">
-        <header class="tk-topbar">
-          <span class="tk-title">Tareas.</span>
-          <span class="tk-sub">kanban del workspace</span>
-          <span class="tk-spacer"></span>
-          <button class="tk-nueva" id="tk-nueva" type="button">
-            ${icon('plus', 12)} <span>Nueva tarea</span>
-          </button>
+        <header class="tk-head">
+          <div class="tk-head-row">
+            <span class="tk-live" aria-hidden="true"></span>
+            <h2 class="tk-title">Agentes</h2>
+            <span class="tk-sub">monitor en vivo</span>
+            <span class="tk-total" id="tk-total" data-i18n-skip></span>
+          </div>
+          <div class="tk-chips" id="tk-chips" role="status" aria-live="polite"></div>
         </header>
-        <div class="tk-board" id="tk-board">
-          ${COLS.map(c => `
-            <div class="tk-col" data-col="${c.id}">
-              <div class="tk-col-head">
-                <span class="tk-col-dot"></span>
-                <span class="tk-col-nombre">${c.nombre}</span>
-                <span class="tk-col-count" id="tk-count-${c.id}">0</span>
-              </div>
-              <div class="tk-col-body" id="tk-col-${c.id}"></div>
-            </div>`).join('')}
+        <div class="tk-scroll" id="tk-scroll">
+          <div class="tk-grupos" id="tk-grupos"></div>
+          <div class="tk-vacio" id="tk-vacio" hidden>
+            <div class="tk-vacio-orb" aria-hidden="true">${ic('terminal', 22)}</div>
+            <div class="tk-vacio-tit">Sin agentes en este proyecto</div>
+            <div class="tk-vacio-txt">Abrí una terminal con Ctrl+\\ o pedile a Jarvis que arme un equipo: acá vas a ver en vivo qué hace cada uno.</div>
+          </div>
         </div>
       </div>`;
 
-    $('tk-nueva').addEventListener('click', _crearTarea);
-    _cablearDnD();
-  }
-
-  /* ── Datos ─────────────────────────────────────────────────── */
-  // Ambos loaders descartan la respuesta si se cambió de proyecto mientras
-  // viajaba: escribían _tasks/_workflows del proyecto VIEJO y el próximo
-  // _render (p.ej. un workflow_update) pintaba el board de A en B.
-  async function _cargarTasks() {
-    const pid = _projectId;
-    try {
-      const r = await fetch(`/api/projects/${pid}/tasks`);
-      if (!r.ok) return;
-      const lista = await r.json();
-      if (pid !== _projectId) return;
-      _tasks = lista;
-    } catch { /* red */ }
-  }
-
-  async function _cargarWorkflows() {
-    const pid = _projectId;
-    try {
-      const r = await fetch(`/api/orchestrator/workflows/${pid}`);
-      if (!r.ok) return;
-      const lista = await r.json();
-      if (pid !== _projectId) return;
-      _workflows = new Map();
-      // Proyectar solo los últimos 12 workflows (vienen DESC por fecha):
-      // el historial completo vive en el modal de Workflows, acá el board
-      // muestra lo reciente sin que "Hecho" crezca infinito.
-      for (const w of (Array.isArray(lista) ? lista : []).slice(0, 12)) {
-        let pasos = w.pasos;
-        if (typeof pasos === 'string') { try { pasos = JSON.parse(pasos); } catch { pasos = []; } }
-        if (Array.isArray(pasos) && pasos.length) {
-          _workflows.set(String(w.id), { nombre: w.nombre || 'Workflow', pasos });
-        }
-      }
-    } catch { /* red */ }
-  }
-
-  /* ── Render ────────────────────────────────────────────────── */
-  function _render() {
-    if (!_montado) return;
-    const porCol = { backlog: [], running: [], blocked: [], done: [] };
-
-    // Tareas manuales
-    for (const t of _tasks) {
-      (porCol[t.estado] || porCol.backlog).push({ tipo: 'task', t });
-    }
-    // Pasos de workflows (en vivo)
-    for (const [wfId, wf] of _workflows) {
-      wf.pasos.forEach((paso, i) => {
-        const col = COL_DE_PASO[paso.estado || 'pending'] || 'backlog';
-        porCol[col].push({ tipo: 'wf', wfId, wfNombre: wf.nombre, paso, idx: i });
-      });
-    }
-
-    for (const c of COLS) {
-      const cont = $(`tk-col-${c.id}`);
-      const items = porCol[c.id];
-      $(`tk-count-${c.id}`).textContent = items.length;
-      if (!items.length) {
-        cont.innerHTML = `<div class="tk-col-empty">${c.id === 'backlog' ? 'Creá una tarea o pedile un workflow a JARVIS' : '—'}</div>`;
-        continue;
-      }
-      cont.innerHTML = items.map((it, i) => it.tipo === 'task'
-        ? _cardTaskHTML(it.t, i)
-        : _cardWfHTML(it, i)).join('');
-      _cablearCards(cont);
-    }
-  }
-
-  function _cardTaskHTML(t, i) {
-    const acciones = [];
-    if (t.estado === 'backlog') {
-      acciones.push(`<button class="asignar" data-act="asignar" title="Asignar a un agente" aria-label="Asignar a un agente">${icon('play', 11)}</button>`);
-    }
-    if (t.estado === 'done' || t.estado === 'blocked') {
-      acciones.push(`<button data-act="reabrir" title="Volver al backlog" aria-label="Volver al backlog">${icon('undo', 11)}</button>`);
-    }
-    acciones.push(`<button data-act="editar" title="Editar" aria-label="Editar">${icon('edit', 11)}</button>`);
-    acciones.push(`<button class="peligro" data-act="borrar" title="Borrar" aria-label="Borrar">${icon('trash', 11)}</button>`);
-
-    const agente = t.terminal_id && t.estado === 'running'
-      ? `<span class="tk-badge agente">${icon('terminal', 9)} T${esc(t.terminal_id)}</span>` : '';
-
-    return `
-      <article class="tk-card" draggable="true" data-task="${t.id}" style="--i:${Math.min(i, 10)}">
-        <div class="tk-card-head"><span class="tk-card-titulo">${esc(t.titulo)}</span></div>
-        ${t.descripcion ? `<div class="tk-card-desc">${esc(t.descripcion)}</div>` : ''}
-        <div class="tk-card-meta">${agente}</div>
-        <span class="tk-card-acciones">${acciones.join('')}</span>
-      </article>`;
-  }
-
-  function _cardWfHTML(it, i) {
-    const tarea = (it.paso.tarea || '').replace(/Cuando termines.*$/i, '').trim();
-    return `
-      <article class="tk-card" data-wf="${esc(it.wfId)}" style="--i:${Math.min(i, 10)}">
-        <div class="tk-card-head"><span class="tk-card-titulo">${esc(it.paso.agente || _t('Paso {n}').replace('{n}', it.idx + 1))}</span></div>
-        ${tarea ? `<div class="tk-card-desc">${esc(tarea.slice(0, 140))}</div>` : ''}
-        <div class="tk-card-meta">
-          <span class="tk-badge wf">${icon('zap', 9)} ${esc(it.wfNombre.slice(0, 24))}</span>
-          ${it.paso.rol && it.paso.rol !== 'builder' ? `<span class="tk-badge rol-${esc(it.paso.rol)}">${esc(it.paso.rol)}</span>` : ''}
-          ${it.paso.terminal_id ? `<span class="tk-badge agente">${icon('terminal', 9)} T${esc(it.paso.terminal_id)}</span>` : ''}
-        </div>
-      </article>`;
-  }
-
-  /* ── Interacción de cards ──────────────────────────────────── */
-  function _cablearCards(cont) {
-    cont.querySelectorAll('.tk-card[data-task]').forEach(card => {
-      const id = parseInt(card.dataset.task, 10);
-
-      card.addEventListener('dragstart', (e) => {
-        card.classList.add('dragging');
-        e.dataTransfer.setData('text/plain', String(id));
-        e.dataTransfer.effectAllowed = 'move';
-      });
-      card.addEventListener('dragend', () => card.classList.remove('dragging'));
-
-      card.querySelector('[data-act="asignar"]')?.addEventListener('click', (e) => {
-        e.stopPropagation(); _abrirPicker(e.currentTarget, id);
-      });
-      card.querySelector('[data-act="reabrir"]')?.addEventListener('click', async (e) => {
-        e.stopPropagation(); await _patch(id, { estado: 'backlog' });
-      });
-      card.querySelector('[data-act="editar"]')?.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        const t = _tasks.find(x => x.id === id);
-        const titulo = await pedirTexto('Título de la tarea:', { titulo: 'Editar tarea', valor: t?.titulo || '', confirmText: 'Guardar' });
-        if (!titulo) return;
-        const desc = await pedirTexto('Descripción (opcional — el agente la recibe junto al título):', {
-          titulo: 'Detalle', valor: t?.descripcion || '', confirmText: 'Guardar', cancelText: 'Sin detalle',
-        });
-        await _patch(id, { titulo, descripcion: desc || '' });
-      });
-      card.querySelector('[data-act="borrar"]')?.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        if (!(await confirmar('¿Borrar esta tarea?', { peligro: true, confirmText: 'Borrar' }))) return;
-        await fetch(`/api/tasks/${id}`, { method: 'DELETE' });
-        await refrescar();
-      });
+    const grupos = $('tk-grupos');
+    grupos.addEventListener('click', (e) => {
+      const link = e.target.closest('[data-dev]');
+      if (link) { e.preventDefault(); e.stopPropagation(); _abrirDev(link.dataset.dev); return; }
+      const fila = e.target.closest('.tk-agente');
+      if (fila) _enfocarTerminal(parseInt(fila.dataset.id, 10));
     });
-  }
-
-  function _cablearDnD() {
-    document.querySelectorAll('#tasks-panel .tk-col').forEach(col => {
-      col.addEventListener('dragover', (e) => { e.preventDefault(); col.classList.add('drag-over'); });
-      col.addEventListener('dragleave', () => col.classList.remove('drag-over'));
-      col.addEventListener('drop', async (e) => {
+    grupos.addEventListener('keydown', (e) => {
+      const fila = e.target.closest('.tk-agente');
+      if (!fila || e.target !== fila) return;
+      if (e.key === 'Enter' || e.key === ' ') {
         e.preventDefault();
-        col.classList.remove('drag-over');
-        const id = parseInt(e.dataTransfer.getData('text/plain'), 10);
-        if (!id) return;
-        const destino = col.dataset.col;
-        if (destino === 'running') {
-          // "En curso" de verdad = un agente la agarra: pedir a cuál
-          _abrirPicker(null, id, e.clientX, e.clientY);
-          return;
+        _enfocarTerminal(parseInt(fila.dataset.id, 10));
+      } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        const todas = Array.from(grupos.querySelectorAll('.tk-agente'));
+        const i = todas.indexOf(fila) + (e.key === 'ArrowDown' ? 1 : -1);
+        if (todas[i]) todas[i].focus();
+      }
+    });
+  }
+
+  /* ── Datos ───────────────────────────────────────────────────── */
+  async function refrescar() {
+    if (_projectId == null || _enVuelo) return;
+    _enVuelo = true;
+    const gen = _gen;
+    const pid = _projectId;
+    try {
+      const r = await fetch(`/api/projects/${pid}/agentes`);
+      if (!r.ok) return;
+      const data = await r.json();
+      if (gen !== _gen) return;                 // cambió el proyecto mientras viajaba
+      _aplicar(data);
+    } catch (_) { /* server reiniciando: el próximo tick reintenta */ }
+    finally { _enVuelo = false; }
+  }
+
+  function _aplicar(data) {
+    const agentes = (data && data.agentes) || [];
+    const nuevos = nuevosEsperando(_prevEstados, agentes);
+    _prevEstados = new Map(agentes.map(a => [a.id, normEstado(a.estado)]));
+    _data = data;
+    if (nuevos.length && !_visible()) root.JarvisDock?.notify?.('tasks', nuevos.length);
+    if (_montado) _render();
+  }
+
+  function _programar(ms) {
+    clearTimeout(_deb);
+    _deb = setTimeout(refrescar, ms);
+  }
+
+  function _arrancarPoll() {
+    if (_timer) return;
+    _timer = setInterval(() => {
+      if (!_visible()) { _pararPoll(); return; }
+      refrescar();
+    }, POLL_MS);
+  }
+  function _pararPoll() { clearInterval(_timer); _timer = null; }
+
+  /* ── Render por clave ────────────────────────────────────────── */
+  function _render() {
+    const vista = agrupar(_data);
+    const cont = $('tk-grupos');
+    $('tk-vacio').hidden = vista.total > 0;
+    $('tk-total').textContent = vista.total ? String(vista.total) : '';
+
+    // Chips del encabezado (solo si cambiaron los conteos)
+    const partes = partesResumen(vista.resumen);
+    const sigR = JSON.stringify(partes);
+    if (sigR !== _sigResumen) {
+      _sigResumen = sigR;
+      $('tk-chips').innerHTML = partes.map(p =>
+        `<span class="tk-chip ${claseEstado(p.estado)}"><i class="tk-dot" aria-hidden="true"></i>${esc(p.texto)}</span>`).join('');
+    }
+
+    const vivosG = new Set();
+    const vivosF = new Set();
+    vista.grupos.forEach((g, gi) => {
+      vivosG.add(g.clave);
+      let rg = _grupos.get(g.clave);
+      if (!rg) {
+        const el = document.createElement('section');
+        el.className = 'tk-grupo tk-grupo-' + g.tipo;
+        el.innerHTML = '<header class="tk-grupo-head"></header><div class="tk-lista" role="list"></div>';
+        rg = { el, sig: '' };
+        _grupos.set(g.clave, rg);
+      }
+      if (cont.children[gi] !== rg.el) cont.insertBefore(rg.el, cont.children[gi] || null);
+      const sigG = JSON.stringify([g.titulo, partesResumen(g.resumen), g.agentes.length]);
+      if (sigG !== rg.sig) { rg.sig = sigG; rg.el.firstElementChild.innerHTML = _headGrupoHTML(g); }
+
+      const lista = rg.el.lastElementChild;
+      g.agentes.forEach((a, ai) => {
+        vivosF.add(a.id);
+        let rf = _filas.get(a.id);
+        if (!rf) {
+          const el = document.createElement('article');
+          el.className = 'tk-agente';
+          el.tabIndex = 0;
+          el.setAttribute('role', 'listitem');
+          el.dataset.id = a.id;
+          rf = { el, sig: '' };
+          _filas.set(a.id, rf);
         }
-        await _patch(id, { estado: destino });
+        if (lista.children[ai] !== rf.el) {
+          const teniaFoco = rf.el.contains(document.activeElement);
+          lista.insertBefore(rf.el, lista.children[ai] || null);
+          if (teniaFoco) rf.el.focus({ preventScroll: true });
+        }
+        const sig = firmaAgente(a);
+        if (sig !== rf.sig) {
+          rf.sig = sig;
+          const est = normEstado(a.estado);
+          rf.el.className = `tk-agente ${claseEstado(est)}`;
+          rf.el.innerHTML = _agenteHTML(a, est);
+          const etiqueta = _t('Ir a la terminal {nombre}').replace('{nombre}', a.nombre);
+          rf.el.setAttribute('aria-label', `${etiqueta} — ${_t(ETIQUETA[est])}`);
+        }
+        const dur = rf.el.querySelector('[data-dur]');
+        const txt = fmtDur(a.estado_hace_s);
+        if (dur && dur.textContent !== txt) dur.textContent = txt;
+      });
+      // filas que se fueron de ESTE grupo (a otro grupo o eliminadas)
+      Array.from(lista.children).forEach(ch => {
+        const id = parseInt(ch.dataset.id, 10);
+        if (!g.agentes.some(a => a.id === id)) ch.remove();
       });
     });
+    for (const [k, rg] of _grupos) if (!vivosG.has(k)) { rg.el.remove(); _grupos.delete(k); }
+    for (const [id, rf] of _filas) if (!vivosF.has(id)) { rf.el.remove(); _filas.delete(id); }
   }
 
-  async function _patch(id, body) {
-    await fetch(`/api/tasks/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-    });
-    await refrescar();
-  }
-
-  async function _crearTarea() {
-    const titulo = await pedirTexto('¿Qué hay que hacer?', {
-      titulo: 'Nueva tarea', placeholder: 'ej. Agregar tests al router de pagos', confirmText: 'Crear',
-    });
-    if (!titulo) return;
-    await fetch(`/api/projects/${_projectId}/tasks`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ titulo }),
-    });
-    await refrescar();
-  }
-
-  /* ── Picker de agente (asignar) ────────────────────────────── */
-  function _cerrarPicker() {
-    _pickerGen++;                 // invalida cualquier _abrirPicker en vuelo
-    _pickerPending = null;
-    if (_picker) { try { _picker.el.remove(); } catch { /* ya estaba */ } _picker = null; }
-    document.querySelectorAll('.tk-picker').forEach(p => p.remove());
-  }
-
-  // `anchor` = elemento disparador (se abre DEBAJO, así no lo tapa y el segundo
-  // click puede togglear); sin anchor (drop en "En curso") usa x/y del mouse.
-  async function _abrirPicker(anchor, taskId, x, y) {
-    const id = String(taskId);
-    // Toggle: ya abierto para esta tarea → cerrar.
-    if (_picker && _picker.taskId === id) { _cerrarPicker(); return; }
-    // Doble click rápido: la 1ª apertura todavía espera el fetch (`_picker` aún
-    // null) → cancelar en vez de crear DOS pickers apilados.
-    if (_pickerPending === id) { _cerrarPicker(); return; }
-    _cerrarPicker();
-    _pickerPending = id;
-    const gen = _pickerGen;       // _cerrarPicker ya incrementó
-
-    let terminales = [];
-    try {
-      const r = await fetch(`/api/workspace/${_projectId}/state`);
-      if (r.ok) terminales = (await r.json()).terminals || [];
-    } catch { /* red */ }
-    if (gen !== _pickerGen) return;   // otra apertura/cierre ganó mientras esperábamos
-
-    const el = document.createElement('div');
-    el.className = 'tk-picker';
-    el.innerHTML = `
-      <div class="tk-picker-titulo">Asignar a un agente</div>
-      ${terminales.length
-        ? terminales.map(t => `<button data-tid="${t.id}">${icon('terminal', 12)} ${esc(t.nombre)}</button>`).join('')
-        : '<div class="tk-picker-vacio">No hay terminales — creá una con + Terminal</div>'}`;
-    document.body.appendChild(el);
-
-    const { offsetWidth: w, offsetHeight: h } = el;
-    let px = x, py = y;
-    if (anchor && anchor.getBoundingClientRect) {
-      const r = anchor.getBoundingClientRect();
-      px = r.left; py = r.bottom + 6;
+  function _headGrupoHTML(g) {
+    const partes = partesResumen(g.resumen);
+    const total = g.agentes.length || 1;
+    const barra = partes.map(p =>
+      `<i class="tk-seg ${claseEstado(p.estado)}" style="flex-grow:${p.n}"></i>`).join('');
+    const resumen = partes.map(p =>
+      `<span class="tk-gp ${claseEstado(p.estado)}">${esc(p.texto)}</span>`).join('<span class="tk-sep" aria-hidden="true">·</span>');
+    if (g.tipo === 'jarvis') {
+      return `
+        <div class="tk-grupo-kicker">${ic('sparkles', 11)}<span>Orquestado por Jarvis</span></div>
+        ${g.titulo
+          ? `<div class="tk-grupo-obj" data-i18n-skip title="${esc(g.titulo)}">${esc(g.titulo)}</div>`
+          : '<div class="tk-grupo-obj tk-grupo-obj-vacio">Enjambre de Jarvis</div>'}
+        <div class="tk-grupo-prog">
+          <div class="tk-barra" aria-hidden="true" data-n="${total}">${barra}</div>
+          <div class="tk-grupo-res">${resumen}</div>
+        </div>`;
     }
-    el.style.left = `${Math.min(px, window.innerWidth - w - 8)}px`;
-    el.style.top  = `${Math.min(py, window.innerHeight - h - 8)}px`;
-
-    _pickerPending = null;
-    _picker = { el, taskId: id };
-
-    el.querySelectorAll('[data-tid]').forEach(b =>
-      b.addEventListener('click', async (ev) => {
-        ev.stopPropagation();
-        _cerrarPicker();
-        const r = await fetch(`/api/tasks/${taskId}/asignar`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ terminal_id: parseInt(b.dataset.tid, 10) }),
-        });
-        if (r.ok) toast('Tarea enviada al agente — el board se mueve solo con TASK_DONE.', 'success');
-        else toast('No se pudo asignar la tarea.', 'error');
-        await refrescar();
-      }));
+    return `
+      <div class="tk-grupo-kicker">${ic('terminal', 11)}<span>Tus terminales</span></div>
+      <div class="tk-grupo-res">${resumen}</div>`;
   }
 
-  // Un solo listener global: cierra al click afuera, pero IGNORA el botón que
-  // abre (así el click del botón alcanza a hacer su toggle en vez de que el
-  // mousedown lo anule) y el propio picker.
-  document.addEventListener('mousedown', (ev) => {
-    if (!_picker) return;
-    if (ev.target.closest('.tk-picker') || ev.target.closest('[data-act="asignar"]')) return;
-    _cerrarPicker();
-  });
+  function _agenteHTML(a, est) {
+    const titulo = a.titulo ? tituloVisible(a.titulo) : '';
+    const icono = est === 'termino' ? ic('check', 10)
+      : est === 'esperando' ? ic('message', 10)
+      : est === 'caido' ? ic('alert', 10)
+      : est === 'arrancando' ? ic('loader', 10) : '<i class="tk-dot" aria-hidden="true"></i>';
 
-  /* ── API pública ───────────────────────────────────────────── */
-  async function refrescar() {
-    // Generation-guard: si cambian de proyecto durante los fetch, no pintar lo viejo.
-    const pid = _projectId;
-    await Promise.all([_cargarTasks(), _cargarWorkflows()]);
-    if (pid !== _projectId) return;
-    _render();
+    const lineas = [];
+    if (titulo) {
+      lineas.push(`<div class="tk-hace" title="${esc(titulo)}">${esc(titulo)}</div>`);
+    }
+    if (a.tarea && a.tarea.texto) {
+      lineas.push(`<div class="tk-tarea"><span class="tk-lbl">Tarea</span><span class="tk-tarea-txt" data-i18n-skip title="${esc(a.tarea.texto)}">${esc(a.tarea.texto)}</span></div>`);
+    }
+    if (!titulo && !(a.tarea && a.tarea.texto)) {
+      lineas.push(`<div class="tk-hace tk-hace-vacio">${est === 'caido' ? 'Su CLI no está corriendo' : 'Sin actividad reportada'}</div>`);
+    }
+
+    const meta = [];
+    const ev = a.ultimo_evento;
+    if (ev && EVENTO[ev.event]) {
+      const tipoEv = ev.event === 'TASK_DONE' ? 'ok' : 'mal';
+      meta.push(`<span class="tk-ev tk-ev-${tipoEv}">${ic(tipoEv === 'ok' ? 'check' : 'alert', 10)}<span>${EVENTO[ev.event]}</span>${
+        ev.motivo ? `<span class="tk-ev-mot" data-i18n-skip title="${esc(ev.motivo)}">${esc(ev.motivo)}</span>` : ''}</span>`);
+    }
+    const archs = a.archivos || [];
+    if (archs.length) {
+      const vis = archs.slice(0, 3).map(f =>
+        `<span class="tk-file" data-i18n-skip title="${esc(f.path)}">${esc(basename(f.path))}${f.writes > 1 ? `<b>×${f.writes}</b>` : ''}</span>`).join('');
+      const mas = archs.length > 3 ? `<span class="tk-mas">+${archs.length - 3} más</span>` : '';
+      meta.push(`<span class="tk-files">${ic('file', 10)}${vis}${mas}</span>`);
+    }
+    for (const url of (a.dev_servers || []).slice(0, 3)) {
+      meta.push(`<a class="tk-dev" href="${esc(url)}" data-dev="${esc(url)}" data-i18n-skip title="${esc(url)}">${ic('globe', 10)}${esc(hostDe(url))}</a>`);
+    }
+
+    return `
+      <div class="tk-logo" aria-hidden="true">${logo(a.tipo_ia, 18)}</div>
+      <div class="tk-cuerpo">
+        <div class="tk-fila1">
+          <span class="tk-nombre" data-i18n-skip title="${esc(a.nombre)}">${esc(a.nombre)}</span>
+          <span class="tk-pill">${icono}<span class="tk-pill-txt">${ETIQUETA[est]}</span><span class="tk-pill-dur" data-dur data-i18n-skip></span></span>
+        </div>
+        ${lineas.join('')}
+        ${meta.length ? `<div class="tk-meta">${meta.join('')}</div>` : ''}
+      </div>`;
   }
 
-  window.JarvisTasks = {
+  /* ── Acciones ────────────────────────────────────────────────── */
+  function _enfocarTerminal(id) {
+    if (!id) return;
+    const card = document.getElementById(`terminal-card-${id}`);
+    if (!card) { root.toast?.(_t('Esa terminal no está en pantalla'), 'info'); return; }
+    try { card.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' }); } catch (_) { card.scrollIntoView(); }
+    card.classList.remove('tk-foco-card');
+    void card.offsetWidth;               // re-dispara la animación si ya estaba
+    card.classList.add('tk-foco-card');
+    clearTimeout(card._tkFoco);
+    card._tkFoco = setTimeout(() => card.classList.remove('tk-foco-card'), 1700);
+    // Foco de teclado a la terminal: si está esperando, respondés sin clickear.
+    const ta = card.querySelector('.xterm-helper-textarea');
+    if (ta) { try { ta.focus({ preventScroll: true }); } catch (_) { ta.focus(); } }
+    root.TerminalAura?.apagar?.(id);
+  }
+
+  function _abrirDev(url) {
+    if (!url) return;
+    if (root.WebPreview && root.JarvisDock) {
+      root.JarvisDock.setTab('preview');
+      root.WebPreview.abrirLink?.(url);
+    } else {
+      window.open(url, '_blank', 'noopener');
+    }
+  }
+
+  function _reset() {
+    _gen++;
+    _data = null;
+    _prevEstados = null;
+    _sigResumen = '';
+    for (const rg of _grupos.values()) rg.el.remove();
+    for (const rf of _filas.values()) rf.el.remove();
+    _grupos.clear();
+    _filas.clear();
+    if (_montado) { $('tk-chips').innerHTML = ''; $('tk-total').textContent = ''; $('tk-vacio').hidden = true; }
+  }
+
+  /* ── API pública ─────────────────────────────────────────────── */
+  function onAgentEvent() {
+    if (_projectId == null) return;
+    _programar(350);
+  }
+
+  root.JarvisTasks = {
     init(projectId) {
       _projectId = projectId;
       _montar();
     },
-    async show() {
-      _visible = true;
+    show() {
       _montar();
-      await refrescar();
+      refrescar();
+      _arrancarPoll();
     },
     onProjectChanged(projectId) {
       _projectId = projectId;
-      _workflows = new Map();
-      _tasks = [];
-      if (_visible) refrescar();
+      _reset();
+      if (_visible()) { refrescar(); _arrancarPoll(); }
     },
-    // WS: el board cambió en el server (crear/asignar/TASK_DONE)
-    onTasksUpdate() { if (_visible) refrescar(); },
-    // WS: progreso de workflow del orquestador → proyectar en vivo
-    onWorkflowUpdate(data) {
-      if (!data?.workflow_id || !Array.isArray(data.pasos)) return;
-      const previo = _workflows.get(String(data.workflow_id));
-      _workflows.set(String(data.workflow_id), {
-        nombre: previo?.nombre || data.nombre || 'Workflow',
-        pasos:  data.pasos,
-      });
-      if (_visible) _render();
-    },
+    onAgentEvent,
+    _pure,
   };
-})();
+
+  // Volver a la pestaña del navegador con el dock en Tareas → retomar el poll.
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && _visible()) { refrescar(); _arrancarPoll(); }
+  });
+})(typeof window !== 'undefined' ? window : globalThis);

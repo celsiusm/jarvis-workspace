@@ -86,7 +86,7 @@
   --ob-on-accent:  #fff;                                            /* texto/ícono SOBRE relleno de --ob-accent (violeta/azul/rosa/rojo = acentos oscuros → blanco) */
   --ob-bevel-accent: color-mix(in oklch, var(--ob-accent) 35%, white);  /* highlight superior de los CTA — deriva del acento, sigue al tema */
 
-  /* ── Señales (estado de agentes/git/workflow — JAMÁS decoración) ── */
+  /* ── Señales (estado de agentes/git/tareas — JAMÁS decoración) ── */
   --ob-run:        oklch(78% 0.16 150);    /* corriendo / éxito */
   --ob-work:       oklch(82% 0.14 80);     /* trabajando / warning */
   --ob-err:        oklch(68% 0.20 22);     /* error / danger */

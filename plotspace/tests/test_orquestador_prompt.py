@@ -2,7 +2,7 @@
 Test: higiene del system prompt del orquestador (Etapa 6 del rework).
 
 El prompt le MENTÍA al modelo sobre el sistema real: decía que el orquestador
-commitea (falso: commitean los agentes/Reviewer), que el tope es 7 terminales
+commitea (falso: commitean los agentes), que el tope es 7 terminales
 (es MAX_TERMINALES=12), ofrecía solo 4 CLIs (el producto corre 7+manual) y
 obligaba a repetir el protocolo de cierre en cada tarea (duplicado con el
 sentinel del engine). Estos tests fijan que el drift no vuelva.
@@ -14,8 +14,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspa
 
 from plotspace.routers.orchestrator import (
     MAX_TERMINALES,
+    RESPONDER_SCHEMA,
     SYSTEM_PROMPT,
-    _tarea_engine_para_terminal,
+    _tarea_para_agente,
 )
 
 
@@ -27,7 +28,7 @@ def test_tope_de_terminales_es_el_real():
 
 
 def test_no_dice_que_el_orquestador_commitea():
-    # El engine NO commitea: commitean los agentes y el Reviewer.
+    # El orquestador NO commitea: commitea cada agente.
     assert 'vos commiteás' not in SYSTEM_PROMPT
     assert 'commitean' in SYSTEM_PROMPT
 
@@ -54,20 +55,37 @@ def test_prompt_no_exige_cierre_literal():
     assert 'CIERRE LITERAL' not in SYSTEM_PROMPT
 
 
-def test_engine_agrega_protocolo_de_cierre():
-    tarea = _tarea_engine_para_terminal({'tarea': 'hacer X', 'archivos': []}, 42)
-    assert 'TASK_DONE' in tarea
-    assert 'TASK_BLOCKED' in tarea
+def test_tarea_del_agente_lleva_el_cierre_sentinel():
+    tarea = _tarea_para_agente('hacer X', [], 42)
+    assert tarea.startswith('hacer X')
     assert '.jarvis/signals/terminal_42.json' in tarea
+    assert tarea.count('.jarvis/signals/terminal_42.json') == 1
 
 
-def test_engine_no_duplica_cierre_si_la_tarea_ya_lo_trae():
-    tarea = _tarea_engine_para_terminal(
-        {'tarea': 'revisá todo. VEREDICTO: escribí TASK_DONE o TASK_BLOCKED.',
-         'archivos': [], 'rol': 'reviewer'}, 42)
-    assert tarea.count('PROTOCOLO DE CIERRE') == 0
-    # el sentinel-file va igual (es otra capa, no el protocolo del pane)
-    assert '.jarvis/signals/terminal_42.json' in tarea
+def test_tarea_del_agente_lleva_su_territorio():
+    tarea = _tarea_para_agente('hacer X', ['src/a.py', 'src/b/*'], 7)
+    assert 'src/a.py, src/b/*' in tarea
+    assert 'EXCLUSIVA' in tarea
+
+
+# ─── El motor de workflows ya no existe (2026-09-28) ─────────────────────────
+
+def test_prompt_sin_workflows_ni_reviewer():
+    bajo = SYSTEM_PROMPT.lower()
+    for palabra in ('workflow', 'reviewer', 'depende_de', 'paso_0'):
+        assert palabra not in bajo, f'el prompt todavía menciona {palabra!r}'
+
+
+def test_schema_sin_workflow_y_spawn_con_tarea():
+    assert 'workflow' not in RESPONDER_SCHEMA['properties']
+    props = RESPONDER_SCHEMA['properties']['actions']['items']['properties']
+    assert props['tarea']['type'] == 'string'
+    assert props['archivos']['type'] == 'array'
+
+
+def test_prompt_documenta_spawn_con_tarea():
+    assert '"type":"spawn_terminal","name":"Backend"' in SYSTEM_PROMPT
+    assert '"tarea":' in SYSTEM_PROMPT and '"archivos":' in SYSTEM_PROMPT
 
 
 # ─── Los ejemplos no sesgan con la estructura de Jarvis ──────────────────────

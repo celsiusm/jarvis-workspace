@@ -1,9 +1,5 @@
 # plotspace/tests/test_orquestador_etapa3.py
-"""Los arreglos que le faltaban al motor de workflows para ser usable.
-
-El motor está construido entero pero en 19 días de esta DB no corrió ni una
-vez. No falló: nunca se lo llamó. Igual tiene que quedar SANO para el día que
-el usuario lo quiera, y tenía tres cosas rotas de raíz:
+"""Entrega de tareas a los agentes (spawn_terminal con tarea / enviar_prompt).
 
 1. La tarea viajaba por `send-keys` crudo. Verificado: los saltos de línea
    llegan como LF al pty, así que un prompt largo puede fragmentarse en varios
@@ -13,13 +9,8 @@ el usuario lo quiera, y tenía tres cosas rotas de raíz:
    (`'bypass permissions on'`). Es la misma fragilidad que dejó ciego al parseo
    de panes: cambia el render y se rompe. Ahora se usa la máquina de estados de
    agent_watch, que no depende de ningún texto.
-3. El Reviewer esperaba que TODOS los pasos estuvieran `done`. Con un solo
-   paso bloqueado no arrancaba nunca y el workflow quedaba colgado sin cierre.
 """
-from plotspace.routers.orchestrator import (
-    comandos_pegar_tarea, _pasos_listos_para_arrancar, _paso_reviewer,
-    listo_segun_fase,
-)
+from plotspace.routers.orchestrator import comandos_pegar_tarea, listo_segun_fase
 
 
 # ─── 1. La tarea viaja como PASTE, no tipeada ────────────────────────────────
@@ -86,59 +77,3 @@ def test_no_listo_mientras_arranca():
 def test_sin_estado_no_esta_listo():
     assert listo_segun_fase(None) is False
     assert listo_segun_fase({}) is False
-
-
-# ─── 3. El Reviewer no se cuelga por un paso bloqueado ───────────────────────
-
-def _pasos(*estados):
-    p = [{'estado': e, 'agente': f'A{i}'} for i, e in enumerate(estados)]
-    p.append({**_paso_reviewer('W', 'obj'), 'estado': 'pending'})
-    return p
-
-
-def test_reviewer_arranca_con_todos_done():
-    assert _pasos_listos_para_arrancar(_pasos('done', 'done')) == [2]
-
-
-def test_reviewer_arranca_AUNQUE_haya_un_paso_bloqueado():
-    """Antes esperaba `done` de todos: un solo bloqueado y el workflow quedaba
-    colgado para siempre, sin cierre ni review."""
-    assert _pasos_listos_para_arrancar(_pasos('done', 'blocked')) == [2]
-
-
-def test_reviewer_arranca_con_un_paso_en_error():
-    assert _pasos_listos_para_arrancar(_pasos('done', 'error')) == [2]
-
-
-def test_reviewer_NO_arranca_si_alguien_sigue_trabajando():
-    assert _pasos_listos_para_arrancar(_pasos('done', 'running')) == []
-
-
-def test_reviewer_NO_arranca_si_alguien_no_empezo():
-    assert _pasos_listos_para_arrancar(_pasos('done', 'pending')) == [1]
-
-
-def test_reviewer_solo_no_arranca():
-    """Un workflow sin builders no tiene nada que revisar."""
-    p = [{**_paso_reviewer('W', 'o'), 'estado': 'pending'}]
-    assert _pasos_listos_para_arrancar(p) == []
-
-
-def test_los_builders_sin_dependencia_arrancan_en_paralelo():
-    p = [{'estado': 'pending', 'depende_de': None},
-         {'estado': 'pending', 'depende_de': None}]
-    assert _pasos_listos_para_arrancar(p) == [0, 1]
-
-
-def test_la_dependencia_se_sigue_respetando():
-    p = [{'estado': 'running', 'depende_de': None},
-         {'estado': 'pending', 'depende_de': 'paso_0'}]
-    assert _pasos_listos_para_arrancar(p) == []
-    p[0]['estado'] = 'done'
-    assert _pasos_listos_para_arrancar(p) == [1]
-
-
-if __name__ == '__main__':
-    import sys
-    import pytest
-    sys.exit(pytest.main([__file__, '-q']))

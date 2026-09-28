@@ -5,8 +5,8 @@ EL AGUJERO QUE TAPA
 -------------------
 `jv estado` tiene el dato fresco y completo, pero es PULL: el agente tiene que
 acordarse de correrlo. No se acuerda. Y la única entrega GARANTIZADA de contexto
-que existía (`mailbox.bloque_pendientes_para_tarea`) solo corre en modo workflow
-— pero el trabajo real de este repo pasa en terminales directas, donde el usuario
+que existía (`mailbox.bloque_pendientes_para_tarea`) solo corre cuando Jarvis
+entrega una tarea — pero el trabajo real de este repo pasa en terminales directas, donde el usuario
 pega la tarea a mano. En ese camino no había ningún momento en el que el sistema
 garantizara que el agente sabe con quién está compartiendo el árbol.
 

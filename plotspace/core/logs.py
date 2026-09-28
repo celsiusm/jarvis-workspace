@@ -1,7 +1,7 @@
 """Logging ESTRUCTURADO del swarm (JSON-lines) — audit trail consultable.
 
 El `print()` disperso no se puede consultar, filtrar ni correlacionar. Acá cada evento importante
-(ciclo de vida de workflow, detección de keyword, errores del orquestador) se escribe como UNA línea
+(tareas que Jarvis entrega, detección de keyword, errores del orquestador) se escribe como UNA línea
 JSON a `data/jarvis.log` (con rotación por tamaño) Y se ecoa a consola (no se pierde la visibilidad
 actual). Lo consume `GET /api/system/metrics` (eventos recientes) y sirve para diagnosticar qué hizo
 el swarm. Stdlib pura, thread-safe (los pollers ahora corren en threads vía to_thread). El logging
@@ -21,9 +21,9 @@ _lock = threading.Lock()
 
 def evento(tipo: str, nivel: str = 'info', **campos):
     """Registra un evento estructurado.
-    tipo: clave del evento (ej 'workflow_paso', 'task_done', 'orquestador_error').
+    tipo: clave del evento (ej 'tarea_jarvis', 'task_event', 'orquestador_error').
     nivel: 'info' | 'warn' | 'error'.
-    campos: contexto arbitrario (workflow_id, terminal_id, paso, etc.)."""
+    campos: contexto arbitrario (terminal_id, project_id, keyword, etc.)."""
     rec = {'ts': datetime.now().isoformat(timespec='seconds'), 'nivel': nivel, 'evento': tipo}
     rec.update(campos)
     # Consola: preserva la visibilidad de los print() de antes.
