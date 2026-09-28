@@ -421,8 +421,11 @@
     const scored = [];
     if (comando) {
       for (const cmd of CMD_REGISTRY) {
-        const m = _cpFuzzy(q, cmd.label);
-        if (m) scored.push({ kind: 'cmd', label: cmd.label, run: cmd.run, score: m.score, positions: m.positions });
+        // Label en el idioma activo: el fuzzy y el resaltado van sobre lo que se VE
+        // (el <span> por letra parte el texto y el motor i18n ya no lo podría traducir).
+        const label = _t(cmd.label);
+        const m = _cpFuzzy(q, label);
+        if (m) scored.push({ kind: 'cmd', label, run: cmd.run, score: m.score, positions: m.positions });
       }
     } else {
       // _ftFlatten() devuelve [{name,path,type}] (Fase 1), memoizado. Solo archivos.
@@ -2588,7 +2591,7 @@
       return;
     }
     meta.classList.remove('error');
-    const trunc = data.truncated ? ' (parcial)' : '';
+    const trunc = data.truncated ? ` (${_t('parcial')})` : '';
     meta.textContent = _t('{n} resultado(s) en {m} archivo(s)').replace('{n}', data.total).replace('{m}', data.results.length) + trunc;
 
     if (data.results.length === 0) {
