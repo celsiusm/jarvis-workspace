@@ -373,6 +373,38 @@ async def salud_memoria(project_id: int):
     return salud
 
 
+def _uso_reciente(project_id: int, n: int) -> dict:
+    """Últimos `n` eventos de memoria_uso del proyecto (lo más nuevo primero),
+    con el nombre de la terminal que la leyó/recibió, + conteo por slug
+    (inyectada vs leída). Solo lectura: alimenta el stream «Recall» de Live."""
+    conn = get_db()
+    try:
+        filas = conn.execute(
+            'SELECT u.slug, u.resultado, u.timestamp, u.terminal_id, t.nombre AS terminal, '
+            't.tipo_ia AS tipo_ia FROM memoria_uso u '
+            'LEFT JOIN terminals t ON t.id = u.terminal_id '
+            'WHERE u.project_id = ? ORDER BY u.id DESC LIMIT ?',
+            (project_id, n)).fetchall()
+    finally:
+        conn.close()
+    eventos, conteo = [], {}
+    for f in filas:
+        ev = dict(f)
+        eventos.append(ev)
+        c = conteo.setdefault(ev['slug'], {'inyectada': 0, 'leida': 0})
+        c['inyectada' if ev['resultado'] == 'inyectada' else 'leida'] += 1
+    return {'eventos': eventos, 'conteo': conteo}
+
+
+@router.get("/projects/{project_id}/memory/uso")
+async def uso_memoria(project_id: int, n: int = 80):
+    """Stream de recall: qué memorias se inyectaron/leyeron y quién. Declarado
+    ANTES de /{slug} (mismo gotcha de orden que /salud)."""
+    _ruta_proyecto(project_id)   # 404 si el proyecto no existe
+    n = max(1, min(int(n), 300))
+    return await asyncio.to_thread(_uso_reciente, project_id, n)
+
+
 @router.get("/projects/{project_id}/memory/{slug}")
 async def leer_memoria(project_id: int, slug: str):
     path = _ruta_proyecto(project_id)
