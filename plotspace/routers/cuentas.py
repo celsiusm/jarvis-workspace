@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from plotspace.core import cli_accounts as ca
 from plotspace.core import cuenta_watch as cw
 from plotspace.core import cli_login
+from plotspace.core import uso_suscripcion
 
 router = APIRouter(prefix="/api/cuentas", tags=["cuentas"])
 
@@ -56,6 +57,13 @@ async def _avisar():
 @router.get("")
 def estado():
     return ca.estado()
+
+
+@router.get("/uso")
+async def uso(refrescar: bool = False):
+    """Cuánto le queda a la suscripción de cada cuenta (claude/codex).
+    Caché de 60 s; `?refrescar=1` la saltea."""
+    return {"cuentas": await uso_suscripcion.uso_todas(forzar=refrescar)}
 
 
 @router.post("")

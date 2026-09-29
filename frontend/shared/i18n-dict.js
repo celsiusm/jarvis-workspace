@@ -2314,5 +2314,17 @@
     "Esa terminal no está en pantalla": "That terminal isn't on screen",
     "completó su tarea": "completed its task",
     "Coordino agentes y les reparto el trabajo por vos.": "I coordinate agents and split the work among them for you.",
+    // ── uso de la suscripción (⚙ → Cuentas) ──
+    "Sesión (5 h)": "Session (5 h)",
+    "Semana": "Week",
+    "quedan {n}%": "{n}% left",
+    "se renueva en {t}": "resets in {t}",
+    "Actualizar el uso": "Refresh usage",
+    "Consultando el uso…": "Checking usage…",
+    "Dato de la última sesión del CLI": "From the CLI's last session",
+    "Sesión vencida: se renueva sola la próxima vez que uses este CLI.": "Session expired: it renews itself the next time you use this CLI.",
+    "No encontré la credencial de esta cuenta.": "Couldn't find this account's credential.",
+    "El proveedor no devolvió datos de uso para este plan.": "The provider returned no usage data for this plan.",
+    "No se pudo consultar el uso ahora. Probá actualizar en un rato.": "Couldn't check usage right now. Try refreshing in a bit.",
   });
 })();

@@ -901,6 +901,8 @@
     let _abiertaId = null;   // detalle desplegado (cli:id)
     let _verMail = false;    // el correo arranca enmascarado; el ojo lo revela
     let _clis = [];
+    let _uso = null;         // {account_id: uso} de /api/cuentas/uso (claude/codex)
+    const U = window.JarvisUsoCuentas;
 
     b.innerHTML = blk('conmutador', 'cargando…', `<div class="cta-cuerpo" id="cta-cuerpo">
         <div class="cta-cargando">${icon('loader', 15)} ${esc(_t('Cargando cuentas…'))}</div></div>`,
@@ -1086,6 +1088,7 @@
                       title="${a.activa ? esc(_t('En uso — ver detalle')) : esc(_t('Cambiar a esta cuenta'))}">
                 ${a.activa ? '<i class="ct-dot" aria-hidden="true"></i>' : ''}
                 <span>${esc(a.label || _t('Sin nombre'))}</span>
+                ${!a.activa && _uso && U ? U.htmlChip(_uso[String(a.id)]) : ''}
               </button>`).join('')}
             ${c.home_sin_guardar
               ? `<button class="ct-chip guardar" type="button" data-act="vincular" data-tipo="${esc(c.tipo)}"
@@ -1097,6 +1100,7 @@
             </button>
           </span>
         </div>
+        ${_bloqueUso(c)}
         ${abierta ? `
           <div class="ct-det">
             <dl>
@@ -1120,6 +1124,22 @@
             </div>
           </div>` : ''}
       </section>`;
+    }
+
+    // Barras de uso de la cuenta EN USO (solo CLIs que exponen su cupo).
+    function _bloqueUso(c) {
+      if (!U || !['claude', 'codex'].includes(c.tipo)) return '';
+      const activa = (c.cuentas || []).find(a => a.activa);
+      if (!activa) return '';
+      return U.htmlBloque(_uso ? (_uso[String(activa.id)] || { estado: 'sin_credencial' }) : null, { icon });
+    }
+
+    async function _cargarUso(refrescar = false) {
+      try {
+        const d = await _ctaFetch(`/api/cuentas/uso${refrescar ? '?refrescar=1' : ''}`);
+        _uso = (d && d.cuentas) || {};
+      } catch { _uso = {}; }
+      if (b.isConnected) pintar();
     }
 
     function pintar() {
@@ -1160,6 +1180,7 @@
       _res.cuentas = _clis.reduce((a, c) => a + (c.cuentas || []).length, 0);
       _pintarValores();
       pintar();
+      _cargarUso();
     }
 
     async function accion(ds) {
@@ -1171,6 +1192,7 @@
         pintar(); return;
       }
       if (ds.act === 'vermail') { _verMail = !_verMail; pintar(); return; }
+      if (ds.act === 'uso-refrescar') { _uso = null; pintar(); await _cargarUso(true); return; }
       if (ds.act === 'copy') {
         try { await navigator.clipboard.writeText(_buscar(id)?.email || ''); window.toast?.(_t('Correo copiado')); }
         catch { window.toast?.(_t('No se pudo copiar'), 'error'); }
