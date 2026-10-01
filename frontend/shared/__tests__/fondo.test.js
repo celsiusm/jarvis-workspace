@@ -29,7 +29,7 @@ for (const p of F.PRESETS) {
   assert.ok(p.nombre && p.css.includes('gradient'), p.id);
   assert.ok(!/#[0-9a-fA-F]{3,8}\b/.test(p.css), `${p.id}: nada de hex`);
 }
-assert.ok(F.PRESETS.find(p => p.id === 'aurora').css.includes('var(--ob-accent)'), 'aurora sigue al tema');
+for (const p of F.PRESETS) assert.ok(!p.css.includes('var(--ob-'), `${p.id}: el fondo no depende del tema`);
 
 // ── activo(): prendido + glass + (imagen propia) + sin reducir transparencias ──
 assert.strictEqual(F.activo({ on: false }), false);

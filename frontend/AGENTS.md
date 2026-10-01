@@ -33,7 +33,7 @@ of its `<link>`/`<script>` in `shell/workspace.html` (or `index.html` for home).
 
 `shared/fondo.js` (engine, loaded in the body start like `glass.js`) + `shared/fondo.css` (loaded after `liquid-glass.css`).
 - Everything hangs off `:root[data-glass="on"][data-fondo="on"]`; the engine sets `data-fondo` and the `--gw-*` vars (`--gw-blur/-dim/-sat/-term/-panel/-img`) synchronously on boot.
-- **The blur lives on the static `#jw-fondo` layer, not in `backdrop-filter` on panels** (a live xterm canvas next to a backdrop-filter repaints every frame). Surfaces become the theme color with alpha: use `--gw-s-void/-0/-1/-term` for a NEW structural surface, and add its selector to `fondo.css`. Small controls and floats keep their fill (they must read on any image).
+- **The blur lives on the static `#jw-fondo` layer, not in `backdrop-filter` on panels** (a live xterm canvas next to a backdrop-filter repaints every frame). Surfaces become NEUTRAL glass with alpha (the theme only paints accents; light themes get a white base and let more image through): use `--gw-s-void/-0/-1/-term` for a NEW structural surface, and add its selector to `fondo.css`. Small controls and floats keep their fill (they must read on any image).
 - xterm: `allowTransparency` only while a background is active (`terminal.js` `_aplicarTransparencia` recreates the CanvasAddon on `fondo-changed`). Monaco and the remote-browser pages stay opaque on purpose.
 - The settings block is `sections/settings/fondo-ui.js` (pure `html()` + `montar()`); tests in `shared/__tests__/fondo.test.js` and `sections/settings/__tests__/fondo-ui.test.js`.
 

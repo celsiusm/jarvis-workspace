@@ -29,15 +29,15 @@
     panel: { min: 20, max: 100, def: 58, unidad: '%' },    // opacidad de franja / barra / dock
   };
 
-  // Degradados de la casa. "aurora" sigue al tema (tokens); el resto son arte fijo
-  // (oklch literal a propósito: son ilustraciones, no chrome — no cambian con el tema).
+  // Degradados de la casa: arte fijo (oklch literal a propósito: son ilustraciones, no
+  // chrome). NO siguen al tema: con un fondo puesto, el tema solo pone los acentos.
   const PRESETS = [
-    { id: 'aurora', nombre: 'Aurora', tema: true, css: [
-      'radial-gradient(62% 72% at 14% 18%, color-mix(in oklch, var(--ob-accent) 78%, transparent), transparent 70%)',
-      'radial-gradient(56% 66% at 88% 14%, color-mix(in oklch, var(--ob-info) 70%, transparent), transparent 70%)',
-      'radial-gradient(72% 82% at 72% 92%, color-mix(in oklch, var(--ob-magenta) 62%, transparent), transparent 72%)',
-      'radial-gradient(48% 58% at 8% 88%, color-mix(in oklch, var(--ob-accent) 40%, var(--ob-info)), transparent 72%)',
-      'linear-gradient(160deg, var(--ob-bg-0), var(--ob-bg-void))'].join(',') },
+    { id: 'aurora', nombre: 'Aurora', css: [
+      'radial-gradient(62% 72% at 14% 18%, oklch(56% 0.21 292), transparent 70%)',
+      'radial-gradient(56% 66% at 88% 14%, oklch(62% 0.15 238), transparent 70%)',
+      'radial-gradient(72% 82% at 72% 92%, oklch(54% 0.21 340), transparent 72%)',
+      'radial-gradient(48% 58% at 8% 88%, oklch(50% 0.16 262), transparent 72%)',
+      'linear-gradient(160deg, oklch(22% 0.06 285), oklch(13% 0.04 275))'].join(',') },
     { id: 'dusk', nombre: 'Atardecer', css: [
       'radial-gradient(60% 70% at 16% 20%, oklch(52% 0.22 300), transparent 70%)',
       'radial-gradient(58% 66% at 86% 18%, oklch(66% 0.21 20), transparent 70%)',

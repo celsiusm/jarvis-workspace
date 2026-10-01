@@ -35,26 +35,53 @@
 /* Velo: oscurece los temas oscuros y aclara los claros (usa el color de fondo del tema). */
 .jw-fondo-vel {
   position: absolute; inset: 0;
-  background: color-mix(in oklch, var(--ob-bg-void) var(--gw-dim, 0%), transparent);
+  background: color-mix(in oklch, var(--gw-n-veil, var(--ob-bg-void)) var(--gw-dim, 0%), transparent);
 }
 
-/* ── Superficies: el color del tema con alpha ───────────────── */
+/* ── Superficies: vidrio NEUTRO con alpha ────────────────────────
+   Con un fondo puesto manda la imagen: el tema de color NO tiñe las superficies
+   (un tema verde no pinta el entorno de verde, y un tema claro no lo lava de
+   blanco). El tema sigue mandando en lo que es acento: títulos, pestañas y
+   pastillas activas, botones, halos, bordes de acento. Solo claro/oscuro decide
+   el tono base, porque el texto (tokens --ob-fg-*) viene del tema. */
 :root[data-glass="on"][data-fondo="on"] {
-  --gw-s-void: color-mix(in oklch, var(--ob-bg-void) var(--gw-panel, 100%), transparent);
-  --gw-s-0:    color-mix(in oklch, var(--ob-bg-0)    var(--gw-panel, 100%), transparent);
-  --gw-s-1:    color-mix(in oklch, var(--ob-bg-1)    var(--gw-panel, 100%), transparent);
-  --gw-s-term: color-mix(in oklch, var(--ob-bg-terminal) var(--gw-term, 100%), transparent);
-  background: var(--ob-bg-void);        /* mientras carga la imagen: el void del tema */
+  --gw-n-void:  oklch(9% 0 0);
+  --gw-n-0:     oklch(12% 0 0);
+  --gw-n-1:     oklch(15.5% 0 0);
+  --gw-n-raise: oklch(24% 0 0);       /* botones / chips / cards: un escalón arriba */
+  --gw-n-term:  oklch(11% 0 0);
+  --gw-n-veil:  oklch(6% 0 0);
+  --gw-s-void: color-mix(in oklch, var(--gw-n-void) var(--gw-panel, 100%), transparent);
+  --gw-s-0:    color-mix(in oklch, var(--gw-n-0)    var(--gw-panel, 100%), transparent);
+  --gw-s-1:    color-mix(in oklch, var(--gw-n-1)    var(--gw-panel, 100%), transparent);
+  --gw-s-term: color-mix(in oklch, var(--gw-n-term) var(--gw-term, 100%), transparent);
+  background: var(--gw-n-void);         /* mientras carga la imagen */
+  /* Las "gotas" de vidrio (botones, chips, cards, pestañas) también neutras. */
+  --lg-body-hi: color-mix(in oklch, var(--gw-n-raise) 62%, transparent);
+  --lg-body-lo: color-mix(in oklch, var(--gw-n-1) 74%, transparent);
+  --lg-body:    linear-gradient(180deg, var(--lg-body-hi), var(--lg-body-lo));
+}
+/* Temas claros (papel, alba): blanco neutro, sin el crema del tema. La terminal
+   sigue siendo grafito (los CLIs asumen fondo oscuro). */
+:root[data-glass="on"][data-fondo="on"]:is([data-theme="papel"], [data-theme="alba"]) {
+  --gw-n-void:  oklch(97.5% 0 0);
+  --gw-n-0:     oklch(96% 0 0);
+  --gw-n-1:     oklch(98.5% 0 0);
+  --gw-n-raise: oklch(100% 0 0);
+  --gw-n-term:  oklch(13% 0 0);
+  --gw-n-veil:  oklch(98% 0 0);
+  --lg-body-hi: color-mix(in oklch, var(--gw-n-raise) 58%, transparent);
+  --lg-body-lo: color-mix(in oklch, var(--gw-n-1) 52%, transparent);
+  /* El blanco sobre una imagen "lava" más que el negro: se deja pasar más fondo. */
+  --gw-s-void: color-mix(in oklch, var(--gw-n-void) calc(var(--gw-panel, 100%) * .72), transparent);
+  --gw-s-0:    color-mix(in oklch, var(--gw-n-0)    calc(var(--gw-panel, 100%) * .72), transparent);
+  --gw-s-1:    color-mix(in oklch, var(--gw-n-1)    calc(var(--gw-panel, 100%) * .72), transparent);
 }
 :root[data-glass="on"][data-fondo="on"] body { background: transparent; }
 
-/* Franja de proyectos (conserva la aurora de acento de arriba) */
+/* Franja de proyectos (sin la aurora de acento de arriba: es tinte del tema) */
 :root[data-glass="on"][data-fondo="on"] .jw-strip {
-  background:
-    var(--lg-gloss),
-    radial-gradient(150% 130px at 18% -30px, color-mix(in oklch, var(--ob-accent) 17%, transparent), transparent 72%),
-    radial-gradient(120% 90px at 95% -20px, color-mix(in oklch, var(--ob-info) 10%, transparent), transparent 70%),
-    linear-gradient(180deg, var(--gw-s-1), var(--gw-s-0) 46%);
+  background: var(--lg-gloss), linear-gradient(180deg, var(--gw-s-1), var(--gw-s-0) 46%);
 }
 
 /* Barra superior */
@@ -115,9 +142,7 @@
 
 /* Tareas */
 :root[data-glass="on"][data-fondo="on"] .tk-root {
-  background:
-    radial-gradient(120% 60% at 0% -10%, color-mix(in oklch, var(--ob-accent) 9%, transparent), transparent 60%),
-    var(--gw-s-0);
+  background: var(--gw-s-0);
 }
 
 /* Review */
@@ -141,5 +166,5 @@
 /* Home (sin franja/dock/terminales): el texto suelto va directo sobre la imagen →
    velo extra para que siga leyéndose. */
 :root[data-glass="on"][data-fondo="on"]:not(:has(.jw-main)) .jw-fondo-vel {
-  background: color-mix(in oklch, var(--ob-bg-void) min(92%, calc(var(--gw-dim, 0%) + 34%)), transparent);
+  background: color-mix(in oklch, var(--gw-n-veil) min(92%, calc(var(--gw-dim, 0%) + 34%)), transparent);
 }
