@@ -24,6 +24,8 @@
     const val = normalizar(v);
     try { _doc(o)?.documentElement?.setAttribute('data-glass', val); } catch {}
     try { _ls(o)?.setItem(KEY, val); } catch {}
+    // El fondo personalizado (shared/fondo.js) depende de Liquid Glass: avisarle.
+    try { if (!o && typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('glass-changed', { detail: { glass: val } })); } catch {}
     return val;
   }
 

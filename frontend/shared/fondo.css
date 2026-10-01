@@ -1,0 +1,145 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — Fondo personalizado del modo Glass
+   Se carga DESPUÉS de liquid-glass.css. Todo cuelga de
+   :root[data-glass="on"][data-fondo="on"] (shared/fondo.js pone el
+   atributo y las variables --gw-*; ⚙ → Apariencia → Fondo las maneja).
+
+   Cómo funciona:
+   · #jw-fondo es UNA capa fija detrás de toda la app: la imagen ya
+     desenfocada (filter: blur) + un velo. Es estática → el navegador la
+     rasteriza una vez; no hay backdrop-filter en nada que conviva con
+     xterm (regla de perf del proyecto).
+   · Franja, barra, dock y terminales pasan a ser el color del tema con
+     alpha (--gw-panel / --gw-term): se ve el fondo a través.
+   · Colores SOLO por tokens (--ob-*). Los degradados de arte viven en
+     fondo.js a propósito.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── La capa ────────────────────────────────────────────────── */
+#jw-fondo {
+  position: fixed; inset: 0; z-index: -1;
+  overflow: hidden; pointer-events: none;
+  display: none;
+}
+:root[data-glass="on"][data-fondo="on"] #jw-fondo { display: block; }
+
+/* El blur sangra por los bordes: la capa se agranda 2× el radio hacia afuera
+   para que el borde difuminado quede fuera de pantalla. */
+.jw-fondo-img {
+  position: absolute;
+  inset: calc(var(--gw-blur, 0px) * -2);
+  background: var(--gw-img, none);
+  filter: blur(var(--gw-blur, 0px)) saturate(var(--gw-sat, 100%));
+  transform: translateZ(0);          /* capa propia: se desenfoca una vez */
+}
+/* Velo: oscurece los temas oscuros y aclara los claros (usa el color de fondo del tema). */
+.jw-fondo-vel {
+  position: absolute; inset: 0;
+  background: color-mix(in oklch, var(--ob-bg-void) var(--gw-dim, 0%), transparent);
+}
+
+/* ── Superficies: el color del tema con alpha ───────────────── */
+:root[data-glass="on"][data-fondo="on"] {
+  --gw-s-void: color-mix(in oklch, var(--ob-bg-void) var(--gw-panel, 100%), transparent);
+  --gw-s-0:    color-mix(in oklch, var(--ob-bg-0)    var(--gw-panel, 100%), transparent);
+  --gw-s-1:    color-mix(in oklch, var(--ob-bg-1)    var(--gw-panel, 100%), transparent);
+  --gw-s-term: color-mix(in oklch, var(--ob-bg-terminal) var(--gw-term, 100%), transparent);
+  background: var(--ob-bg-void);        /* mientras carga la imagen: el void del tema */
+}
+:root[data-glass="on"][data-fondo="on"] body { background: transparent; }
+
+/* Franja de proyectos (conserva la aurora de acento de arriba) */
+:root[data-glass="on"][data-fondo="on"] .jw-strip {
+  background:
+    var(--lg-gloss),
+    radial-gradient(150% 130px at 18% -30px, color-mix(in oklch, var(--ob-accent) 17%, transparent), transparent 72%),
+    radial-gradient(120% 90px at 95% -20px, color-mix(in oklch, var(--ob-info) 10%, transparent), transparent 70%),
+    linear-gradient(180deg, var(--gw-s-1), var(--gw-s-0) 46%);
+}
+
+/* Barra superior */
+:root[data-glass="on"][data-fondo="on"] .jw-bar {
+  background: var(--lg-gloss), linear-gradient(var(--gw-s-void), var(--gw-s-void));
+}
+
+/* Dock */
+:root[data-glass="on"][data-fondo="on"] .jw-dock { background: var(--gw-s-1); }
+:root[data-glass="on"][data-fondo="on"] .jw-dock-tabs {
+  background: var(--lg-gloss), linear-gradient(var(--gw-s-1), var(--gw-s-1));
+}
+
+/* Mosaico y terminales */
+:root[data-glass="on"][data-fondo="on"] .panel-terminales { background: transparent; }
+:root[data-glass="on"][data-fondo="on"] .terminals-grid { background: transparent; }
+:root[data-glass="on"][data-fondo="on"] .terminal-card,
+:root[data-glass="on"][data-fondo="on"] .terminal-card:hover,
+:root[data-glass="on"][data-fondo="on"] .terminal-card.activa {
+  background: none;
+  border-color: color-mix(in oklch, var(--ob-fg-0) 14%, transparent);
+  box-shadow: var(--lg-ring), var(--lg-drop);
+}
+:root[data-glass="on"][data-fondo="on"] .terminal-card:hover {
+  border-color: color-mix(in oklch, var(--ob-fg-0) 24%, transparent);
+}
+:root[data-glass="on"][data-fondo="on"] .terminal-card.activa {
+  border-color: var(--ob-accent-24);
+  box-shadow: var(--lg-ring), var(--lg-drop), 0 0 0 1px var(--ob-accent-24), var(--lg-glow);
+}
+:root[data-glass="on"][data-fondo="on"] .terminal-body { background: var(--gw-s-term); }
+/* xterm pinta con alpha (allowTransparency, terminal.js): el lienzo deja pasar la card. */
+:root[data-glass="on"][data-fondo="on"] .terminal-body .xterm,
+:root[data-glass="on"][data-fondo="on"] .terminal-body .xterm .xterm-screen,
+:root[data-glass="on"][data-fondo="on"] .terminal-body .xterm .xterm-viewport {
+  background: transparent !important;
+}
+
+/* ── Paneles del dock ───────────────────────────────────────────
+   Solo las losas estructurales (raíz del panel y sus barras). Las piezas
+   chicas (inputs, chips, menús flotantes) conservan su relleno: tienen que
+   leerse sobre cualquier imagen. El código de Monaco y las páginas del
+   navegador remoto quedan sólidos a propósito (contenido, no chrome). */
+:root[data-glass="on"][data-fondo="on"] .jw-pane,
+:root[data-glass="on"][data-fondo="on"] #jw-pane-preview { background: transparent; }
+
+/* Navegador */
+:root[data-glass="on"][data-fondo="on"] .br-wrap { background: transparent; }
+:root[data-glass="on"][data-fondo="on"] .br-chrome,
+:root[data-glass="on"][data-fondo="on"] .br-bar { background: var(--gw-s-1); }
+
+/* Jarvis (chat) */
+:root[data-glass="on"][data-fondo="on"] .orch-panel { background: var(--gw-s-void); }
+:root[data-glass="on"][data-fondo="on"] .orch-composer { background: linear-gradient(to top, var(--gw-s-void) 58%, transparent); }
+:root[data-glass="on"][data-fondo="on"] .orch-vignette {
+  background: radial-gradient(130% 100% at 50% 42%, transparent 44%, var(--gw-s-void) 100%);
+}
+
+/* Tareas */
+:root[data-glass="on"][data-fondo="on"] .tk-root {
+  background:
+    radial-gradient(120% 60% at 0% -10%, color-mix(in oklch, var(--ob-accent) 9%, transparent), transparent 60%),
+    var(--gw-s-0);
+}
+
+/* Review */
+:root[data-glass="on"][data-fondo="on"] .rv-modal,
+:root[data-glass="on"][data-fondo="on"] .rv-ghead,
+:root[data-glass="on"][data-fondo="on"] .rv-filebar,
+:root[data-glass="on"][data-fondo="on"] .rv-file-head { background: var(--gw-s-1); }
+:root[data-glass="on"][data-fondo="on"] .rv-main { background: var(--gw-s-void); }
+:root[data-glass="on"][data-fondo="on"] .rv-top {
+  background: var(--lg-gloss), linear-gradient(var(--gw-s-1), var(--gw-s-1));
+}
+
+/* Mobile Studio */
+:root[data-glass="on"][data-fondo="on"] .panel-mobile-preview {
+  background: linear-gradient(180deg, var(--gw-s-1), var(--gw-s-0));
+}
+:root[data-glass="on"][data-fondo="on"] .mps-stage {
+  background: radial-gradient(100% 70% at 50% 40%, var(--gw-s-1), var(--gw-s-void));
+}
+
+/* Home (sin franja/dock/terminales): el texto suelto va directo sobre la imagen →
+   velo extra para que siga leyéndose. */
+:root[data-glass="on"][data-fondo="on"]:not(:has(.jw-main)) .jw-fondo-vel {
+  background: color-mix(in oklch, var(--ob-bg-void) min(92%, calc(var(--gw-dim, 0%) + 34%)), transparent);
+}

@@ -282,6 +282,7 @@
     push('apariencia', 'Escala de la app', 'zoom tamaño agrandar achicar interfaz letra grande size scale font');
     push('apariencia', 'Idioma de la interfaz', 'español english lang');
     push('apariencia', 'Liquid Glass', 'vidrio translúcido transparencia material glass blur translucent');
+    push('apariencia', 'Fondo personalizado', 'fondo wallpaper imagen background blur desenfoque opacidad transparencia glass vidrio velo saturación', 'Fondo');
     push('apariencia', 'Auto-iniciar el preview móvil', 'expo metro mobile');
     push('cuentas', 'Conectar cuenta nueva', 'login oauth vincular cli account link', null);
     push('skills', 'Plugins instalados', 'marketplace extensiones claude', null);
@@ -779,7 +780,10 @@
           'En proyectos Expo, abre la pestaña móvil cuando detecta el Metro que levantó el agente.',
           sw('ap-mob', localStorage.getItem('jarvis.autoMobilePreview') !== '0', _t('Auto-iniciar el preview móvil')),
           'Auto-iniciar el preview móvil'),
-        { key: 'Interfaz' });
+        { key: 'Interfaz' }) +
+      // Fondo del modo Glass: bloque propio (fondo-ui.js), justo debajo del interruptor de Liquid Glass.
+      blk('fondo', 'imagen detrás del vidrio', '<div id="ap-fondo"></div>', { wide: true, key: 'Fondo' });
+    window.JarvisFondoUI?.montar(b.querySelector('#ap-fondo'), { icon });
 
     // ── Espectro: hover = previsualizar en el banco, click = elegir (y ahí se
     //    despliega). Previsualizar NO toca el data-theme del documento: pisa las

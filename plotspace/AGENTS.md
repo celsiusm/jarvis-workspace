@@ -15,13 +15,14 @@ plotspace/
 │   ├── database.py  # SQLite WAL (DB_PATH → data/jarvis.db), get_db(), init_db(), purgar_task_events()
 │   ├── events.py    # EventBroadcaster (WebSocket per project_id), singleton `broadcaster`
 │   └── auth.py      # token-gate + host_permitido/origen_permitido (anti rebinding/CSWSH)
-├── routers/         # one router per section (17): orchestrator, terminals,
+├── routers/         # one router per section (18): orchestrator, terminals,
 │   │                # projects, projects_files, plugins, voice, workspace,
 │   │                # mobile_preview, memory, tasks, browser, radio,
-│   │                # review, live, system, cuentas, fs
+│   │                # review, live, system, cuentas, fs, fondo
 │   ├── orchestrator.py   # /api/orchestrator/* chat + actions (spawn agents with tarea, enviar_prompt)
 │   ├── terminals.py      # /api/terminals/* + keyword monitor + tmux/PTY
 │   ├── projects.py       # /api/projects/*
+│   ├── fondo.py          # /api/fondo: the custom Glass-mode background image (validated by magic bytes, data/fondo/)
 │   ├── projects_files.py # files tab (read/write/search/upload, with safe-join)
 │   └── ...
 └── tests/           # pytest (config in pytest.ini) — each test also runs
