@@ -18,6 +18,8 @@
     'alert':         '<path d="M12 3.5L2.5 20h19L12 3.5zM12 10v4.5M12 17.5v.01"/>',
     'info':          '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8v.01"/>',
     'refresh':       '<path d="M21 12a9 9 0 1 1-2.64-6.36M21 3v6h-6"/>',
+    'image':         '<rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.09-3.09a2 2 0 0 0-2.82 0L6 21"/>',
+    'upload':        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
     'external-link': '<path d="M14 4.5h5.5V10M19.5 4.5l-9 9M19.5 13.5v6h-15v-15h6"/>',
     'camera':        '<path d="M3 8a1.5 1.5 0 0 1 1.5-1.5H8l1.5-2h5L16 6.5h3.5A1.5 1.5 0 0 1 21 8v10a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V8z"/><circle cx="12" cy="13" r="3.5"/>',
     'zap':           '<path d="M13 2.5L4.5 14H11l-1 7.5L18.5 10H12l1-7.5z"/>',

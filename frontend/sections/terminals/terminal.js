@@ -211,6 +211,12 @@ function _modoChico(container) {
 // oscuros-sobre-claro y desaparecerían). Los ANSI restantes quedan fijos:
 // son la paleta del CONTENIDO de la terminal, pensada para fondo oscuro.
 let _xtermTheme = null;
+// ¿La terminal debe dejar pasar el fondo del modo Glass (shared/fondo.js)? Con
+// transparencia xterm pierde el antialiasing de subpíxel (texto en escala de
+// grises), por eso SOLO se enciende mientras hay un fondo activo.
+function _fondoTransparente() {
+  try { return !!window.JarvisFondo?.estaActivo?.(); } catch (_) { return false; }
+}
 function _temaXterm() {
   if (_xtermTheme) return _xtermTheme;
   const css = getComputedStyle(document.documentElement);
@@ -230,10 +236,23 @@ function _temaXterm() {
     cyan:         tok('--ob-term-cyan', '#8be9fd'),     brightCyan:    tok('--ob-term-cyan', '#a4ffff'),
     white:        '#e0e0e0',                            brightWhite:   '#ffffff',
   };
+  // Fondo del modo Glass: lienzo sin color propio (la card pone el tinte con alpha).
+  if (_fondoTransparente()) _xtermTheme.background = 'rgba(0, 0, 0, 0)';
   return _xtermTheme;
 }
 
 if (typeof window !== 'undefined') {
+  // Prender/apagar/ajustar el fondo del modo Glass: tema (fondo transparente o no)
+  // y transparencia de cada terminal viva.
+  const _reaplicarXterm = () => {
+    _xtermTheme = null;
+    for (const inst of terminales.values()) {
+      try { inst.aplicarTransparencia?.(); } catch (_) {}
+    }
+  };
+  // También al prender/apagar Liquid Glass: cambia la paleta (--ob-bg-terminal) y el fondo.
+  window.addEventListener('fondo-changed', _reaplicarXterm);
+  window.addEventListener('glass-changed', _reaplicarXterm);
   window.addEventListener('theme-changed', () => {
     // Esperar al siguiente macro-tick (20ms) para que los estilos del nuevo tema
     // se hayan propagado y computado completamente en el DOM.
@@ -320,6 +339,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
   };
   const term = new Terminal({
     theme: _temaXterm(),
+    allowTransparency:  _fondoTransparente(),
     linkHandler: { activate: (_e, uri) => _abrirLink(uri) },
     fontFamily:         '"Cascadia Code", "JetBrains Mono", "Fira Code", Consolas, monospace',
     fontSize:           13,
@@ -369,6 +389,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
   // WebGL/Canvas pintan en GPU/bitmap: órdenes de magnitud más rápido.
   // Debe cargarse DESPUÉS de term.open().
   let _rendererActivo = 'dom';   // 'webgl' | 'canvas' | 'dom' — dato clave del diagnóstico de garble
+  let _canvasAddon = null;       // el CanvasAddon vivo (se recrea al prender/apagar el fondo Glass)
   // Renderer: CANVAS (2D) por DEFAULT, NO WebGL. Cada WebGL abre 1 contexto y el
   // browser topea ~16: con varias terminales + un preview/Web-Builder con WebGL
   // (Three.js) se agotan → el browser DROPEA los contextos más viejos = las
@@ -413,9 +434,36 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
       } catch (_) { /* GPU/WebGL no disponible */ }
     }
     try {
-      if (window.CanvasAddon?.CanvasAddon) { term.loadAddon(new window.CanvasAddon.CanvasAddon()); _rendererActivo = 'canvas'; }
+      if (window.CanvasAddon?.CanvasAddon) { _canvasAddon = new window.CanvasAddon.CanvasAddon(); term.loadAddon(_canvasAddon); _rendererActivo = 'canvas'; }
     } catch (_) { /* último recurso: DOM renderer */ }
   })();
+
+  // ── Fondo del modo Glass: transparencia EN VIVO ──
+  // `allowTransparency` se lee al CREAR las capas del CanvasAddon (contexto con o
+  // sin alpha), así que prender/apagar el fondo implica recrear el addon — el mismo
+  // swap que hace la recuperación de WebGL de arriba (buffer intacto, sin reset).
+  const _aplicarTransparencia = () => {
+    try {
+      const quiere = _fondoTransparente();
+      if (quiere !== !!term.options.allowTransparency) {
+        term.options.allowTransparency = quiere;
+        if (_rendererActivo === 'canvas' && window.CanvasAddon?.CanvasAddon) {
+          try { _canvasAddon?.dispose(); } catch (_) {}
+          _canvasAddon = new window.CanvasAddon.CanvasAddon();
+          term.loadAddon(_canvasAddon);
+          try { term._core.viewport.scrollBarWidth = 0; } catch (_) {}
+          const inst = terminales.get(terminalId);
+          if (inst) {
+            try { inst.moWipe?.disconnect(); } catch (_) {}
+            inst.moWipe = window.TerminalRender?.blindarWipeCanvas?.(term, container) || null;
+          }
+          window.TerminalRender?.blindarContextoCanvas?.(term, container);
+        }
+      }
+      term.options.theme = _temaXterm();
+      try { window.TerminalRender ? window.TerminalRender.pintarYa(term) : term.refresh(0, term.rows - 1); } catch (_) {}
+    } catch (_) { /* nunca romper la terminal por el fondo */ }
+  };
 
   // URLs de texto plano clickeables (además del OSC 8 del linkHandler de arriba).
   try {
@@ -1570,7 +1618,8 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
   });
   observer.observe(container);
 
-  const instancia = { term, ws, fitAddon, observer, container, ioRepintar: _ioRepintar, moWipe: _moWipe, ac: _ac };
+  const instancia = { term, ws, fitAddon, observer, container, ioRepintar: _ioRepintar, moWipe: _moWipe, ac: _ac,
+                      aplicarTransparencia: _aplicarTransparencia };
   terminales.set(terminalId, instancia);
   return instancia;
 }

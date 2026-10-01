@@ -28,7 +28,7 @@ new blocks.
 |---|---|---|
 | Voice | `voz` | The key as a physical object (keycap) + signal path + dictation & alerts |
 | Keyboard | `atajos` | **Real keyboard map**: lit = occupied, click to reassign |
-| Appearance | `apariencia` | Live test bench + the 24 themes as **spectrum** + tonality + language |
+| Appearance | `apariencia` | Live test bench + the 24 themes as **spectrum** + tonality + language + **Background** block (custom Glass-mode wallpaper: 5 house gradients or your own image, blur / veil / saturation / terminal & panel opacity — `fondo-ui.js`, engine in `shared/fondo.js`) |
 | Accounts | `cuentas` | **Switchboard**: one CLI per row, its accounts as buttons of a selector; under the active claude/codex account, **usage bars** (what's left per window, `uso-cuentas.js` + `GET /api/cuentas/uso`), and each inactive chip shows its remaining % |
 | Extensions | `skills` | Extensions studio (`extensions.js` + `extensions.css`): readers map per AI, skills/rules of every AI, Claude plugins + marketplace, side drawer |
 | Memory | `memoria` | **Not a settings page**: the nav item (and `open('memoria')`) closes Settings and opens the Memory panel (`JarvisMemory.abrir()`). The old console — pulse, altimeter, boxes per category, recent, lessons — lives in the panel's **Resumen** tab |

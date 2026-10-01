@@ -1,0 +1,160 @@
+/* ═══════════════════════════════════════════════════════════════
+   JARVIS — Fondo personalizado del modo Glass
+   Se carga DESPUÉS de liquid-glass.css. Todo cuelga de
+   :root[data-glass="on"][data-fondo="on"] (shared/fondo.js pone el
+   atributo y las variables --gw-*; ⚙ → Apariencia → Fondo las maneja).
+
+   Cómo funciona:
+   · #jw-fondo es UNA capa fija detrás de toda la app: la imagen ya
+     desenfocada (filter: blur) + un velo. Es estática → el navegador la
+     rasteriza una vez; no hay backdrop-filter en nada que conviva con
+     xterm (regla de perf del proyecto).
+   · Franja, barra, dock y terminales son vidrio: un velo con alpha sobre la
+     imagen. La opacidad (--gw-p paneles / --gw-t terminales, 0-1) manda
+     TAMBIÉN el color: con la configuración normal (opacidad baja) es un
+     velo NEUTRO y transparente — el color de la apariencia no pinta el
+     entorno —, y a medida que se sube la opacidad el velo se tiñe con los
+     colores del tema elegido hasta ser el color sólido del tema al 100%.
+   · Colores SOLO por tokens (--ob-*). Los degradados de arte viven en
+     fondo.js a propósito.
+═══════════════════════════════════════════════════════════════ */
+
+/* ── La capa ────────────────────────────────────────────────── */
+#jw-fondo {
+  position: fixed; inset: 0; z-index: -1;
+  overflow: hidden; pointer-events: none;
+  display: none;
+}
+:root[data-glass="on"][data-fondo="on"] #jw-fondo { display: block; }
+
+/* El blur sangra por los bordes: la capa se agranda 2× el radio hacia afuera
+   para que el borde difuminado quede fuera de pantalla. */
+.jw-fondo-img {
+  position: absolute;
+  inset: calc(var(--gw-blur, 0px) * -2);
+  background: var(--gw-img, none);
+  filter: blur(var(--gw-blur, 0px)) saturate(var(--gw-sat, 100%));
+  transform: translateZ(0);          /* capa propia: se desenfoca una vez */
+}
+/* Velo de la imagen: neutro (no tiñe con el tema); oscurece en oscuros, aclara en claros. */
+.jw-fondo-vel {
+  position: absolute; inset: 0;
+  background: color-mix(in oklch, var(--gw-ng-veil) var(--gw-dim, 0%), transparent);
+}
+
+/* ── Superficies: velo neutro → color del tema, según la opacidad ──
+   Cada superficie es   mezcla( color del tema ,  velo neutro )   a un alpha.
+   · alpha = la opacidad elegida (p / t).
+   · peso del color del tema = opacidad² : con opacidad baja (el vidrio normal)
+     casi no hay color del tema; al 100% es EXACTAMENTE el color del tema, sólido.
+   Así "sin transparencia" = los colores de la apariencia, y "vidrio" = se ve el fondo. */
+:root[data-glass="on"][data-fondo="on"] {
+  --gw-ng-void: oklch(9% 0 0);  --gw-ng-0: oklch(11.5% 0 0);  --gw-ng-1: oklch(14.5% 0 0);
+  --gw-ng-raise: oklch(22% 0 0); --gw-ng-term: oklch(10% 0 0); --gw-ng-veil: oklch(7% 0 0);
+  --gw-wp: calc(var(--gw-p, 1) * var(--gw-p, 1) * 100%);
+  --gw-wt: calc(var(--gw-t, 1) * var(--gw-t, 1) * 100%);
+  --gw-s-void: color-mix(in oklch, color-mix(in oklch, var(--ob-bg-void) var(--gw-wp), var(--gw-ng-void)) calc(var(--gw-p, 1) * 100%), transparent);
+  --gw-s-0:    color-mix(in oklch, color-mix(in oklch, var(--ob-bg-0)    var(--gw-wp), var(--gw-ng-0))    calc(var(--gw-p, 1) * 100%), transparent);
+  --gw-s-1:    color-mix(in oklch, color-mix(in oklch, var(--ob-bg-1)    var(--gw-wp), var(--gw-ng-1))    calc(var(--gw-p, 1) * 100%), transparent);
+  --gw-s-term: color-mix(in oklch, color-mix(in oklch, var(--ob-bg-terminal) var(--gw-wt), var(--gw-ng-term)) calc(var(--gw-t, 1) * 100%), transparent);
+  background: var(--ob-bg-void);        /* mientras carga la imagen */
+  /* Las "gotas" de vidrio (botones, chips, cards, pestañas): mismo criterio. */
+  --lg-body-hi: color-mix(in oklch, color-mix(in oklch, var(--ob-bg-3) var(--gw-wp), var(--gw-ng-raise)) 62%, transparent);
+  --lg-body-lo: color-mix(in oklch, color-mix(in oklch, var(--ob-bg-2) var(--gw-wp), var(--gw-ng-1)) 70%, transparent);
+}
+/* Claros: el velo es leche (el texto del tema es oscuro); la terminal sigue siendo grafito. */
+:root[data-glass="on"][data-fondo="on"]:is([data-theme="papel"], [data-theme="alba"]) {
+  --gw-ng-void: oklch(97.5% 0 0); --gw-ng-0: oklch(95.5% 0 0); --gw-ng-1: oklch(98.5% 0 0);
+  --gw-ng-raise: oklch(100% 0 0); --gw-ng-veil: oklch(98% 0 0);
+}
+:root[data-glass="on"][data-fondo="on"] body { background: transparent; }
+
+/* Franja de proyectos (sin la aurora de acento de arriba: es tinte del tema) */
+:root[data-glass="on"][data-fondo="on"] .jw-strip {
+  background: var(--lg-gloss), linear-gradient(180deg, var(--gw-s-1), var(--gw-s-0) 46%);
+}
+
+/* Barra superior */
+:root[data-glass="on"][data-fondo="on"] .jw-bar {
+  background: var(--lg-gloss), linear-gradient(var(--gw-s-void), var(--gw-s-void));
+}
+
+/* Dock */
+:root[data-glass="on"][data-fondo="on"] .jw-dock { background: var(--gw-s-1); }
+:root[data-glass="on"][data-fondo="on"] .jw-dock-tabs {
+  background: var(--lg-gloss), linear-gradient(var(--gw-s-1), var(--gw-s-1));
+}
+
+/* Mosaico y terminales */
+:root[data-glass="on"][data-fondo="on"] .panel-terminales { background: transparent; }
+:root[data-glass="on"][data-fondo="on"] .terminals-grid { background: transparent; }
+:root[data-glass="on"][data-fondo="on"] .terminal-card,
+:root[data-glass="on"][data-fondo="on"] .terminal-card:hover,
+:root[data-glass="on"][data-fondo="on"] .terminal-card.activa {
+  background: none;
+  border-color: color-mix(in oklch, var(--ob-fg-0) 14%, transparent);
+  box-shadow: var(--lg-ring), var(--lg-drop);
+}
+:root[data-glass="on"][data-fondo="on"] .terminal-card:hover {
+  border-color: color-mix(in oklch, var(--ob-fg-0) 24%, transparent);
+}
+:root[data-glass="on"][data-fondo="on"] .terminal-card.activa {
+  border-color: var(--ob-accent-24);
+  box-shadow: var(--lg-ring), var(--lg-drop), 0 0 0 1px var(--ob-accent-24), var(--lg-glow);
+}
+:root[data-glass="on"][data-fondo="on"] .terminal-body { background: var(--gw-s-term); }
+/* xterm pinta con alpha (allowTransparency, terminal.js): el lienzo deja pasar la card. */
+:root[data-glass="on"][data-fondo="on"] .terminal-body .xterm,
+:root[data-glass="on"][data-fondo="on"] .terminal-body .xterm .xterm-screen,
+:root[data-glass="on"][data-fondo="on"] .terminal-body .xterm .xterm-viewport {
+  background: transparent !important;
+}
+
+/* ── Paneles del dock ───────────────────────────────────────────
+   Solo las losas estructurales (raíz del panel y sus barras). Las piezas
+   chicas (inputs, chips, menús flotantes) conservan su relleno: tienen que
+   leerse sobre cualquier imagen. El código de Monaco y las páginas del
+   navegador remoto quedan sólidos a propósito (contenido, no chrome). */
+:root[data-glass="on"][data-fondo="on"] .jw-pane,
+:root[data-glass="on"][data-fondo="on"] #jw-pane-preview { background: transparent; }
+
+/* Navegador */
+:root[data-glass="on"][data-fondo="on"] .br-wrap { background: transparent; }
+:root[data-glass="on"][data-fondo="on"] .br-chrome,
+:root[data-glass="on"][data-fondo="on"] .br-bar { background: var(--gw-s-1); }
+
+/* Jarvis (chat) */
+:root[data-glass="on"][data-fondo="on"] .orch-panel { background: var(--gw-s-void); }
+:root[data-glass="on"][data-fondo="on"] .orch-composer { background: linear-gradient(to top, var(--gw-s-void) 58%, transparent); }
+:root[data-glass="on"][data-fondo="on"] .orch-vignette {
+  background: radial-gradient(130% 100% at 50% 42%, transparent 44%, var(--gw-s-void) 100%);
+}
+
+/* Tareas */
+:root[data-glass="on"][data-fondo="on"] .tk-root {
+  background: var(--gw-s-0);
+}
+
+/* Review */
+:root[data-glass="on"][data-fondo="on"] .rv-modal,
+:root[data-glass="on"][data-fondo="on"] .rv-ghead,
+:root[data-glass="on"][data-fondo="on"] .rv-filebar,
+:root[data-glass="on"][data-fondo="on"] .rv-file-head { background: var(--gw-s-1); }
+:root[data-glass="on"][data-fondo="on"] .rv-main { background: var(--gw-s-void); }
+:root[data-glass="on"][data-fondo="on"] .rv-top {
+  background: var(--lg-gloss), linear-gradient(var(--gw-s-1), var(--gw-s-1));
+}
+
+/* Mobile Studio */
+:root[data-glass="on"][data-fondo="on"] .panel-mobile-preview {
+  background: linear-gradient(180deg, var(--gw-s-1), var(--gw-s-0));
+}
+:root[data-glass="on"][data-fondo="on"] .mps-stage {
+  background: radial-gradient(100% 70% at 50% 40%, var(--gw-s-1), var(--gw-s-void));
+}
+
+/* Home (sin franja/dock/terminales): el texto suelto va directo sobre la imagen →
+   velo extra para que siga leyéndose. */
+:root[data-glass="on"][data-fondo="on"]:not(:has(.jw-main)) .jw-fondo-vel {
+  background: color-mix(in oklch, var(--gw-ng-veil) min(92%, calc(var(--gw-dim, 0%) + 34%)), transparent);
+}
