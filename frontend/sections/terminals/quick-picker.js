@@ -104,9 +104,12 @@
     let _el = null, _onPick = null, _nombreProyecto = '', _prevFocus = null;
     let _counts = {}, _pdSel = 'auto', _tiles = [], _disponibles = 1, _existentes = 0;
     // Estado de instalación por CLI (GET /api/clis): null = todavía no lo sé.
-    // Lo que falta instalar se pinta en negro con un aviso, pero SIGUE
-    // seleccionable — informar es distinto de bloquear.
+    // Lo que falta instalar se ve en su lugar, atenuado, con la opción de instalarlo
+    // al pasar el mouse (cli-instalar.js); no se puede sumar a la tanda hasta que esté.
     let _clisEstado = null;
+    const _I = () => global.JarvisCliInstalar;
+    const _ICO_BAJAR = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v7.5M4.8 7.2 8 10.4l3.2-3.2M3 13h10"/></svg>';
+    const _ICO_SITIO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H4A1.5 1.5 0 0 0 2.5 5v7A1.5 1.5 0 0 0 4 13.5h7a1.5 1.5 0 0 0 1.5-1.5V9.5M9.5 2.5h4v4M13.5 2.5 7.5 8.5"/></svg>';
 
     // Bilingüe para strings COMPUESTAS (números adentro → el observer de i18n no
     // matchea por clave); las estáticas van en español y las traduce el observer.
@@ -235,41 +238,66 @@
       return !!st && !st.instalado;
     }
 
-    // Aplica el estado de instalación (fila en negro + aviso, deshabilitada).
+    // Pinta el estado de instalación de cada fila: atenuada, con el aviso «Falta
+    // instalar» (y el comando al pasar el mouse) y la pastilla «Instalar».
     function _pintarFalta() {
       if (!_el) return;
+      const I = _I();
+      let pendientes = 0;
       _el.querySelectorAll('.qp-row').forEach(r => {
-        const falta = _faltaDe(r.dataset.tipo);
+        const tipo = r.dataset.tipo;
+        const cli = (_clisEstado || []).find(c => c.id === tipo) || null;
+        const e = I ? I.estadoFila(cli, { hayProyecto: I.hayProyecto(), enCurso: I.enCurso(tipo) })
+                    : { falta: !!cli && !cli.instalado, instalando: false, accionable: false };
+        const falta = !!e.falta;
+        if (falta) pendientes++;
         r.classList.toggle('off', falta);
-        r.disabled = falta;                       // no seleccionable sin instalar
+        r.classList.toggle('instalando', !!e.instalando);
         r.setAttribute('aria-disabled', String(falta));
         const chip = r.querySelector('.qp-falta');
-        if (chip) chip.hidden = !falta;
+        if (chip) {
+          chip.hidden = !falta;
+          chip.textContent = e.instalando ? _L('Instalando…', 'Installing…') : _L('Falta instalar', 'Not installed');
+        }
+        const cmd = r.querySelector('.qp-d-cmd');
+        if (cmd) { cmd.textContent = e.comando || ''; cmd.title = e.comando || ''; }
+        // sin instalar no se suma: ni stepper ni keycap, en su lugar la pastilla
+        const kbd = r.querySelector('.qp-tecla'), step = r.querySelector('.qp-step');
+        const c = _counts[tipo] | 0;
+        kbd.hidden = falta || c > 0;                 // al instalarse vuelve la keycap
+        step.hidden = falta || c === 0;
+        const btn = r.querySelector('.cli-inst');
+        if (!btn) return;
+        const ver = falta && (e.accionable || e.instalando);
+        btn.hidden = !ver;
+        if (!ver) return;
+        const sitio = e.plan && e.plan.accion === 'sitio';
+        btn.dataset.estado = e.instalando ? 'instalando' : (sitio ? 'sitio' : 'instalar');
+        const txt = e.instalando ? _L('Instalando…', 'Installing…') : (sitio ? _L('Cómo instalar', 'How to install') : _L('Instalar', 'Install'));
+        btn.innerHTML = (e.instalando ? '<i class="cli-inst-spin" aria-hidden="true"></i>' : (sitio ? _ICO_SITIO : _ICO_BAJAR))
+          + `<span class="cli-inst-t">${txt}</span>`;
+        btn.setAttribute('aria-label', `${txt} ${(OPCIONES.find(o => o.tipo === tipo) || {}).label || tipo}`);
+        btn.title = sitio ? _L('Se instala desde su sitio oficial', 'Installed from its official site')
+          : (e.comando ? `${_L('Abre una terminal y corre:', 'Opens a terminal and runs:')} ${e.comando}`
+              + (e.conNode ? `\n${_L('Incluye instalar Node.js.', 'Includes installing Node.js.')}` : '') : '');
       });
-      _plegarFaltan();
+      const pend = _el.querySelector('.qp-pend');
+      if (pend) {
+        pend.hidden = pendientes === 0;
+        pend.textContent = pendientes ? _L(`${pendientes} por instalar`, `${pendientes} to install`) : '';
+      }
     }
 
-    // Sin instalar → bloque plegado aparte («+N sin instalar»), mismo criterio
-    // que el modal de proyecto. Las teclas 1-9 siguen mapeando a OPCIONES.
-    let _verFaltan = false;
-    function _plegarFaltan() {
-      const grid = _el.querySelector('.qp-grid');
-      const extra = _el.querySelector('.qp-grid-faltan');
-      const btn = _el.querySelector('.qp-faltan-toggle');
-      let n = 0;
-      for (const o of OPCIONES) {
-        const r = _el.querySelector(`.qp-row[data-tipo="${o.tipo}"]`);
-        if (!r) continue;
-        const falta = _faltaDe(o.tipo);
-        if (falta) n++;
-        (falta ? extra : grid).appendChild(r);
-      }
-      btn.hidden = n === 0;
-      extra.hidden = n === 0 || !_verFaltan;
-      btn.setAttribute('aria-expanded', String(_verFaltan));
-      btn.textContent = _verFaltan
-        ? _L('Ocultar los que faltan instalar', 'Hide the ones not installed')
-        : _L(`+${n} sin instalar`, `+${n} not installed`);
+    // El clic de «Instalar»: abre la terminal con el comando (el picker se cierra para
+    // que se vea) o el sitio oficial (el picker queda abierto).
+    function _instalar(tipo) {
+      const I = _I();
+      if (!I) return;
+      const cli = (_clisEstado || []).find(c => c.id === tipo);
+      const e = I.estadoFila(cli, { hayProyecto: I.hayProyecto(), enCurso: I.enCurso(tipo) });
+      if (!e.accionable) return;
+      if (!(e.plan && e.plan.accion === 'sitio')) cerrar();
+      I.instalar(tipo);
     }
 
     function _build() {
@@ -288,20 +316,20 @@
           </div>
           <div class="qp-sec">
             <b class="qp-lbl">Agentes</b>
+            <span class="qp-pend" hidden></span>
             <span class="qp-fill"></span>
             <span class="qp-cap"><span class="qp-cap-cells"></span><span class="qp-cap-txt"></span></span>
           </div>
           <div class="qp-grid">
             ${OPCIONES.map(o => `
-              <button class="qp-row" data-tipo="${o.tipo}" type="button">
+              <button class="qp-row cli-fila" data-tipo="${o.tipo}" type="button">
                 <span class="qp-logo">${window.cliLogo ? cliLogo(o.tipo, 18) : ''}</span>
-                <span class="qp-txt"><b>${o.label}</b><span class="qp-desc"><small>${o.desc}</small><i class="qp-falta" hidden>Falta instalar</i></span></span>
+                <span class="qp-txt"><b>${o.label}</b><span class="qp-desc"><small class="qp-d-txt">${o.desc}</small><i class="qp-falta" hidden>Falta instalar</i><small class="qp-d-cmd" hidden></small></span></span>
                 <span class="qp-step" hidden><span class="qp-st-b" data-d="-1">−</span><b>0</b><span class="qp-st-b" data-d="1">+</span></span>
                 <kbd class="qp-tecla">${o.tecla}</kbd>
+                ${o.tipo !== 'manual' ? '<span class="cli-inst" role="button" tabindex="0" hidden></span>' : ''}
               </button>`).join('')}
           </div>
-          <button class="cli-faltan-toggle qp-faltan-toggle" type="button" hidden></button>
-          <div class="qp-grid qp-grid-faltan cli-faltan-grid" hidden></div>
           <div class="qp-sec">
             <b class="qp-lbl">Disposición</b>
             <span class="qp-fill"></span>
@@ -321,13 +349,19 @@
         if (!_el.hidden && !_el.contains(document.activeElement)) _el.querySelector('.qp-panel').focus();
       });
       _el.querySelector('.qp-x').addEventListener('click', cerrar);
-      _el.querySelector('.qp-faltan-toggle').addEventListener('click', () => { _verFaltan = !_verFaltan; _plegarFaltan(); });
       _el.querySelector('.qp-go').addEventListener('click', _lanzar);
       _el.querySelectorAll('.qp-row').forEach(r => {
         // click suma 1; el − del stepper resta; click derecho resta (como el launcher)
         r.addEventListener('click', (e) => {
+          if (e.target.closest('.cli-inst')) { e.stopPropagation(); _instalar(r.dataset.tipo); return; }
           const b = e.target.closest('.qp-st-b');
           _sumar(r.dataset.tipo, b ? +b.dataset.d : +1);
+        });
+        // La pastilla «Instalar» se opera con teclado (Enter/Espacio) sin que el Enter
+        // llegue al atajo del panel (que lanzaría la tanda).
+        r.querySelector('.cli-inst')?.addEventListener('keydown', (e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault(); e.stopPropagation(); _instalar(r.dataset.tipo);
         });
         r.addEventListener('contextmenu', (e) => { e.preventDefault(); _sumar(r.dataset.tipo, -1); });
       });
@@ -350,6 +384,11 @@
       });
       // idioma: las compuestas (_L) se re-arman a mano al cambiar ES⇆EN
       window.addEventListener('jarvis:lang', () => { if (_el && !_el.hidden) _render(); });
+      // Cambió el estado de instalación (terminó una, empezó otra): repintar las filas.
+      window.addEventListener('clis-estado', (e) => {
+        if (e.detail && Array.isArray(e.detail.clis)) _clisEstado = e.detail.clis;
+        if (_el && !_el.hidden) _pintarFalta();
+      });
     }
 
     function _lanzar() {

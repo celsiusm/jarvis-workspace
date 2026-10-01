@@ -159,9 +159,21 @@
 #modal-new-terminal .tl2-cli-step button:disabled { opacity: .3; cursor: not-allowed; }
 #modal-new-terminal .tl2-cli-step .cnt { min-width: 17px; text-align: center; font: 700 12px var(--mono); color: var(--fg0); }
 #modal-new-terminal .tl2-cli-card:not(.active) .tl2-cli-step .cnt { color: var(--fg3); }
-#modal-new-terminal .tl2-cli-card:not(.active).off { background: var(--ob-bg-void); }
-#modal-new-terminal .tl2-cli-card.off .tl2-cli-name { color: var(--fg3); }
-#modal-new-terminal .tl2-cli-card.off .tl2-cli-badge { opacity: .45; }
+/* CLI sin instalar: se ve EN SU LUGAR (borde punteado, logo en gris que recupera color
+   al pasar el mouse). Al hover/foco el chip «Falta instalar» cede su sitio al comando
+   exacto y aparece la pastilla «Instalar» (base.css .cli-inst). */
+#modal-new-terminal .tl2-cli-card:not(.active).off { background: transparent; border-style: dashed; border-color: var(--line2); }
+#modal-new-terminal .tl2-cli-card.off .tl2-cli-name { color: var(--fg2); }
+#modal-new-terminal .tl2-cli-card.off .tl2-cli-badge { opacity: .6; filter: grayscale(1); transition: opacity var(--dur1), filter var(--dur1); }
+#modal-new-terminal .tl2-cli-card.off:hover .tl2-cli-badge, #modal-new-terminal .tl2-cli-card.off:focus-within .tl2-cli-badge { opacity: 1; filter: none; }
+#modal-new-terminal .tl2-cli-card.off:hover { border-color: var(--acc-24); }
+#modal-new-terminal .tl2-cli-step[hidden], #modal-new-terminal .tl2-cli-falta[hidden], #modal-new-terminal .tl2-cli-cmd[hidden] { display: none; }
+#modal-new-terminal .tl2-cli-cmd { display: none; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font: 500 10px var(--mono); color: var(--fg2); }
+#modal-new-terminal .tl2-cli-card.off:hover .tl2-cli-falta:not([hidden]), #modal-new-terminal .tl2-cli-card.off:focus-within .tl2-cli-falta:not([hidden]) { display: none; }
+#modal-new-terminal .tl2-cli-card.off:hover .tl2-cli-cmd:not([hidden]), #modal-new-terminal .tl2-cli-card.off:focus-within .tl2-cli-cmd:not([hidden]) { display: block; }
+#modal-new-terminal .tl2-cli-card.instalando .tl2-cli-falta { color: var(--fg2); background: var(--bg3); border-color: var(--line2); }
+#tl-pend { margin-left: 8px; font: 600 9.5px var(--mono); text-transform: uppercase; letter-spacing: .05em; color: var(--work); }
+#tl-pend[hidden] { display: none; }
 /* aviso de CLI sin instalar (chip ámbar, no bloquea la card) — va en la segunda
    línea de .tl2-cli-info, sola (la .sub se oculta en .off), así el texto se lee
    COMPLETO y nunca le roba ancho al nombre del CLI. */

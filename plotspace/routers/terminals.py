@@ -1413,6 +1413,10 @@ class TerminalBatchCreate(BaseModel):
     # tipo 'manual' del lote (ej. "npm run dev", "pytest -x --watch").
     # Las terminales con IA lo ignoran (el agente toma el shell).
     comando: Optional[str] = None
+    # "Instalar" de un CLI que falta: id del CLI (claude, codex…). El SERVER arma el
+    # comando (core/clis.comando_terminal) y lo tipea en la terminal del lote — el
+    # navegador nunca decide qué se ejecuta. Pisa a `comando`.
+    instalar_cli: Optional[str] = None
 
 
 class TerminalUpdate(BaseModel):
@@ -1510,6 +1514,14 @@ async def crear_terminales_batch(project_id: int, batch: TerminalBatchCreate):
     if not batch.terminales:
         raise HTTPException(status_code=400, detail="El lote no contiene terminales")
 
+    # "Instalar un CLI": se valida ANTES de crear nada (no dejar una terminal huérfana).
+    comando_instalacion = None
+    if batch.instalar_cli:
+        from plotspace.core import clis as _clis
+        comando_instalacion = await asyncio.to_thread(_clis.comando_terminal, batch.instalar_cli)
+        if not comando_instalacion:
+            raise HTTPException(status_code=400, detail="ese agente no se instala por comando")
+
     conn = get_db()
     try:
         cursor = conn.cursor()
@@ -1579,8 +1591,10 @@ async def crear_terminales_batch(project_id: int, batch: TerminalBatchCreate):
 
     # 3. "Command Room": comando inicial en las terminales Bash del lote
     #    (las de IA lo ignoran — el agente toma el shell al conectar).
-    comando = (batch.comando or '').strip()
+    comando = (comando_instalacion or batch.comando or '').strip()
     if comando:
+        if comando_instalacion:
+            _CLIS_CACHE['data'] = None     # el estado va a cambiar: que la próxima consulta re-detecte
         for terminal_id in nuevas_ids:
             if filas[terminal_id].get('tipo_ia') != 'manual':
                 continue
@@ -2138,9 +2152,12 @@ async def _clis_estado_cacheado():
 
 
 @router.get("/api/clis")
-async def listar_clis():
+async def listar_clis(refrescar: bool = False):
     """Qué CLIs de agente hay instalados en esta máquina, y cuáles se pueden
-    instalar desde acá."""
+    instalar desde acá. `?refrescar=1` se salta el cache (la UI lo usa mientras
+    una instalación está en curso, para enterarse apenas termina)."""
+    if refrescar:
+        _CLIS_CACHE['data'] = None
     return await _clis_estado_cacheado()
 
 

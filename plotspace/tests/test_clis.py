@@ -171,3 +171,139 @@ def test_la_salida_no_crece_sin_limite():
 if __name__ == '__main__':
     import pytest
     raise SystemExit(pytest.main([__file__, '-q']))
+
+
+# ── "Instalar" desde la UI: el comando que se tipea en una terminal ───────
+
+def _con_node(b, path=None):
+    return b == 'npm'
+
+
+def _sin_node(b, path=None):
+    return False
+
+
+def test_comando_de_terminal_con_node_es_el_npm_pelado():
+    assert clis.comando_terminal('claude', _con_node) == 'npm install -g @anthropic-ai/claude-code'
+    assert clis.comando_terminal('codex', _con_node) == 'npm install -g @openai/codex'
+    assert clis.comando_terminal('pi', _con_node) == 'npm install -g --ignore-scripts @earendil-works/pi-coding-agent'
+
+
+def test_sin_node_el_comando_instala_node_primero_y_sigue_en_un_solo_clic():
+    cmd = clis.comando_terminal('claude', _sin_node)
+    assert cmd.startswith('curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/')
+    assert 'nvm install --lts' in cmd
+    assert cmd.endswith('&& npm install -g @anthropic-ai/claude-code')
+    # nvm.sh se carga en ESA shell antes de usar npm (si no, "npm: command not found")
+    assert cmd.index('nvm.sh') < cmd.index('npm install')
+
+
+def test_cursor_usa_su_instalador_oficial_con_o_sin_node():
+    esperado = 'curl https://cursor.com/install -fsS | bash'
+    assert clis.comando_terminal('cursor', _con_node) == esperado
+    assert clis.comando_terminal('cursor', _sin_node) == esperado
+
+
+def test_lo_que_no_tiene_comando_no_se_inventa_uno():
+    assert clis.comando_terminal('antigravity', _con_node) is None
+    assert clis.comando_terminal('no-existe', _con_node) is None
+
+
+def test_el_estado_trae_comando_url_y_si_incluye_node():
+    d = clis.detectar(existe_local=lambda b, path=None: b in ('claude', 'npm'))
+    assert _por_id(d, 'claude')['comando'] is None            # instalado: nada que instalar
+    assert _por_id(d, 'claude')['url'] is None
+    cx = _por_id(d, 'codex')
+    assert cx['comando'] == 'npm install -g @openai/codex' and cx['con_node'] is False
+    assert _por_id(d, 'cursor')['comando'].startswith('curl https://cursor.com/install')
+    ag = _por_id(d, 'antigravity')
+    assert ag['comando'] is None and ag['url'] == 'https://antigravity.google'
+    assert ag['con_node'] is False
+
+
+def test_sin_node_el_estado_lo_avisa_solo_donde_hace_falta():
+    d = clis.detectar(existe_local=_sin_node)
+    assert _por_id(d, 'codex')['con_node'] is True
+    assert _por_id(d, 'cursor')['con_node'] is False          # curl, no necesita Node
+    assert _por_id(d, 'antigravity')['con_node'] is False
+
+
+# ── endpoints (/api/clis?refrescar · batch con instalar_cli) ──────────────
+
+def _cliente_con_proyecto(monkeypatch):
+    import tempfile
+    from fastapi.testclient import TestClient
+    from plotspace.main import app
+    from plotspace.core.database import get_db
+    from plotspace.tests._harness import fresh_db
+    import plotspace.routers.terminals as T
+
+    fresh_db()
+    ruta = tempfile.mkdtemp(prefix='jarvis_proj_')
+    conn = get_db()
+    try:
+        cur = conn.execute("INSERT INTO projects (nombre, ruta, fecha_creacion, ultimo_acceso) VALUES ('p', ?, '2026-01-01T00:00:00', '2026-01-01T00:00:00')", (ruta,))
+        conn.commit()
+        pid = cur.lastrowid
+    finally:
+        conn.close()
+
+    escritos = []
+
+    class _Motor:
+        def enviar_texto(self, tid, texto): escritos.append(('texto', tid, texto))
+        def enviar_tecla(self, tid, tecla): escritos.append(('tecla', tid, tecla))
+
+    async def _nada(*a, **k): return None
+    monkeypatch.setattr(T, '_crear_sesion_tmux', _nada)
+    monkeypatch.setattr(T, '_preparar_proyecto', _nada)
+    monkeypatch.setattr(T, 'motor_terminales', lambda: _Motor())
+    return TestClient(app), pid, escritos, T
+
+
+def test_refrescar_se_salta_el_cache(monkeypatch):
+    from fastapi.testclient import TestClient
+    from plotspace.main import app
+    import plotspace.routers.terminals as T
+    llamadas = []
+    monkeypatch.setattr(clis, 'estado', lambda: (llamadas.append(1), {'clis': [], 'hay_node': True, 'primer_arranque': True})[1])
+    T._CLIS_CACHE.update(ts=0.0, data=None)
+    with TestClient(app) as c:
+        c.get('/api/clis'); c.get('/api/clis')
+        assert len(llamadas) == 1                       # la segunda salió del cache
+        c.get('/api/clis?refrescar=1')
+        assert len(llamadas) == 2                       # refrescar re-detecta
+
+
+def test_batch_instalar_cli_tipea_el_comando_que_arma_el_server(monkeypatch):
+    monkeypatch.setattr(clis, 'hay_node', lambda existe_local=None: True)
+    c, pid, escritos, T = _cliente_con_proyecto(monkeypatch)
+    T._CLIS_CACHE.update(ts=1.0, data={'clis': []})
+    with c:
+        r = c.post(f'/api/projects/{pid}/terminals/batch', json={
+            'terminales': [{'nombre': 'Instalar Codex', 'tipo_ia': 'manual'}],
+            'instalar_cli': 'codex',
+            'comando': 'rm -rf /',          # un comando del cliente NO se usa cuando hay instalar_cli
+        })
+    assert r.status_code == 201
+    tid = r.json()[0]['id']
+    assert ('texto', tid, 'npm install -g @openai/codex') in escritos
+    assert ('tecla', tid, 'Enter') in escritos
+    assert not any('rm -rf' in str(e) for e in escritos)
+    assert T._CLIS_CACHE['data'] is None                # el estado va a cambiar: invalida el cache
+
+
+def test_batch_instalar_cli_desconocido_se_rechaza_sin_crear_nada(monkeypatch):
+    from plotspace.core.database import get_db
+    c, pid, escritos, T = _cliente_con_proyecto(monkeypatch)
+    with c:
+        for malo in ('antigravity', 'no-existe'):
+            r = c.post(f'/api/projects/{pid}/terminals/batch', json={
+                'terminales': [{'nombre': 'x', 'tipo_ia': 'manual'}], 'instalar_cli': malo})
+            assert r.status_code == 400
+    conn = get_db()
+    try:
+        assert conn.execute('SELECT COUNT(*) FROM terminals').fetchone()[0] == 0
+    finally:
+        conn.close()
+    assert escritos == []
