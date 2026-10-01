@@ -13,8 +13,8 @@
     ['blur',  'Desenfoque',           'Cuánto se difumina la imagen detrás del vidrio.'],
     ['dim',   'Velo',                 'Oscurece el fondo en los temas oscuros y lo aclara en los claros: más velo = texto más legible.'],
     ['sat',   'Saturación',           'Intensidad de los colores de la imagen.'],
-    ['term',  'Opacidad terminales',  '100% = fondo sólido; menos deja ver la imagen a través de las terminales.'],
-    ['panel', 'Opacidad paneles',     'Lo mismo para la franja de proyectos, la barra superior y el panel derecho.'],
+    ['term',  'Opacidad terminales',  '100% = fondo sólido con los colores de la apariencia; menos lo vuelve vidrio y deja ver la imagen.'],
+    ['panel', 'Opacidad paneles',     'Lo mismo para la franja de proyectos, la barra superior y el panel derecho: al 100% usan los colores de la apariencia.'],
   ];
 
   function etiquetaValor(clave, v, rangos) {

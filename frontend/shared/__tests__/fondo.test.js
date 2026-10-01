@@ -4,12 +4,15 @@ const F = require('../fondo.js');
 
 // ── normalizar: cualquier basura vuelve a valores válidos ──
 const d = F.normalizar(null);
-assert.deepStrictEqual(d, { on: false, fuente: 'aurora', version: 0, blur: 14, dim: 30, sat: 115, term: 66, panel: 58 });
+assert.deepStrictEqual(d, { on: true, fuente: 'aurora', version: 0, blur: 16, dim: 22, sat: 115, term: 40, panel: 30 });
+assert.strictEqual(F.DEFAULTS.on, true, 'viene encendido: es lo que hace que Glass se vea como vidrio');
 assert.deepStrictEqual(F.normalizar('x'), d);
 assert.deepStrictEqual(F.normalizar([]), d);
 
 const n = F.normalizar({ on: 'yes', fuente: 'nope', version: -3, blur: 999, dim: -5, sat: 'abc', term: 5, panel: 500 });
-assert.strictEqual(n.on, false, 'solo true estricto activa');
+assert.strictEqual(n.on, false, 'solo true estricto activa (un valor raro no prende)');
+assert.strictEqual(F.normalizar({ on: false }).on, false, 'apagado explícito se respeta');
+assert.strictEqual(F.normalizar({ blur: 5 }).on, true, 'sin dato de `on`: el default');
 assert.strictEqual(n.fuente, 'aurora');
 assert.strictEqual(n.version, 0);
 assert.strictEqual(n.blur, F.RANGOS.blur.max);
@@ -34,6 +37,7 @@ for (const p of F.PRESETS) assert.ok(!p.css.includes('var(--ob-'), `${p.id}: el 
 // ── activo(): prendido + glass + (imagen propia) + sin reducir transparencias ──
 assert.strictEqual(F.activo({ on: false }), false);
 assert.strictEqual(F.activo({ on: true }), true);
+assert.strictEqual(F.activo(null), true, 'sin ajustes guardados: encendido por defecto');
 assert.strictEqual(F.activo({ on: true }, { glass: false }), false, 'sin Liquid Glass no hay fondo');
 assert.strictEqual(F.activo({ on: true }, { glass: true }), true);
 assert.strictEqual(F.activo({ on: true }, { reducirTransparencia: true }), false);
@@ -51,10 +55,11 @@ const v = F.variables({ blur: 20, dim: 40, sat: 130, term: 55, panel: 70, fuente
 assert.strictEqual(v['--gw-blur'], '20px');
 assert.strictEqual(v['--gw-dim'], '40%');
 assert.strictEqual(v['--gw-sat'], '130%');
-assert.strictEqual(v['--gw-term'], '55%');
-assert.strictEqual(v['--gw-panel'], '70%');
+assert.strictEqual(v['--gw-t'], '0.55', 'opacidad de terminales, 0-1');
+assert.strictEqual(v['--gw-p'], '0.7', 'opacidad de paneles, 0-1');
 assert.ok(v['--gw-img'].includes('gradient'));
-assert.deepStrictEqual(Object.keys(v).sort(), ['--gw-blur', '--gw-dim', '--gw-img', '--gw-panel', '--gw-sat', '--gw-term']);
+assert.deepStrictEqual(Object.keys(v).sort(), ['--gw-blur', '--gw-dim', '--gw-img', '--gw-p', '--gw-sat', '--gw-t']);
+assert.strictEqual(F.variables({ term: 100, panel: 100 })['--gw-p'], '1', 'al 100% el color es el del tema, sólido');
 
 // ── medidasAchicadas: nunca agranda, respeta el aspecto ──
 assert.deepStrictEqual(F.medidasAchicadas(1920, 1080), { w: 1920, h: 1080 });

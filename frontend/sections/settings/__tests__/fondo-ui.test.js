@@ -13,7 +13,7 @@ for (const [k] of U.SLIDERS) {
   const r = F.RANGOS[k];
   assert.ok(html.includes(`data-k="${k}" min="${r.min}" max="${r.max}"`), `slider ${k}`);
 }
-assert.ok(html.includes('14px') && html.includes('66%'), 'valores por defecto visibles');
+assert.ok(html.includes('16px') && html.includes('40%') && html.includes('30%'), 'valores por defecto visibles');
 
 // Un tile por preset + el de la imagen propia; el elegido queda marcado.
 for (const p of F.PRESETS) assert.ok(html.includes(`data-fuente="${p.id}"`), p.id);

@@ -8,8 +8,9 @@
 // canvas de xterm vivo se recalcula en cada frame (regla de perf del proyecto).
 //
 // Ajustes en localStorage (como el resto de Apariencia); la imagen propia vive en
-// el servidor (data/fondo/, plotspace/routers/fondo.py). Solo se activa con
-// Liquid Glass ON y respetando prefers-reduced-transparency.
+// el servidor (data/fondo/, plotspace/routers/fondo.py). Viene ENCENDIDO por
+// defecto (con el degradado Aurora): es lo que hace que el modo Glass se vea como
+// vidrio. Solo se activa con Liquid Glass ON y respetando prefers-reduced-transparency.
 //
 // Este archivo carga en el <head> junto a glass.js: aplica data-fondo y las
 // variables --gw-* de forma SÍNCRONA para no parpadear al entrar.
@@ -22,11 +23,11 @@
 
   // Rangos de cada control (los usa la UI y los tests).
   const RANGOS = {
-    blur:  { min: 0,  max: 40,  def: 14, unidad: 'px' },   // desenfoque del fondo
-    dim:   { min: 0,  max: 80,  def: 30, unidad: '%' },    // velo (oscurece en temas oscuros, aclara en claros)
+    blur:  { min: 0,  max: 40,  def: 16, unidad: 'px' },   // desenfoque del fondo
+    dim:   { min: 0,  max: 80,  def: 22, unidad: '%' },    // velo (oscurece en temas oscuros, aclara en claros)
     sat:   { min: 60, max: 180, def: 115, unidad: '%' },   // saturación del fondo
-    term:  { min: 20, max: 100, def: 66, unidad: '%' },    // opacidad del fondo de las terminales
-    panel: { min: 20, max: 100, def: 58, unidad: '%' },    // opacidad de franja / barra / dock
+    term:  { min: 20, max: 100, def: 40, unidad: '%' },    // opacidad de las terminales (100 = color sólido del tema)
+    panel: { min: 20, max: 100, def: 30, unidad: '%' },    // opacidad de franja / barra / dock (100 = color sólido del tema)
   };
 
   // Degradados de la casa: arte fijo (oklch literal a propósito: son ilustraciones, no
@@ -62,7 +63,7 @@
   const IDS_PRESET = PRESETS.map(p => p.id);
 
   const DEFAULTS = Object.freeze({
-    on: false, fuente: 'aurora', version: 0,
+    on: true, fuente: 'aurora', version: 0,
     blur: RANGOS.blur.def, dim: RANGOS.dim.def, sat: RANGOS.sat.def,
     term: RANGOS.term.def, panel: RANGOS.panel.def,
   });
@@ -81,7 +82,7 @@
     const fuente = (src.fuente === 'custom' || IDS_PRESET.includes(src.fuente)) ? src.fuente : DEFAULTS.fuente;
     const version = Number.isFinite(Number(src.version)) && Number(src.version) > 0 ? Math.floor(Number(src.version)) : 0;
     return {
-      on: src.on === true,
+      on: src.on === undefined ? DEFAULTS.on : src.on === true,
       fuente, version,
       blur: _num(src.blur ?? RANGOS.blur.def, RANGOS.blur),
       dim: _num(src.dim ?? RANGOS.dim.def, RANGOS.dim),
@@ -120,8 +121,8 @@
       '--gw-blur': `${c.blur}px`,
       '--gw-dim': `${c.dim}%`,
       '--gw-sat': `${c.sat}%`,
-      '--gw-term': `${c.term}%`,
-      '--gw-panel': `${c.panel}%`,
+      '--gw-t': String(c.term / 100),      // opacidad de las terminales, 0-1
+      '--gw-p': String(c.panel / 100),     // opacidad de franja / barra / dock, 0-1
       '--gw-img': fondoCss(c),
     };
   }
