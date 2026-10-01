@@ -10,8 +10,10 @@ Token-gated como todo /api. Herramienta local, single-user.
 """
 import os
 import asyncio
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
+from pydantic import BaseModel
 
+from plotspace.core import auth, selector_nativo
 from plotspace.core.database import get_db
 
 router = APIRouter(prefix="/api/fs", tags=["fs"])
@@ -145,3 +147,50 @@ def hogar_de_la_maquina() -> dict:
 @router.get("/hogar")
 async def ruta_hogar():
     return hogar_de_la_maquina()
+
+
+# ── Selector NATIVO del sistema (macOS / Linux GTK·KDE / Windows vía WSL) ──────
+# El servidor abre el diálogo del SO en tu escritorio y devuelve la ruta elegida
+# (plotspace/core/selector_nativo.py). El explorador de arriba (/list) queda de
+# respaldo para cuando no hay selector: servidor sin pantalla, falta zenity…
+
+_NOMBRES_LOCALES = {'localhost', '127.0.0.1', '::1', 'testserver'}
+
+
+def _es_local(request: Request) -> bool:
+    """¿La persona usa Jarvis desde ESTA máquina? Un diálogo del SO solo tiene sentido
+    en la pantalla de quien lo pidió: por la LAN o un túnel se abriría en el escritorio
+    del servidor, donde nadie lo ve."""
+    return auth._hostname_de(request.headers.get('host', '')) in _NOMBRES_LOCALES
+
+
+@router.get("/nativo")
+async def selector_disponible(request: Request):
+    """¿Hay selector nativo? `{disponible, motor, entorno, razon, ayuda}`."""
+    entorno = selector_nativo.entorno()
+    if not _es_local(request):
+        return {'disponible': False, 'motor': None, 'entorno': entorno, 'razon': 'remoto', 'ayuda': None}
+    nombre, razon = selector_nativo.motor()
+    return {'disponible': bool(nombre), 'motor': nombre, 'entorno': entorno, 'razon': razon,
+            'ayuda': None if nombre else selector_nativo.ayuda_instalacion()}
+
+
+class ElegirCarpeta(BaseModel):
+    inicio: str = ''
+    titulo: str = ''
+
+
+@router.post("/elegir")
+async def elegir_carpeta(body: ElegirCarpeta, request: Request):
+    """Abre el selector del sistema y espera a que la persona elija.
+    `{ruta | null, cancelado, aviso | null, motor}`. 503 sin selector, 409 si ya hay uno abierto."""
+    if not _es_local(request):
+        raise HTTPException(status_code=403, detail="El selector del sistema solo se abre desde esta máquina")
+    try:
+        return await asyncio.to_thread(selector_nativo.elegir_carpeta, body.inicio or None, (body.titulo or '').strip() or None)
+    except selector_nativo.NoDisponible as e:
+        raise HTTPException(status_code=503, detail=e.razon)
+    except selector_nativo.Ocupado:
+        raise HTTPException(status_code=409, detail="Ya hay un selector de carpeta abierto")
+    except selector_nativo.ErrorSelector as e:
+        raise HTTPException(status_code=500, detail=str(e) or "El selector del sistema falló")

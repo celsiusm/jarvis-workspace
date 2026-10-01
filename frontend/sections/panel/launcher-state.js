@@ -128,7 +128,32 @@
     return (orden || []).filter(t => t !== 'manual' && clis.some(c => c && c.id === t && !c.instalado));
   }
 
-  const pure = { MAX_TERMINALES, CLI_ORDEN, CLI_LABELS, PRESETS, MAX_TEMPLATES,
+  // ¿Con qué selector se elige la carpeta? El del SISTEMA si el servidor puede abrirlo
+  // en esta máquina (cap = GET /api/fs/nativo); si no, el explorador propio de Jarvis
+  // (respaldo). Si lo que falta es una herramienta instalable (zenity en Linux) se avisa
+  // UNA vez cómo instalarla.
+  function planSelector(cap, yaAvisado) {
+    if (cap && cap.disponible) return { usar: 'nativo', avisar: false };
+    const instalable = !!cap && cap.razon === 'falta_herramienta' && !!cap.ayuda;
+    return { usar: 'web', avisar: instalable && !yaAvisado };
+  }
+
+  // Dónde arranca el diálogo del sistema: la ruta que ya hay en el campo (si es
+  // absoluta), si no la base de proyectos (modo "Crear") o el home de ESTA máquina.
+  function inicioSelector(valor, env, target) {
+    const v = String(valor || '').trim();
+    if (v.startsWith('/')) return v.replace(/\/+$/, '') || '/';
+    if (target === 'loc' && env && env.proyectos) return env.proyectos;
+    return (env && env.home) || '';
+  }
+
+  // Qué decirle a la persona mientras el diálogo del sistema está abierto (puede
+  // abrirse DETRÁS del navegador). Devuelve la clave del texto, no el texto.
+  function pistaEspera(entorno) {
+    return entorno === 'wsl' ? 'wsl' : entorno === 'macos' ? 'macos' : 'linux';
+  }
+
+  const pure = { planSelector, inicioSelector, pistaEspera, MAX_TERMINALES, CLI_ORDEN, CLI_LABELS, PRESETS, MAX_TEMPLATES,
                  totalContadores, loteDesdeContadores, etiquetaCrear, etiquetaAbrir,
                  countsIniciales, clampContador, usadasDestino, faltantes,
                  resumenCounts, aplicarTemplate, mismosCounts, templatesValidos };

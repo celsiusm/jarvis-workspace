@@ -136,6 +136,16 @@ here — if a system step fails, the sensitive spots are commented in the
 
 ---
 
+## Picking a project folder
+
+**Add project → Open / Create** opens the **Windows folder dialog** (not a Jarvis
+list): the server calls `powershell.exe` from WSL, and the folder you choose is
+translated back to its Linux path. The dialog starts in your **Linux home**
+(`\\wsl.localhost\<distro>\home\<you>`), which is where projects should live.
+If you pick something under `C:\…` it works (it becomes `/mnt/c/…`) but Jarvis warns
+you: tmux and heavy I/O are much slower on NTFS. If the dialog can't open, Jarvis
+falls back to its own folder browser. `JARVIS_SELECTOR_NATIVO=off` turns this off.
+
 ## Where things live
 
 | | WSL2 path | Docker |

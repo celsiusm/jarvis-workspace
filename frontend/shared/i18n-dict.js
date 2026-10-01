@@ -2359,5 +2359,11 @@
     "El archivo no es una imagen": "The file isn't an image",
     "No se pudo leer la imagen": "Couldn't read the image",
     "No se pudo preparar la imagen": "Couldn't prepare the image",
+    // ── selector de carpetas del sistema (Agregar proyecto) ──
+    "Elegí la carpeta en la ventana de tu sistema": "Choose the folder in your system's window",
+    "Se abre en Windows. Si no la ves, buscá la ventana detrás del navegador.": "It opens in Windows. If you can't see it, look for the window behind the browser.",
+    "Se abre como una ventana de Finder. Si no la ves, buscala en el Dock.": "It opens as a Finder window. If you can't see it, look for it in the Dock.",
+    "Se abre como una ventana de tu sistema. Si no la ves, buscala detrás del navegador.": "It opens as a window of your system. If you can't see it, look for it behind the browser.",
+    "Esa carpeta está en Windows (/mnt): funciona, pero va más lento. Para trabajar mejor elegí una dentro de Linux (tu home).": "That folder is on Windows (/mnt): it works, but it's slower. For better results pick one inside Linux (your home).",
   });
 })();

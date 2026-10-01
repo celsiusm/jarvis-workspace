@@ -118,4 +118,39 @@ assert.strictEqual(L.etiquetaAbrir({ claude: 2, codex: 1 }), 'Abrir con 3 termin
   assert.deepStrictEqual(L.faltantes(L.CLI_ORDEN, null), []);
   assert.deepStrictEqual(L.faltantes(L.CLI_ORDEN, { clis: 'x' }), []);
 }
+// planSelector: el del SISTEMA si el servidor puede abrirlo; si no, el explorador de
+// Jarvis (respaldo). Solo se avisa UNA vez cómo instalar lo que falta.
+{
+  assert.deepStrictEqual(L.planSelector({ disponible: true, motor: 'zenity' }, false), { usar: 'nativo', avisar: false });
+  assert.deepStrictEqual(L.planSelector({ disponible: true }, true), { usar: 'nativo', avisar: false });
+  // falta zenity (instalable): respaldo + aviso la primera vez, después no insiste
+  const falta = { disponible: false, razon: 'falta_herramienta', ayuda: 'sudo apt install zenity' };
+  assert.deepStrictEqual(L.planSelector(falta, false), { usar: 'web', avisar: true });
+  assert.deepStrictEqual(L.planSelector(falta, true), { usar: 'web', avisar: false });
+  // sin pantalla / remoto / error / sin respuesta: respaldo mudo (no hay nada que instalar)
+  for (const razon of ['sin_pantalla', 'remoto', 'error', 'desactivado', 'sin_powershell']) {
+    assert.deepStrictEqual(L.planSelector({ disponible: false, razon }, false), { usar: 'web', avisar: false }, razon);
+  }
+  assert.deepStrictEqual(L.planSelector({ disponible: false, razon: 'falta_herramienta' }, false), { usar: 'web', avisar: false }, 'sin texto de ayuda no se avisa');
+  assert.deepStrictEqual(L.planSelector(null, false), { usar: 'web', avisar: false });
+  assert.deepStrictEqual(L.planSelector(undefined, false), { usar: 'web', avisar: false });
+}
+
+// inicioSelector: dónde arranca el diálogo del sistema
+{
+  const env = { home: '/home/ana', proyectos: '/home/ana/projects' };
+  assert.strictEqual(L.inicioSelector('/srv/mi-app/', env, 'path'), '/srv/mi-app', 'ruta absoluta del campo, sin barra final');
+  assert.strictEqual(L.inicioSelector('/', env, 'path'), '/');
+  assert.strictEqual(L.inicioSelector('', env, 'path'), '/home/ana', 'modo Abrir vacío: el home de ESTA máquina');
+  assert.strictEqual(L.inicioSelector('', env, 'loc'), '/home/ana/projects', 'modo Crear: la base de proyectos');
+  assert.strictEqual(L.inicioSelector('relativa/x', env, 'path'), '/home/ana', 'una ruta relativa no sirve de inicio');
+  assert.strictEqual(L.inicioSelector('', null, 'path'), '', 'sin datos de la máquina: el servidor decide');
+  assert.strictEqual(L.inicioSelector('  /tmp/x  ', env, 'loc'), '/tmp/x');
+}
+
+// pistaEspera: qué texto mostrar mientras el diálogo del sistema está abierto
+assert.strictEqual(L.pistaEspera('wsl'), 'wsl');
+assert.strictEqual(L.pistaEspera('macos'), 'macos');
+assert.strictEqual(L.pistaEspera('linux'), 'linux');
+assert.strictEqual(L.pistaEspera(undefined), 'linux');
 console.log('launcher-state.test.js OK');

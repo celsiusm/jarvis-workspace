@@ -23,6 +23,10 @@ sudo apt install -y python3 python3-venv python3-pip tmux git curl ffmpeg
 # Fedora: sudo dnf install python3 python3-pip tmux git curl ffmpeg
 # Arch:   sudo pacman -S python python-pip tmux git curl ffmpeg
 
+# Optional, for the system's own folder dialog in "Add project" (GNOME/GTK: zenity,
+# KDE: kdialog). Without either, Jarvis uses its built-in folder browser.
+sudo apt install -y zenity
+
 python3 -m venv venv
 source venv/bin/activate
 pip install -r plotspace/requirements.txt
