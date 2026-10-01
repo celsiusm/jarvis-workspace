@@ -4201,8 +4201,73 @@ function _tlEnviron() {
   })();
   return _tlEnvP;
 }
+// ── Selector del SISTEMA (nativo) primero; el explorador de Jarvis es el respaldo ──
+// El servidor abre el diálogo del SO en esta máquina (macOS Finder · zenity/kdialog en
+// Linux · el de Windows desde WSL) y devuelve la ruta (GET /api/fs/nativo · POST
+// /api/fs/elegir). Si no hay (servidor sin pantalla, falta zenity, acceso remoto…) se
+// cae al explorador propio, que sigue abajo.
+let _tlNativoP = null, _tlAvisoSelector = false, _tlEligiendo = false;
+function _tlNativo() {
+  _tlNativoP ||= fetch('/api/fs/nativo').then(r => (r.ok ? r.json() : null)).catch(() => null)
+    .then(d => d || { disponible: false, razon: 'error' });
+  return _tlNativoP;
+}
+// La ruta elegida (por el selector del sistema o por el explorador de Jarvis) entra al
+// formulario igual: campo oculto/visible del modo + refresco de tarjeta o preview.
+function _tlAplicarRuta(target, ruta) {
+  const esLoc = target === 'loc';
+  const input = document.getElementById(esLoc ? 'tl-new-loc' : 'tl-folder-input');
+  if (input) input.value = ruta;
+  if (esLoc) _tlUpdatePrev();     // 'loc' → base oculta: refresca botón + preview
+  else _tlSyncPick();             // 'path' → refleja la carpeta en la tarjeta
+  // El foco va al campo VISIBLE (en 'loc' el input es oculto → al nombre).
+  setTimeout(() => document.getElementById(esLoc ? 'tl-new-name' : 'tl-folder-input')?.focus(), 20);
+}
+async function _tlElegirNativo(cap) {
+  const target = _tlFsTarget;
+  _tlEligiendo = true;
+  const wait = document.getElementById('tl-native-wait');
+  const pistas = {
+    wsl: 'Se abre en Windows. Si no la ves, buscá la ventana detrás del navegador.',
+    macos: 'Se abre como una ventana de Finder. Si no la ves, buscala en el Dock.',
+    linux: 'Se abre como una ventana de tu sistema. Si no la ves, buscala detrás del navegador.',
+  };
+  const hint = document.getElementById('tl-native-hint');
+  if (hint) hint.textContent = _sbT(pistas[window.JarvisLauncherState.pistaEspera(cap.entorno)]);
+  wait?.removeAttribute('hidden');
+  try {
+    const env = (await _tlEnviron()) || {};
+    const src = document.getElementById(target === 'loc' ? 'tl-new-loc' : 'tl-folder-input');
+    const inicio = window.JarvisLauncherState.inicioSelector(src?.value, env, target);
+    const res = await fetch('/api/fs/elegir', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ inicio }),
+    });
+    if (res.status === 409) return 'cancelado';       // ya hay un diálogo abierto: no abrir otro
+    if (!res.ok) return 'fallback';                   // 503/500/403: usar el explorador de Jarvis
+    const d = await res.json();
+    if (d.cancelado || !d.ruta) return 'cancelado';
+    _tlAplicarRuta(target, d.ruta);
+    if (d.aviso === 'mnt') {
+      toast(_sbT('Esa carpeta está en Windows (/mnt): funciona, pero va más lento. Para trabajar mejor elegí una dentro de Linux (tu home).'), 'warning', 9000);
+    }
+    return 'ok';
+  } catch { return 'fallback'; }
+  finally { _tlEligiendo = false; wait?.setAttribute('hidden', ''); }
+}
 async function _tlOpenFS(target) {
   _tlFsTarget = target || 'path';
+  if (_tlEligiendo) return;
+  const cap = await _tlNativo();
+  const plan = window.JarvisLauncherState.planSelector(cap, _tlAvisoSelector);
+  if (plan.avisar) { _tlAvisoSelector = true; toast(cap.ayuda, 'info', 10000); }
+  if (plan.usar === 'nativo') {
+    const r = await _tlElegirNativo(cap);
+    if (r !== 'fallback') return;
+    _tlNativoP = null;           // falló: la próxima vez vuelve a preguntar
+  }
+  await _tlAbrirExplorerWeb();
+}
+async function _tlAbrirExplorerWeb() {
   const src = _tlFsTarget === 'loc' ? 'tl-new-loc' : 'tl-folder-input';
   const seed = (document.getElementById(src)?.value || '').trim();
   const env = (await _tlEnviron()) || {};
@@ -4248,14 +4313,8 @@ function _tlCerrarFS() {
 }
 document.getElementById('tl-fs-cancel')?.addEventListener('click', _tlCerrarFS);
 document.getElementById('tl-fs-pick')?.addEventListener('click', () => {
-  const esLoc = _tlFsTarget === 'loc';
-  const input = document.getElementById(esLoc ? 'tl-new-loc' : 'tl-folder-input');
-  if (input) input.value = _tlFsPath;
   document.getElementById('tl-fs')?.setAttribute('hidden', '');
-  if (esLoc) _tlUpdatePrev();     // 'loc' → base oculta: refresca botón + preview
-  else _tlSyncPick();             // 'path' → refleja la carpeta en la tarjeta
-  // El foco va al campo VISIBLE (en 'loc' el input es oculto → al nombre).
-  setTimeout(() => document.getElementById(esLoc ? 'tl-new-name' : 'tl-folder-input')?.focus(), 20);
+  _tlAplicarRuta(_tlFsTarget, _tlFsPath);
 });
 
 // ── Modos Abrir/Crear + preview de creación + ubicaciones recientes ──
@@ -4332,6 +4391,7 @@ function abrirLauncher(opts = {}) {
   _tlUpdatePrev();
   _tlDist = 'mosaico';
   document.getElementById('tl-fs')?.setAttribute('hidden', '');
+  _tlNativoP = null; _tlNativo();     // ¿hay selector del sistema? (precargado: el click responde al instante)
   document.querySelectorAll('#tl-dist-modes button').forEach(b => b.setAttribute('aria-checked', String(b.dataset.dist === 'mosaico')));
 
   modalTerminal.style.display = 'flex';
@@ -4357,6 +4417,7 @@ window.abrirLauncher = abrirLauncher;
 document.addEventListener('keydown', (e) => {
   if (!modalTerminal || modalTerminal.style.display === 'none') return;
   if (document.querySelector('.ob-confirm-overlay')) return;
+  if (_tlEligiendo) return;      // el diálogo del sistema está abierto: el modal espera
   const fs = document.getElementById('tl-fs');
   const fsAbierto = !!fs && !fs.hidden;
   if (e.key === 'Escape') {

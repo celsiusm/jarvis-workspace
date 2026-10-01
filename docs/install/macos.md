@@ -17,6 +17,7 @@ There is no DMG / notarized app yet. Terminals are **tmux** sessions.
 xcode-select --install
 
 brew install python@3.12 tmux git ffmpeg
+# "Add project" uses the native Finder folder dialog (osascript, already on macOS).
 
 git clone https://github.com/celsiusm/jarvis-workspace
 cd jarvis-workspace
