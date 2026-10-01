@@ -244,12 +244,15 @@ function _temaXterm() {
 if (typeof window !== 'undefined') {
   // Prender/apagar/ajustar el fondo del modo Glass: tema (fondo transparente o no)
   // y transparencia de cada terminal viva.
-  window.addEventListener('fondo-changed', () => {
+  const _reaplicarXterm = () => {
     _xtermTheme = null;
     for (const inst of terminales.values()) {
       try { inst.aplicarTransparencia?.(); } catch (_) {}
     }
-  });
+  };
+  // También al prender/apagar Liquid Glass: cambia la paleta (--ob-bg-terminal) y el fondo.
+  window.addEventListener('fondo-changed', _reaplicarXterm);
+  window.addEventListener('glass-changed', _reaplicarXterm);
   window.addEventListener('theme-changed', () => {
     // Esperar al siguiente macro-tick (20ms) para que los estilos del nuevo tema
     // se hayan propagado y computado completamente en el DOM.

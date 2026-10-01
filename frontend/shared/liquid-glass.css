@@ -3,7 +3,8 @@
    Se carga ÚLTIMO (después de las secciones) y todo cuelga de
    :root[data-glass="on"] (shared/glass.js; ⚙ → Apariencia lo apaga).
    El material sale de los tokens --lg-* (shared/tokens.css), que a su
-   vez salen de --ob-*: sigue a los 24 temas + Tonalidad.
+   vez salen de --ob-*; las superficies tienen paleta propia (sección 0) y
+   el tema de color solo pone los acentos.
 
    Reglas del material (no romper):
    · El canto va como ANILLO INTERIOR (box-shadow), no como border: la
@@ -15,6 +16,39 @@
      el de la píldora de terminal trabajando (ya existía).
    · Colores SOLO por tokens (regla de oro: nunca hex).
 ═══════════════════════════════════════════════════════════════ */
+
+/* ── 0 · Paleta propia del vidrio ───────────────────────────────
+   Liquid Glass es un TEMA APARTE, no una capa teñida por el tema de color:
+   mientras está encendido, las superficies (lienzo, paneles, cards, líneas,
+   la terminal) salen de su propia escala NEUTRA — humo oscuro, o leche clara
+   en papel/alba — y el tema de color solo aporta los ACENTOS (títulos,
+   pestañas y pastillas activas, botones, halos, bordes de acento). Así un
+   tema verde no pinta todo el entorno de verde, y uno claro no lava todo de
+   blanco. Va en :root (mismo elemento que los temas) para que las derivadas
+   --lg-* y los alias legacy se computen con esta escala. La Tonalidad
+   (matiz/saturación) solo afecta acentos acá: sobre un neutro no hay croma
+   que desplazar. Con Liquid Glass apagado nada de esto aplica. */
+:root[data-glass="on"] {
+  --ob-bg-void: oklch(10.5% 0 0); --ob-bg-terminal: oklch(14% 0 0); --ob-bg-0: oklch(12.5% 0 0);
+  --ob-bg-1: oklch(16.5% 0 0);    --ob-bg-2: oklch(19.5% 0 0);
+  --ob-bg-3: oklch(23% 0 0);      --ob-bg-4: oklch(27% 0 0);
+  --ob-line-1: oklch(28% 0 0);    --ob-line-2: oklch(34% 0 0);    --ob-line-3: oklch(42% 0 0);
+  --ob-glass: oklch(18% 0 0 / 0.62); --ob-glass-hi: oklch(85% 0 0 / 0.10);
+  --lg-body-hi: color-mix(in oklch, var(--ob-bg-3) 66%, transparent);
+  --lg-body-lo: color-mix(in oklch, var(--ob-bg-2) 74%, transparent);
+}
+/* Claros: la jerarquía se invierte (lo elevado se aclara, el hover oscurece) y la
+   terminal sigue siendo grafito (los CLIs asumen fondo oscuro). Gris perlado, no
+   blanco quemado: así el vidrio conserva profundidad. */
+:root[data-glass="on"]:is([data-theme="papel"], [data-theme="alba"]) {
+  --ob-bg-void: oklch(97.5% 0 0); --ob-bg-terminal: oklch(16% 0 0); --ob-bg-0: oklch(94.5% 0 0);
+  --ob-bg-1: oklch(96.5% 0 0);    --ob-bg-2: oklch(98% 0 0);
+  --ob-bg-3: oklch(92% 0 0);      --ob-bg-4: oklch(89% 0 0);
+  --ob-line-1: oklch(88% 0 0);    --ob-line-2: oklch(82% 0 0);    --ob-line-3: oklch(70% 0 0);
+  --ob-glass: oklch(98.5% 0 0 / 0.85); --ob-glass-hi: oklch(100% 0 0 / 0.9);
+  --lg-body-hi: color-mix(in oklch, var(--ob-bg-2) 72%, transparent);
+  --lg-body-lo: color-mix(in oklch, var(--ob-bg-1) 80%, transparent);
+}
 
 /* ── 1 · Barra superior ─────────────────────────────────────── */
 :root[data-glass="on"] .jw-bar {
@@ -39,11 +73,7 @@
 
 /* ── 2 · Franja de proyectos ────────────────────────────────── */
 :root[data-glass="on"] .jw-strip {
-  background:
-    var(--lg-gloss),
-    radial-gradient(150% 130px at 18% -30px, color-mix(in oklch, var(--ob-accent) 17%, transparent), transparent 72%),
-    radial-gradient(120% 90px at 95% -20px, color-mix(in oklch, var(--ob-info) 10%, transparent), transparent 70%),
-    linear-gradient(180deg, var(--ob-bg-1), var(--ob-bg-0) 46%);
+  background: var(--lg-gloss), linear-gradient(180deg, var(--ob-bg-1), var(--ob-bg-0) 46%);
 }
 :root[data-glass="on"] .sb-search {
   background: var(--lg-body);
