@@ -19,6 +19,7 @@ Lo que sí se puede es **ayudar a instalarlos**: casi todos son paquetes de npm.
 La detección mira el PATH del propio server (todo corre en el mismo mundo:
 Linux/WSL); el que arma nvm en el rc del usuario es el mismo que hereda uvicorn.
 """
+import shlex
 import shutil
 import subprocess
 from typing import Dict, List, Optional
@@ -39,7 +40,8 @@ CATALOGO = [
     {'id': 'qwen',        'nombre': 'Qwen Code',   'binario': 'qwen',
      'paquete': '@qwen-code/qwen-code'},
     {'id': 'antigravity', 'nombre': 'Antigravity', 'binario': 'agy',
-     'paquete': None},
+     # App de escritorio: no hay comando que tipear, se baja de su sitio.
+     'paquete': None, 'url': 'https://antigravity.google'},
     {'id': 'grok',        'nombre': 'Grok Build',  'binario': 'grok',
      'paquete': '@xai-official/grok'},
     {'id': 'cursor',      'nombre': 'Cursor CLI',
@@ -47,7 +49,9 @@ CATALOGO = [
      # `agent` (el nombre que documenta) y `cursor-agent` (legacy). Se sondea
      # primero el legacy para no confundirlo con cualquier OTRO `agent` que
      # ya ande en el PATH de la máquina.
-     'binarios': ('cursor-agent', 'agent'), 'paquete': None},
+     'binarios': ('cursor-agent', 'agent'), 'paquete': None,
+     # El instalador oficial (se corre en la terminal, a la vista).
+     'instalador': 'curl https://cursor.com/install -fsS | bash'},
     {'id': 'pi',          'nombre': 'Pi',          'binario': 'pi',
      'paquete': '@earendil-works/pi-coding-agent',
      # El quickstart de Pi manda `--ignore-scripts`: el paquete no necesita
@@ -61,14 +65,44 @@ def _existe_local(binario: str, path: Optional[str] = None) -> bool:
     return shutil.which(binario, path=path) is not None
 
 
+# Node.js vía nvm: lo que se antepone al `npm install -g` cuando la máquina no tiene
+# npm, para que el "Instalar" siga siendo UN clic. Se corre a la vista, en la
+# terminal que abre la app (la persona lo ve y lo puede cortar con Ctrl+C).
+_NVM_NODE = ('curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash'
+             ' && . "$HOME/.nvm/nvm.sh" && nvm install --lts')
+
+
+def comando_terminal(cli_id: str, existe_local=None) -> Optional[str]:
+    """La línea que se tipea en una TERMINAL para instalar ese CLI, o None si no
+    se instala por comando (Antigravity: se baja de su sitio).
+
+    Es la fuente única: el front pide `instalar_cli: <id>` y el server arma el
+    comando — el navegador nunca compone qué se ejecuta. Sin npm en la máquina se
+    antepone la instalación de Node (nvm), así que "Instalar" funciona igual en
+    una máquina recién instalada."""
+    cli = next((c for c in CATALOGO if c['id'] == cli_id), None)
+    if not cli:
+        return None
+    if cli.get('instalador'):
+        return cli['instalador']
+    cmd = comando_instalar(cli_id)
+    if not cmd:
+        return None
+    linea = shlex.join(cmd)
+    return linea if hay_node(existe_local) else f'{_NVM_NODE} && {linea}'
+
+
 def detectar(existe_local=None) -> List[Dict]:
     """Estado de cada CLI en el entorno del propio motor.
 
-    Cada entrada: `{id, nombre, instalado, instalable}`. `instalable` es False
-    cuando no hay un paquete que instalar (Antigravity) — ahí la app informa
-    en vez de ofrecer un botón que no puede cumplir.
+    Cada entrada: `{id, nombre, instalado, instalable, comando, con_node, url}`.
+    `instalable` = se puede instalar EN SEGUNDO PLANO por npm (Cursor y Antigravity
+    no). `comando` = la línea que la app tipea en una terminal para instalarlo
+    (None si no hay: Antigravity), `con_node` = esa línea incluye instalar Node
+    primero, `url` = sitio oficial cuando no hay comando.
     """
     existe_local = existe_local or _existe_local
+    hay_npm = hay_node(existe_local)
 
     salida = []
     for cli in CATALOGO:
@@ -85,11 +119,15 @@ def detectar(existe_local=None) -> List[Dict]:
                     break
             except Exception:
                 continue
+        comando = None if instalado else comando_terminal(cli['id'], existe_local)
         salida.append({
             'id': cli['id'],
             'nombre': cli['nombre'],
             'instalado': bool(instalado),
             'instalable': cli['paquete'] is not None,
+            'comando': comando,
+            'con_node': bool(comando) and not hay_npm and bool(cli['paquete']),
+            'url': None if instalado else cli.get('url'),
         })
     return salida
 

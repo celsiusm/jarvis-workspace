@@ -2,6 +2,7 @@
 
 // projectId es mutable: cambia al navegar entre proyectos sin recargar
 let projectId = new URLSearchParams(location.search).get('id');
+window.JarvisCliInstalar?.init?.({ proyectoId: () => projectId });
 const _bootstrapNuevo = new URLSearchParams(location.search).get('launcher') === 'nuevo';
 if (!projectId && !_bootstrapNuevo) location.href = '/';
 
@@ -3938,52 +3939,59 @@ function _tlUsadas() {
 const _TL_CLI_SUB = { claude: 'anthropic', codex: 'openai', opencode: 'sst', qwen: 'alibaba', antigravity: 'google', grok: 'xai', cursor: 'anysphere', pi: 'earendil', manual: 'bash' };
 let _tlEstadoClis = null;   // GET /api/clis → qué CLIs faltan instalar (null = no lo sé aún)
 
+// Los CLIs sin instalar YA NO se pliegan: se ven en su lugar, atenuados, con «Falta
+// instalar» y, al pasar el mouse, el comando exacto y la pastilla «Instalar» (abre una
+// terminal con el comando). Lo decide shared/cli-instalar.js; esto solo pinta.
+const _ICO_BAJAR = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v7.5M4.8 7.2 8 10.4l3.2-3.2M3 13h10"/></svg>';
+const _ICO_SITIO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H4A1.5 1.5 0 0 0 2.5 5v7A1.5 1.5 0 0 0 4 13.5h7a1.5 1.5 0 0 0 1.5-1.5V9.5M9.5 2.5h4v4M13.5 2.5 7.5 8.5"/></svg>';
 function _tlPintarFalta() {
+  const I = window.JarvisCliInstalar;
+  let pendientes = 0;
   document.querySelectorAll('#tl-grid .tl2-cli-card').forEach(card => {
     const tipo = card.dataset.tipo;
     if (tipo === 'manual') return;               // el shell no se instala
-    const st = (_tlEstadoClis?.clis || []).find(c => c.id === tipo);
-    const falta = !!st && !st.instalado;
+    const cli = (_tlEstadoClis?.clis || []).find(c => c.id === tipo) || null;
+    const e = I ? I.estadoFila(cli, { hayProyecto: I.hayProyecto(), enCurso: I.enCurso(tipo) })
+                : { falta: !!cli && !cli.instalado, instalando: false, accionable: false };
+    const falta = !!e.falta;
+    if (falta) pendientes++;
     card.classList.toggle('off', falta);
+    card.classList.toggle('instalando', !!e.instalando);
     const chip = card.querySelector('.tl2-cli-falta');
-    if (chip) chip.hidden = !falta;
-    // sin instalar no se puede sumar: los botones mueren
+    if (chip) {
+      chip.hidden = !falta;
+      chip.textContent = e.instalando ? _sbT('Instalando…') : _sbT('Falta instalar');
+    }
+    const cmd = card.querySelector('.tl2-cli-cmd');
+    if (cmd) { cmd.textContent = e.comando || ''; cmd.title = e.comando || ''; cmd.hidden = !e.comando; }
+    // sin instalar no se suma: en lugar del stepper, la pastilla «Instalar»
+    const step = card.querySelector('.tl2-cli-step');
+    if (step) step.hidden = falta;
     card.querySelectorAll('.inc').forEach(b => { b.disabled = falta; });
+    const btn = card.querySelector('.cli-inst');
+    if (!btn) return;
+    const ver = falta && (e.accionable || e.instalando);
+    btn.hidden = !ver;
+    if (!ver) return;
+    const sitio = e.plan && e.plan.accion === 'sitio';
+    btn.dataset.estado = e.instalando ? 'instalando' : (sitio ? 'sitio' : 'instalar');
+    const txt = e.instalando ? _sbT('Instalando…') : (sitio ? _sbT('Cómo instalar') : _sbT('Instalar'));
+    btn.innerHTML = (e.instalando ? '<i class="cli-inst-spin" aria-hidden="true"></i>' : (sitio ? _ICO_SITIO : _ICO_BAJAR))
+      + `<span class="cli-inst-t">${txt}</span>`;
+    btn.setAttribute('aria-label', `${txt} ${window.JarvisLauncherState.CLI_LABELS[tipo] || tipo}`);
+    btn.title = sitio ? _sbT('Se instala desde su sitio oficial')
+      : (e.comando ? `${_sbT('Abre una terminal y corre:')} ${e.comando}` + (e.conNode ? `\n${_sbT('Incluye instalar Node.js.')}` : '') : '');
   });
-  _tlPlegarFaltan();
-}
-
-// Los CLIs sin instalar (7 de 9 en una máquina recién instalada) dominaban la
-// grilla: se pliegan en un bloque aparte detrás de «+N sin instalar». Mismo
-// orden relativo (CLI_ORDEN) en los dos lados; el shell queda último arriba.
-let _tlVerFaltan = false;
-function _tlPlegarFaltan() {
-  const L = window.JarvisLauncherState;
-  const grid = document.getElementById('tl-grid');
-  if (!grid || !L) return;
-  let extra = document.getElementById('tl-grid-faltan');
-  let btn = document.getElementById('tl-faltan-toggle');
-  if (!extra) {
-    btn = document.createElement('button');
-    btn.type = 'button'; btn.id = 'tl-faltan-toggle'; btn.className = 'cli-faltan-toggle';
-    btn.addEventListener('click', () => { _tlVerFaltan = !_tlVerFaltan; _tlPlegarFaltan(); });
-    extra = document.createElement('div');
-    extra.id = 'tl-grid-faltan'; extra.className = 'tl2-cli-grid cli-faltan-grid';
-    grid.after(btn, extra);
+  const pend = document.getElementById('tl-pend');
+  if (pend) {
+    pend.hidden = pendientes === 0;
+    pend.textContent = pendientes ? _sbT('{n} por instalar').replace('{n}', pendientes) : '';
   }
-  const faltan = new Set(L.faltantes(L.CLI_ORDEN, _tlEstadoClis));
-  const cards = new Map([...document.querySelectorAll('#modal-new-terminal .tl2-cli-card')].map(c => [c.dataset.tipo, c]));
-  for (const tipo of L.CLI_ORDEN) {
-    const c = cards.get(tipo); if (!c) continue;
-    (faltan.has(tipo) ? extra : grid).appendChild(c);
-  }
-  btn.hidden = faltan.size === 0;
-  extra.hidden = faltan.size === 0 || !_tlVerFaltan;
-  btn.setAttribute('aria-expanded', String(_tlVerFaltan));
-  btn.textContent = _tlVerFaltan
-    ? _sbT('Ocultar los que faltan instalar')
-    : _sbT('+{n} sin instalar').replace('{n}', faltan.size);
 }
+// Cambió el estado de instalación (terminó una, empezó otra): repintar el grid.
+window.addEventListener('clis-estado', (e) => {
+  if (e.detail && Array.isArray(e.detail.clis)) { _tlEstadoClis = e.detail; _tlPintarFalta(); _tlSync(); }
+});
 
 function _tlEstadoFaltantes() {
   // Hidratación inmediata desde la última detección guardada: el aviso "Falta
@@ -4004,8 +4012,9 @@ function _tlEstadoFaltantes() {
     .then(d => {
       if (!d) return;
       _tlEstadoClis = d;
-      window.JarvisClisEstado = d;             // cache compartida con QuickPicker
-      try { localStorage.setItem('jarvis_clis_estado', JSON.stringify(d)); } catch { /* cuota/privacidad */ }
+      // publica en la cache compartida + localStorage + evento `clis-estado` (repinta pickers)
+      if (window.JarvisCliInstalar?.aplicarEstado) window.JarvisCliInstalar.aplicarEstado(d);
+      else { window.JarvisClisEstado = d; try { localStorage.setItem('jarvis_clis_estado', JSON.stringify(d)); } catch { /* cuota */ } }
       _tlPintarFalta();
     })
     .catch(() => {});
@@ -4016,19 +4025,28 @@ function _tlRenderGrid() {
   const cont = document.getElementById('tl-grid');
   if (!cont || !L) return;
   cont.innerHTML = L.CLI_ORDEN.map(tipo => `
-    <div class="tl2-cli-card" data-tipo="${tipo}">
+    <div class="tl2-cli-card cli-fila" data-tipo="${tipo}">
       <span class="tl2-cli-badge">${window.cliLogo ? cliLogo(tipo, 18) : tipo}</span>
-      <span class="tl2-cli-info"><span class="tl2-cli-name">${L.CLI_LABELS[tipo]}</span><span class="tl2-cli-row"><span class="tl2-cli-sub">${_TL_CLI_SUB[tipo] || ''}</span>${tipo !== 'manual' ? '<i class="tl2-cli-falta" hidden>Falta instalar</i>' : ''}</span></span>
+      <span class="tl2-cli-info"><span class="tl2-cli-name">${L.CLI_LABELS[tipo]}</span><span class="tl2-cli-row"><span class="tl2-cli-sub">${_TL_CLI_SUB[tipo] || ''}</span>${tipo !== 'manual' ? '<i class="tl2-cli-falta" hidden>Falta instalar</i><small class="tl2-cli-cmd" hidden></small>' : ''}</span></span>
       <span class="tl2-cli-step">
         <button type="button" class="dec" aria-label="Menos ${L.CLI_LABELS[tipo]}">−</button>
         <span class="cnt">0</span>
         <button type="button" class="inc" aria-label="Más ${L.CLI_LABELS[tipo]}">+</button>
       </span>
+      ${tipo !== 'manual' ? '<span class="cli-inst" role="button" tabindex="0" hidden></span>' : ''}
     </div>`).join('');
   cont.querySelectorAll('.tl2-cli-card').forEach(card => {
     const tipo = card.dataset.tipo;
     card.querySelector('.inc').addEventListener('click', () => _tlSetCount(tipo, _tlCounts[tipo] + 1));
     card.querySelector('.dec').addEventListener('click', () => _tlSetCount(tipo, _tlCounts[tipo] - 1));
+    // «Instalar»: abre una terminal con el comando (o el sitio oficial). El modal queda
+    // abierto: la config del proyecto que estás armando no se pierde.
+    const inst = card.querySelector('.cli-inst');
+    inst?.addEventListener('click', (e) => { e.stopPropagation(); window.JarvisCliInstalar?.instalar(tipo); });
+    inst?.addEventListener('keydown', (e) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault(); e.stopPropagation(); window.JarvisCliInstalar?.instalar(tipo);
+    });
   });
   _tlPintarFalta();
 }

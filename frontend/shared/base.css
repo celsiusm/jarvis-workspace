@@ -2806,20 +2806,41 @@ body.tl-resizing iframe {
 }
 
 
-/* ── «+N sin instalar»: pliegue de CLIs faltantes (launcher + picker rápido) ──
-   Los CLIs sin instalar se agrupan aparte y plegados: informan que existen sin
-   ocupar 7 de 9 filas de la grilla. */
-.cli-faltan-toggle {
-  display: flex; align-items: center; justify-content: center; gap: 6px;
-  width: 100%; margin-top: 8px; padding: 6px 10px;
-  font: 500 var(--text-2xs) var(--font-ui); color: var(--ob-fg-3);
-  background: transparent;
-  border: 1px dashed var(--ob-line-2); border-radius: var(--radius-pill);
-  cursor: pointer;
-  transition: color var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out),
-              background var(--dur-1) var(--ease-out);
+/* ── «Instalar» un CLI que falta (picker de Nueva terminal + modal Agregar proyecto) ──
+   Los CLIs sin instalar YA NO se esconden: se ven en su lugar, atenuados, y al pasar el
+   mouse (o enfocar la fila) la pastilla del ícono de descarga se abre en «Instalar».
+   cli-instalar.js decide qué hace el clic. La pastilla es un <span role="button"> dentro
+   de la fila (`.cli-fila`), igual que el stepper. Solo tokens --ob-*. */
+.cli-inst {
+  display: inline-flex; align-items: center; flex: none; height: 24px; padding: 0 7px;
+  border-radius: var(--radius-pill); cursor: pointer; user-select: none; white-space: nowrap;
+  font: 600 var(--text-2xs) var(--font-ui); letter-spacing: .01em;
+  color: var(--ob-accent-fg); background: var(--ob-accent-08);
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24);
+  transition: background var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out),
+              transform var(--dur-1) var(--ease-out);
 }
-.cli-faltan-toggle:hover { color: var(--ob-fg-1); border-color: var(--ob-line-3); background: var(--ob-bg-2); }
-.cli-faltan-toggle[hidden] { display: none; }
-.cli-faltan-grid { margin-top: 8px; }
-.cli-faltan-grid[hidden] { display: none; }
+.cli-inst[hidden] { display: none; }
+.cli-inst svg { width: 12px; height: 12px; flex: none; }
+/* el texto vive colapsado (solo el ícono) y se abre con la fila */
+.cli-inst-t { max-width: 0; opacity: 0; margin-left: 0; overflow: hidden;
+  transition: max-width var(--dur-2) var(--ease-out), opacity var(--dur-2) var(--ease-out),
+              margin-left var(--dur-2) var(--ease-out); }
+.cli-fila:hover .cli-inst-t, .cli-fila:focus-within .cli-inst-t, .cli-inst:focus-visible .cli-inst-t,
+.cli-inst[data-estado="instalando"] .cli-inst-t { max-width: 96px; opacity: 1; margin-left: 6px; }
+.cli-inst:hover, .cli-inst:focus-visible {
+  background: var(--ob-accent-14); box-shadow: inset 0 0 0 1px var(--ob-accent), 0 0 14px -6px var(--ob-accent-glow);
+}
+.cli-inst:active { transform: scale(.97); }
+.cli-inst:focus-visible { outline: none; }
+/* instalando: gira, queda a la vista y no se puede pulsar de nuevo */
+.cli-inst[data-estado="instalando"] { cursor: progress; pointer-events: none; color: var(--ob-fg-2);
+  background: var(--ob-bg-3); box-shadow: inset 0 0 0 1px var(--ob-line-2); }
+.cli-inst-spin { width: 12px; height: 12px; flex: none; border-radius: 50%;
+  border: 2px solid var(--ob-line-3); border-top-color: var(--ob-accent);
+  animation: cli-inst-giro .8s linear infinite; }
+@keyframes cli-inst-giro { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .cli-inst-spin { animation: none; }
+  .cli-inst-t { transition: none; }
+}

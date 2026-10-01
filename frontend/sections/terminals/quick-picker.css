@@ -1,6 +1,9 @@
 /* Picker de terminal rápida (Ctrl+\) — "Nueva terminal": tanda de agentes
    (contadores con cupos) + disposición (blueprints de snapPresets).
-   Obsidian Glass: solo tokens --ob-*, borde-joya en gradiente, keycaps con relieve. */
+   Solo tokens --ob-*: sigue a los 24 temas (claros incluidos) y a Liquid Glass
+   (shared/liquid-glass.css pisa el cuerpo del panel y las filas cuando está ON).
+   Los agentes que faltan instalar se ven en su lugar, atenuados, y al pasar el
+   mouse ofrecen «Instalar» (shared/cli-instalar.js + .cli-inst en base.css). */
 .qp-overlay {
   --qp-acc-40: color-mix(in oklch, var(--ob-accent) 40%, transparent);
   --qp-acc-55: color-mix(in oklch, var(--ob-accent) 55%, transparent);
@@ -17,44 +20,45 @@
 @keyframes qp-ovin { from { opacity: 0; } }
 
 .qp-panel {
-  width: min(580px, calc(var(--jw-vw, 100vw) * .94)); max-height: calc(var(--jw-vh, 100vh) * .92);
+  width: min(600px, calc(var(--jw-vw, 100vw) * .94)); max-height: calc(var(--jw-vh, 100vh) * .92);
   overflow-y: auto; overflow-x: hidden;
-  position: relative; padding: 16px 20px 14px;
-  border-radius: var(--radius-xl); border: 1px solid transparent; outline: none;
+  position: relative; padding: 18px 20px 16px;
+  border-radius: var(--radius-xl); border: 0; outline: none;
   background:
-    linear-gradient(180deg, var(--ob-glass-hi), transparent 40%) padding-box,
-    linear-gradient(180deg, oklch(20% 0.022 300 / 0.97), oklch(15% 0.018 300 / 0.97)) padding-box,
-    linear-gradient(168deg, oklch(38% 0.05 293), oklch(28% 0.024 300) 45%, oklch(33% 0.05 255)) border-box;
-  box-shadow: var(--shadow-3), 0 0 70px -18px var(--qp-acc-40);
+    linear-gradient(180deg, var(--ob-glass-hi), transparent 36%),
+    linear-gradient(180deg, var(--ob-bg-2), var(--ob-bg-1));
+  box-shadow: inset 0 0 0 1px var(--ob-line-2), inset 0 1px 0 var(--ob-glass-hi),
+              var(--shadow-3), 0 0 70px -22px var(--qp-acc-40);
   animation: qp-in 300ms var(--ease-snap);
 }
 @keyframes qp-in { from { opacity: 0; transform: translateY(14px) scale(0.96); } }
 .qp-panel::before { /* filo superior */
-  content: ""; position: absolute; top: 0; left: 8%; right: 8%; height: 1px;
+  content: ""; position: absolute; top: 0; left: 8%; right: 8%; height: 1px; pointer-events: none;
   background: linear-gradient(90deg, transparent, var(--qp-acc-55) 30%, var(--qp-info-30) 70%, transparent);
 }
 
 /* ── Header ── */
-.qp-head { display: flex; align-items: flex-start; gap: 12px; margin-bottom: 14px; }
+.qp-head { display: flex; align-items: flex-start; gap: 13px; margin-bottom: 16px; }
 .qp-head-ico {
   position: relative; overflow: hidden; flex: 0 0 auto;
-  width: 40px; height: 40px; border-radius: 11px; display: grid; place-items: center;
+  width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
   background: linear-gradient(165deg,
     color-mix(in oklch, var(--ob-accent) 28%, transparent),
     color-mix(in oklch, var(--ob-accent) 9%, transparent) 62%);
-  border: 1px solid var(--ob-accent-24); color: var(--ob-accent-fg);
-  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.16), inset 0 -9px 14px -10px var(--qp-acc-40);
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), inset 0 1px 0 var(--ob-glass-hi),
+              inset 0 -9px 14px -10px var(--qp-acc-40);
+  color: var(--ob-accent-fg);
 }
 .qp-head-ico::before { content: ""; position: absolute; inset: 0;
-  background: linear-gradient(115deg, transparent 32%, oklch(100% 0 0 / 0.10) 47%, transparent 63%); }
-.qp-head-ico svg { width: 17px; height: 17px; }
+  background: linear-gradient(115deg, transparent 32%, var(--ob-glass-hi) 47%, transparent 63%); }
+.qp-head-ico svg { width: 18px; height: 18px; position: relative; }
 .qp-head-txt { flex: 1; min-width: 0; }
-.qp-title { margin: 0; font: italic 400 22px/1.15 var(--font-display); color: var(--ob-fg-0); letter-spacing: 0.005em; }
-.qp-sub { margin: 3px 0 0; font: 400 var(--text-sm) var(--font-ui); color: var(--ob-fg-3);
+.qp-title { margin: 1px 0 0; font: italic 400 24px/1.12 var(--font-display); color: var(--ob-fg-0); letter-spacing: 0.005em; }
+.qp-sub { margin: 4px 0 0; font: 400 var(--text-sm) var(--font-ui); color: var(--ob-fg-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qp-sub b.qp-proyecto { color: var(--ob-fg-1); font-weight: 600; }
 .qp-x {
-  margin-left: auto; flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px;
+  margin-left: auto; flex: 0 0 auto; width: 28px; height: 28px; border-radius: 9px;
   display: grid; place-items: center; background: none; border: none; cursor: pointer;
   color: var(--ob-fg-3); transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
@@ -62,170 +66,177 @@
 .qp-x svg { width: 11px; height: 11px; }
 
 /* ── Cabeceras de sección ── */
-.qp-sec { display: flex; align-items: baseline; gap: 10px; margin: 10px 2px 6px; }
+.qp-sec { display: flex; align-items: center; gap: 10px; margin: 12px 2px 8px; }
 .qp-lbl { font: 600 var(--text-2xs) var(--font-mono); letter-spacing: var(--ls-caps);
   text-transform: uppercase; color: var(--ob-fg-3); }
+.qp-pend { font: 600 9.5px var(--font-mono); letter-spacing: .03em; white-space: nowrap;
+  color: var(--ob-work); background: var(--ob-work-08); border-radius: var(--radius-pill); padding: 2px 8px;
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-work) 30%, transparent); }
+.qp-pend[hidden] { display: none; }
 .qp-fill { flex: 1; }
 .qp-cap { display: flex; align-items: center; gap: 8px; }
 .qp-cap-cells { display: flex; gap: 3px; }
 .qp-cap-cells i { width: 8px; height: 8px; border-radius: 2.5px; background: var(--ob-bg-3);
-  border: 1px solid var(--ob-line-1); transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out); }
-.qp-cap-cells i.uso { background: var(--ob-bg-4); border-color: var(--ob-line-2); }
-.qp-cap-cells i.on { background: var(--ob-accent); border-color: var(--ob-accent);
-  box-shadow: 0 0 8px var(--qp-acc-40); }
+  box-shadow: inset 0 0 0 1px var(--ob-line-1); transition: background var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
+.qp-cap-cells i.uso { background: var(--ob-bg-4); box-shadow: inset 0 0 0 1px var(--ob-line-2); }
+.qp-cap-cells i.on { background: var(--ob-accent); box-shadow: 0 0 8px var(--qp-acc-40); }
 .qp-cap-txt { font: 500 var(--text-2xs) var(--font-mono); color: var(--ob-fg-3); white-space: nowrap; }
 .qp-hint { min-width: 200px; text-align: right; font: 500 var(--text-xs) var(--font-ui);
   color: var(--ob-fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .qp-hint b { color: var(--ob-accent-fg); font-weight: 600; }
 
 /* ── Grid de agentes ── */
-/* minmax(0,1fr) y NO 1fr 1fr: el `auto` del track es el min-content de la fila,
-   y el chip "Falta instalar" (nowrap) lo inflaba → la columna derecha desbordaba
-   el panel y se cortaba en ventanas angostas / zoom>1. Ver
-   [[leccion-grid-minmax-chips-overflow]]. */
-.qp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
-/* con conteo IMPAR el último queda solo en su fila → centrado y con el mismo
-   ancho de columna (simetría pedida por el usuario 2026-07-10) */
+/* minmax(0,1fr) y NO 1fr 1fr: el `auto` del track es el min-content de la fila y un chip
+   nowrap lo inflaba → la columna derecha desbordaba el panel en ventanas angostas / zoom>1.
+   Ver [[leccion-grid-minmax-chips-overflow]]. */
+.qp-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* con conteo IMPAR el último queda solo en su fila → centrado y con el mismo ancho de columna */
 .qp-row:last-child:nth-child(odd) { grid-column: 1 / -1; width: calc(50% - 4px); justify-self: center; }
 .qp-row {
-  display: flex; align-items: center; gap: 9px; width: 100%; text-align: left;
-  padding: 7px 10px; cursor: pointer; color: var(--ob-fg-1);
+  position: relative; display: flex; align-items: center; gap: 10px; width: 100%; min-height: 48px;
+  text-align: left; padding: 8px 11px; cursor: pointer; color: var(--ob-fg-1);
   border-radius: var(--radius-lg); border: 1px solid transparent;
-  background:
-    linear-gradient(180deg, oklch(22% 0.02 300 / 0.7), oklch(18% 0.018 300 / 0.7)) padding-box,
-    linear-gradient(168deg, oklch(32% 0.03 293), oklch(26% 0.02 300) 60%) border-box;
-  transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
+  background: linear-gradient(180deg,
+    color-mix(in oklch, var(--ob-bg-3) 78%, transparent),
+    color-mix(in oklch, var(--ob-bg-2) 78%, transparent));
+  box-shadow: inset 0 0 0 1px var(--ob-line-1), inset 0 1px 0 var(--ob-glass-hi);
+  transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out),
+              background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out);
 }
-.qp-row:hover { transform: translateY(-1px); box-shadow: var(--shadow-1); }
+.qp-row:hover { transform: translateY(-1px);
+  box-shadow: inset 0 0 0 1px var(--ob-line-3), inset 0 1px 0 var(--ob-glass-hi), var(--shadow-1); }
 .qp-row:active { transform: translateY(0) scale(0.99); }
-/* sin instalar → deshabilitada: sin hover ni transform (informa pero no suma) */
-.qp-row:disabled { cursor: not-allowed; }
-.qp-row:disabled:hover, .qp-row:disabled:active { transform: none; box-shadow: none; }
+/* el foco del teclado se dibuja con diseño (los outlines están desactivados globalmente) */
+.qp-row:focus-visible { box-shadow: inset 0 0 0 1px var(--ob-accent), 0 0 0 3px var(--ob-accent-24); }
 .qp-row.has {
-  background:
-    linear-gradient(180deg, oklch(23% 0.026 300 / 0.85), oklch(19% 0.022 300 / 0.85)) padding-box,
-    linear-gradient(168deg, var(--qp-acc-55), oklch(33% 0.03 300) 45%, var(--qp-info-30)) border-box;
-  box-shadow: var(--shadow-1), 0 0 18px -6px var(--qp-acc-40);
+  background: linear-gradient(180deg, var(--ob-accent-14), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px var(--qp-acc-55), inset 0 1px 0 var(--ob-glass-hi),
+              var(--shadow-1), 0 0 18px -6px var(--qp-acc-40);
 }
+
+/* ── Sin instalar: SE VE (no se esconde), atenuado y con borde punteado ── */
 .qp-row.off {
-  background:
-    linear-gradient(180deg, oklch(15% 0.012 300 / 0.9), oklch(12% 0.01 300 / 0.9)) padding-box,
-    linear-gradient(168deg, oklch(22% 0.018 300), oklch(17% 0.014 300) 60%) border-box;
+  cursor: default; background: transparent; box-shadow: none;
+  border: 1px dashed var(--ob-line-2);
 }
-.qp-row.off .qp-txt b { color: var(--ob-fg-3); }
-.qp-row.off .qp-logo { background: var(--ob-bg-3); opacity: 0.5; }
-/* desc + aviso "Falta instalar" en la misma línea (las filas no crecen) */
-/* ⚠ distinto de .qp-sub (subtítulo del header): no chocar los selectores. */
-.qp-desc { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.qp-row.off:hover { transform: none; border-color: var(--qp-acc-55); background: var(--ob-accent-08); box-shadow: none; }
+.qp-row.off:focus-visible, .qp-row.off:focus-within { border-color: var(--ob-accent); box-shadow: 0 0 0 3px var(--ob-accent-24); }
+.qp-row.off .qp-txt b { color: var(--ob-fg-2); }
+.qp-row.off .qp-logo { filter: grayscale(.9); opacity: .55; transition: filter var(--dur-2) var(--ease-out), opacity var(--dur-2) var(--ease-out); }
+.qp-row.off:hover .qp-logo, .qp-row.off:focus-within .qp-logo { filter: none; opacity: .95; }
+/* abajo del nombre: el aviso «Falta instalar»; al pasar el mouse, el comando exacto que se va a correr */
+.qp-row.off .qp-d-txt { display: none; }
+.qp-row.off .qp-d-cmd:not([hidden]) { display: none; }
+.qp-row.off:hover .qp-falta, .qp-row.off:focus-within .qp-falta { display: none; }
+.qp-row.off:hover .qp-d-cmd:not([hidden]), .qp-row.off:focus-within .qp-d-cmd:not([hidden]) { display: block; }
+.qp-d-cmd { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font: 500 10px var(--font-mono) !important; color: var(--ob-fg-3) !important; }
+.qp-row.instalando { border-color: var(--ob-line-3); background: transparent; }
+.qp-row.instalando .qp-falta { color: var(--ob-fg-2); background: var(--ob-bg-3); border-color: var(--ob-line-2); }
+
+.qp-desc { display: flex; align-items: center; gap: 7px; min-width: 0; margin-top: 1px; }
 .qp-desc small { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qp-falta {
-  flex: 0 0 auto; white-space: nowrap;
+  flex: 0 0 auto; white-space: nowrap; font-style: normal;
   font: 600 9px var(--font-mono); text-transform: uppercase; letter-spacing: 0.05em;
   color: var(--ob-work); background: var(--ob-work-08);
-  border: 1px solid color-mix(in oklch, var(--ob-work) 32%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-work) 32%, transparent);
   border-radius: 999px; padding: 1px 7px;
 }
-.qp-logo { width: 28px; height: 28px; border-radius: 8px; background: var(--ob-bg-3);
-  border: 1px solid var(--ob-line-1);
+.qp-falta[hidden] { display: none; }
+.qp-logo { width: 32px; height: 32px; border-radius: 9px; background: var(--ob-bg-1);
+  box-shadow: inset 0 0 0 1px var(--ob-line-1), inset 0 1px 0 var(--ob-glass-hi);
   display: flex; align-items: center; justify-content: center; flex: none; }
 .qp-txt { flex: 1; min-width: 0; }
 .qp-txt b { display: block; font: 600 var(--text-sm) var(--font-ui); color: var(--ob-fg-0); }
 .qp-txt small { display: block; font: 400 var(--text-2xs) var(--font-ui); color: var(--ob-fg-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-/* keycap 1-6 con relieve */
+/* keycap con relieve */
 .qp-tecla {
-  flex: none; min-width: 20px; text-align: center; padding: 2px 6px; border-radius: 5px;
+  flex: none; min-width: 22px; text-align: center; padding: 2px 6px; border-radius: 6px;
   font: 600 10px var(--font-mono); color: var(--ob-fg-3);
-  background: linear-gradient(180deg, oklch(27% 0.022 300), oklch(21% 0.02 300));
-  border: 1px solid oklch(36% 0.025 300);
-  box-shadow: inset 0 1px 0 oklch(100% 0 0 / 0.10), 0 2px 0 oklch(11% 0.012 300);
-  transition: color var(--dur-2) var(--ease-out), background var(--dur-2) var(--ease-out),
-              border-color var(--dur-2) var(--ease-out);
+  background: linear-gradient(180deg, var(--ob-bg-4), var(--ob-bg-3));
+  box-shadow: inset 0 0 0 1px var(--ob-line-2), inset 0 1px 0 var(--ob-glass-hi), 0 2px 0 var(--ob-bg-void);
+  transition: color var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
-.qp-row:hover .qp-tecla { color: var(--ob-accent-fg); border-color: var(--ob-accent-24); }
+.qp-row:hover .qp-tecla { color: var(--ob-accent-fg); box-shadow: inset 0 0 0 1px var(--ob-accent-24), inset 0 1px 0 var(--ob-glass-hi), 0 2px 0 var(--ob-bg-void); }
 /* stepper − n + (reemplaza a la keycap cuando hay conteo) */
 .qp-step[hidden], .qp-tecla[hidden] { display: none; } /* [[gotcha-hidden-vs-display-de-clase]] */
 .qp-step { flex: none; display: flex; align-items: center; gap: 2px; padding: 2px;
-  border-radius: var(--radius-pill); border: 1px solid var(--ob-accent-24);
+  border-radius: var(--radius-pill); box-shadow: inset 0 0 0 1px var(--ob-accent-24);
   background: var(--ob-accent-08); }
-.qp-st-b { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center;
+.qp-st-b { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center;
   cursor: pointer; color: var(--ob-fg-2); font: 600 12px/1 var(--font-mono); user-select: none;
   transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out); }
-.qp-st-b:hover { background: var(--ob-accent-24); color: var(--ob-on-accent); }
+.qp-st-b:hover { background: var(--ob-accent-24); color: var(--ob-accent-fg); }
 .qp-step b { min-width: 15px; text-align: center; font: 700 var(--text-sm) var(--font-mono);
   color: var(--ob-accent-fg); }
 
 /* ── Disposición: mini-blueprints ── */
-/* overflow-y: hidden EXPLÍCITO: con solo overflow-x:auto, overflow-y computa a
-   `auto` y la entrada qp-rise (arranca en translateY(10px)) desborda 10px por
-   abajo DURANTE la animación → scrollbar vertical fantasma que roba ancho y
-   corre los tiles (parpadeo). La fila jamás debe scrollear en vertical. */
-.qp-disp { display: flex; gap: 9px; min-height: 78px; align-items: stretch; overflow-x: auto; overflow-y: hidden; }
+/* overflow-y: hidden EXPLÍCITO: con solo overflow-x:auto, overflow-y computa a `auto` y la
+   entrada qp-rise (translateY(10px)) desborda por abajo DURANTE la animación → scrollbar
+   vertical fantasma que roba ancho (parpadeo). La fila jamás debe scrollear en vertical. */
+.qp-disp { display: flex; gap: 9px; min-height: 80px; align-items: stretch; overflow-x: auto; overflow-y: hidden; padding: 2px; margin: -2px; }
 .qp-pd-void { flex: 1; display: grid; place-items: center; border: 1px dashed var(--ob-line-2);
   border-radius: var(--radius-lg); color: var(--ob-fg-4); font: 400 var(--text-xs) var(--font-ui); }
 .qp-pd {
   position: relative; flex: 0 0 auto; display: flex; flex-direction: column; gap: 5px;
-  padding: 6px 6px 5px; cursor: pointer;
-  border-radius: var(--radius-lg); border: 1px solid transparent;
-  background:
-    linear-gradient(180deg, oklch(21% 0.02 300 / 0.7), oklch(18% 0.018 300 / 0.7)) padding-box,
-    linear-gradient(168deg, oklch(31% 0.028 293), oklch(26% 0.02 300) 60%) border-box;
+  padding: 6px 6px 5px; cursor: pointer; border-radius: var(--radius-lg); border: 0;
+  background: linear-gradient(180deg,
+    color-mix(in oklch, var(--ob-bg-3) 78%, transparent),
+    color-mix(in oklch, var(--ob-bg-2) 78%, transparent));
+  box-shadow: inset 0 0 0 1px var(--ob-line-1), inset 0 1px 0 var(--ob-glass-hi);
   transition: transform var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
   animation: qp-rise 400ms var(--ease-out) both; animation-delay: calc(var(--i, 0) * 40ms);
 }
 @keyframes qp-rise { from { opacity: 0; transform: translateY(10px); } }
-.qp-pd:hover { transform: translateY(-1px); }
+.qp-pd:hover { transform: translateY(-1px); box-shadow: inset 0 0 0 1px var(--ob-line-3), inset 0 1px 0 var(--ob-glass-hi); }
+.qp-pd:focus-visible { box-shadow: inset 0 0 0 1px var(--ob-accent), 0 0 0 3px var(--ob-accent-24); }
 .qp-pd.sel {
-  background:
-    linear-gradient(180deg, oklch(23% 0.024 300 / 0.85), oklch(19% 0.02 300 / 0.85)) padding-box,
-    linear-gradient(168deg, var(--qp-acc-55), oklch(33% 0.03 300) 45%, var(--qp-info-30)) border-box;
-  box-shadow: var(--shadow-1), 0 0 20px -6px var(--qp-acc-40);
+  background: linear-gradient(180deg, var(--ob-accent-14), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px var(--qp-acc-55), inset 0 1px 0 var(--ob-glass-hi), 0 0 20px -6px var(--qp-acc-40);
 }
 .qp-pd-thumb { position: relative; width: 84px; height: 50px; border-radius: 6px; overflow: hidden; display: block; }
 .qp-pd-thumb i { position: absolute; border-radius: 2.5px; background: var(--ob-bg-3);
-  border: 1px solid var(--ob-line-2); transition: background var(--dur-2) var(--ease-out), border-color var(--dur-2) var(--ease-out); }
-.qp-pd:hover .qp-pd-thumb i { border-color: var(--ob-line-3); }
-.qp-pd.sel .qp-pd-thumb i { background: var(--ob-accent-14); border-color: var(--qp-acc-55);
-  box-shadow: inset 0 0 8px -4px var(--qp-acc-40); }
+  box-shadow: inset 0 0 0 1px var(--ob-line-2); transition: background var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out); }
+.qp-pd:hover .qp-pd-thumb i { box-shadow: inset 0 0 0 1px var(--ob-line-3); }
+.qp-pd.sel .qp-pd-thumb i { background: var(--ob-accent-14); box-shadow: inset 0 0 0 1px var(--qp-acc-55), inset 0 0 8px -4px var(--qp-acc-40); }
 .qp-pd small { text-align: center; font: 600 9px var(--font-mono); letter-spacing: 0.06em;
   color: var(--ob-fg-3); text-transform: uppercase; max-width: 84px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qp-pd.sel small { color: var(--ob-accent-fg); }
 
 /* ── Pie: resumen + lanzar ── */
-.qp-foot { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+.qp-foot { display: flex; align-items: center; gap: 12px; margin-top: 14px; padding-top: 12px;
+  border-top: 1px solid var(--ob-line-1); }
 .qp-sum { flex: 1; font: 400 var(--text-xs) var(--font-ui); color: var(--ob-fg-3);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .qp-sum b { color: var(--ob-fg-1); font-weight: 600; }
 .qp-go {
-  flex: 0 0 auto; display: flex; align-items: center; gap: 9px; padding: 8px 15px;
-  cursor: pointer; border-radius: var(--radius-pill);
+  flex: 0 0 auto; display: flex; align-items: center; gap: 9px; padding: 9px 16px;
+  cursor: pointer; border-radius: var(--radius-pill); border: 0;
   background: linear-gradient(180deg, color-mix(in oklch, var(--ob-accent) 88%, white), var(--ob-accent) 40%, var(--ob-accent-dim));
-  border: 1px solid var(--qp-acc-55); color: var(--ob-on-accent);
-  font: 600 var(--text-sm) var(--font-ui);
-  box-shadow: inset 0 1px 0 var(--ob-bevel-accent), var(--shadow-1), 0 4px 22px -6px var(--qp-acc-55);
+  color: var(--ob-on-accent); font: 600 var(--text-sm) var(--font-ui);
+  box-shadow: inset 0 0 0 1px var(--qp-acc-55), inset 0 1px 0 var(--ob-bevel-accent), var(--shadow-1), 0 4px 22px -6px var(--qp-acc-55);
   transition: transform var(--dur-2) var(--ease-out), filter var(--dur-2) var(--ease-out),
               background var(--dur-2) var(--ease-out), box-shadow var(--dur-2) var(--ease-out);
 }
 .qp-go:hover:not(:disabled) { transform: translateY(-1px); filter: brightness(1.06); }
 .qp-go:active:not(:disabled) { transform: translateY(0) scale(0.98); }
 .qp-go kbd { padding: 2px 6px; border-radius: 5px; font: 600 10px var(--font-mono);
-  background: oklch(100% 0 0 / 0.16); border: 1px solid oklch(100% 0 0 / 0.28);
-  box-shadow: 0 1.5px 0 oklch(0% 0 0 / 0.22); }
-.qp-go:disabled { background: var(--ob-bg-3); border-color: var(--ob-line-2); color: var(--ob-fg-4);
-  box-shadow: none; cursor: default; filter: none; transform: none; }
-.qp-go:disabled kbd { background: var(--ob-bg-2); border-color: var(--ob-line-2);
-  color: var(--ob-fg-4); box-shadow: none; }
+  background: oklch(100% 0 0 / 0.16); box-shadow: inset 0 0 0 1px oklch(100% 0 0 / 0.28), 0 1.5px 0 oklch(0% 0 0 / 0.22); }
+.qp-go:disabled { background: var(--ob-bg-3); color: var(--ob-fg-4); cursor: default; filter: none; transform: none;
+  box-shadow: inset 0 0 0 1px var(--ob-line-2); }
+.qp-go:disabled kbd { background: var(--ob-bg-2); box-shadow: inset 0 0 0 1px var(--ob-line-2); color: var(--ob-fg-4); }
 
 @media (prefers-reduced-motion: reduce) {
   .qp-overlay, .qp-panel, .qp-pd { animation: none; }
-  .qp-row, .qp-pd, .qp-go, .qp-tecla, .qp-st-b { transition: none; }
+  .qp-row, .qp-pd, .qp-go, .qp-tecla, .qp-st-b, .qp-logo { transition: none; }
 }
 
-/* Angosto: 2 columnas no dejan ancho para el chip "Falta instalar" completo
-   (nowrap) → 1 columna, y la última fila impar ocupa el ancho entero. */
+/* Angosto: 2 columnas no dejan ancho para el aviso y la pastilla → 1 columna, y la
+   última fila impar ocupa el ancho entero. */
 @media (max-width: 540px) {
   .qp-grid { grid-template-columns: 1fr; }
   .qp-row:last-child:nth-child(odd) { grid-column: auto; width: 100%; justify-self: stretch; }
 }
-

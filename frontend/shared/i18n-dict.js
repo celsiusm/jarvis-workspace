@@ -2365,5 +2365,16 @@
     "Se abre como una ventana de Finder. Si no la ves, buscala en el Dock.": "It opens as a Finder window. If you can't see it, look for it in the Dock.",
     "Se abre como una ventana de tu sistema. Si no la ves, buscala detrás del navegador.": "It opens as a window of your system. If you can't see it, look for it behind the browser.",
     "Esa carpeta está en Windows (/mnt): funciona, pero va más lento. Para trabajar mejor elegí una dentro de Linux (tu home).": "That folder is on Windows (/mnt): it works, but it's slower. For better results pick one inside Linux (your home).",
+    "Cómo instalar": "How to install",
+    "Se instala desde su sitio oficial": "Installs from its official site",
+    "Abre una terminal y corre:": "Opens a terminal and runs:",
+    "Incluye instalar Node.js.": "Includes installing Node.js.",
+    "{n} por instalar": "{n} to install",
+    "{cli} quedó instalado: ya lo podés lanzar": "{cli} is installed: you can launch it now",
+    "Instalando {cli} en una terminal nueva…": "Installing {cli} in a new terminal…",
+    "Instalando {cli}… puede tardar unos minutos": "Installing {cli}… it may take a few minutes",
+    "No se pudo abrir la terminal de instalación: {m}": "Couldn't open the install terminal: {m}",
+    "{cli} no se pudo instalar: {m}": "{cli} couldn't be installed: {m}",
+    "Abrí un proyecto para instalarlo desde una terminal": "Open a project to install it from a terminal",
   });
 })();
