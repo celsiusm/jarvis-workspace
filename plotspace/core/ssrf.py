@@ -16,6 +16,12 @@ Política calibrada a esta app LOCAL single-user:
     suma seguridad y rompería previews legítimos de dev servers en otra
     máquina de la red.
 
+EXCEPCIÓN ACOTADA — tus dev servers: el Web Preview existe para ver el localhost que
+levantó un agente, así que `permitir_loopback` deja pasar un nombre de loopback
+(`localhost`, `127.0.0.1`, `::1`) SOLO en los puertos que el caller declara (los dev
+servers detectados por `dev_detect`). Un dominio público que resuelva a 127.0.0.1
+(DNS-rebinding) sigue bloqueado: la excepción mira el NOMBRE escrito, no solo la IP.
+
 `_ip_bloqueada` es pura y testeable; `url_destino_segura` resuelve DNS (blocking
 — los callers la corren en un thread).
 """
@@ -49,7 +55,24 @@ def _resolver(hostname: str) -> list:
         return []
 
 
-def resolver_y_validar(url: str) -> tuple:
+_NOMBRES_LOOPBACK = ('localhost', '127.0.0.1', '0.0.0.0', '::1')
+
+
+def es_loopback_permitido(url: str, puertos) -> bool:
+    """True si `url` apunta a un nombre de loopback en uno de los `puertos` permitidos
+    (iterable de ints). Pura: no resuelve DNS."""
+    try:
+        partes = urlsplit((url or '').strip())
+        host = (partes.hostname or '').lower()
+        puerto = partes.port or (443 if partes.scheme == 'https' else 80)
+    except ValueError:
+        return False
+    if partes.scheme not in ('http', 'https') or host not in _NOMBRES_LOOPBACK:
+        return False
+    return puerto in set(puertos or ())
+
+
+def resolver_y_validar(url: str, permitir_loopback=None) -> tuple:
     """(ok, motivo, ip). Como url_destino_segura pero devuelve TAMBIÉN una IP
     validada (la primera resuelta, ya confirmada no-interna) para que el caller
     pueda PINNEAR el connect a esa IP y cerrar el TOCTOU de DNS-rebinding (el
@@ -64,6 +87,8 @@ def resolver_y_validar(url: str) -> tuple:
     host = partes.hostname
     if not host:
         return (False, 'URL sin host', None)
+    if permitir_loopback and es_loopback_permitido(u, permitir_loopback):
+        return (True, None, '127.0.0.1')
     ips = _resolver(host)
     if not ips:
         return (False, 'el host no resuelve', None)
@@ -73,9 +98,9 @@ def resolver_y_validar(url: str) -> tuple:
     return (True, None, ips[0])
 
 
-def url_destino_segura(url: str) -> tuple:
+def url_destino_segura(url: str, permitir_loopback=None) -> tuple:
     """(ok, motivo). ok=True solo si es http/https a un host que resuelve a
     IP(s) NO bloqueadas. Si CUALQUIER IP resuelta es interna peligrosa, se
     rechaza (defensa contra hosts que resuelven a varias IPs)."""
-    ok, motivo, _ip = resolver_y_validar(url)
+    ok, motivo, _ip = resolver_y_validar(url, permitir_loopback)
     return (ok, motivo)

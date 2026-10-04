@@ -27,6 +27,7 @@ abre un contexto aislado (cookies/storage propios).
 """
 import asyncio
 import base64
+import os
 from typing import Optional
 
 from plotspace.core import ssrf
@@ -39,6 +40,8 @@ MAX_SESIONES = 4
 # Tamaño de un frame del screencast (JPEG). 70 es el balance calidad/peso.
 CALIDAD_JPEG = 70
 # Ancho/alto máximos del stream: no manda más píxeles de los que se muestran.
+MIN_ANCHO = 240    # un panel de una vista dividida angosta puede ser así de chico
+MIN_ALTO = 160
 MAX_ANCHO = 1600
 MAX_ALTO = 1000
 
@@ -112,6 +115,21 @@ class _Pool:
 _pool = _Pool()
 
 
+_LOOPBACK = ('localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]')
+
+
+def _puertos_loopback() -> set:
+    """Puertos de loopback que el browser puede abrir: los dev servers que Jarvis
+    detectó. `JARVIS_BROWSER_LOOPBACK=all` abre cualquier puerto (salvo el de Jarvis)."""
+    try:
+        from plotspace.core import dev_detect
+        if os.environ.get('JARVIS_BROWSER_LOOPBACK', '').strip().lower() == 'all':
+            return set(range(1, 65536)) - {dev_detect.PUERTO_JARVIS}
+        return dev_detect.puertos_vivos()
+    except Exception:
+        return set()
+
+
 def _scheme_permitido(url: str) -> bool:
     s = url.split(':', 1)[0].lower() if ':' in url else ''
     return s in ('http', 'https', 'data', 'blob', 'about')
@@ -128,7 +146,8 @@ async def _guard(route):
         return
     try:
         if req.resource_type == 'document':
-            ok, _motivo = await asyncio.to_thread(ssrf.url_destino_segura, url)
+            ok, _motivo = await asyncio.to_thread(
+                ssrf.url_destino_segura, url, _puertos_loopback())
             if not ok:
                 await route.abort()
                 return
@@ -139,9 +158,17 @@ async def _guard(route):
                 host = (urlsplit(url).hostname or '').lower()
             except ValueError:
                 pass
-            if host in ('localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]'):
-                await route.abort()
-                return
+            if host in _LOOPBACK:
+                # Un dev server carga sus propios assets/API en loopback; una página
+                # PÚBLICA, en cambio, no puede tocar tu localhost (exfiltración).
+                try:
+                    pagina = req.frame.page.url
+                except Exception:
+                    pagina = ''
+                if not (ssrf.es_loopback_permitido(pagina, _puertos_loopback())
+                        and ssrf.es_loopback_permitido(url, _puertos_loopback())):
+                    await route.abort()
+                    return
     except Exception:
         pass
     try:
@@ -194,8 +221,8 @@ class Sesion:
     async def crear(cls, ancho: int = 1280, alto: int = 800):
         if _pool.vivas >= MAX_SESIONES:
             raise BrowserError('demasiadas pestañas del browser abiertas')
-        ancho = max(320, min(int(ancho or 1280), MAX_ANCHO))
-        alto = max(240, min(int(alto or 800), MAX_ALTO))
+        ancho = max(MIN_ANCHO, min(int(ancho or 1280), MAX_ANCHO))
+        alto = max(MIN_ALTO, min(int(alto or 800), MAX_ALTO))
         b = await _pool.browser()
         cola: asyncio.Queue = asyncio.Queue(maxsize=4)
         ctx = await b.new_context(viewport={'width': ancho, 'height': alto},
@@ -228,8 +255,12 @@ class Sesion:
 
     # ── Navegación ──────────────────────────────────────────────────
     async def navegar(self, url: str):
-        ok, motivo = await asyncio.to_thread(ssrf.url_destino_segura, url)
+        ok, motivo = await asyncio.to_thread(
+            ssrf.url_destino_segura, url, _puertos_loopback())
         if not ok:
+            if 'host interno' in str(motivo):
+                motivo = ('ese localhost no es un servidor de desarrollo detectado en tus '
+                          'terminales (solo se abren esos puertos)')
             raise BrowserError(f'URL no permitida: {motivo}')
         await self.page.goto(url, wait_until='domcontentloaded', timeout=30000)
         await self._emitir_nav()
@@ -280,8 +311,8 @@ class Sesion:
         self._screencast_on = True
 
     async def redimensionar(self, w: int, h: int):
-        w = max(320, min(int(w or self.ancho), MAX_ANCHO))
-        h = max(240, min(int(h or self.alto), MAX_ALTO))
+        w = max(MIN_ANCHO, min(int(w or self.ancho), MAX_ANCHO))
+        h = max(MIN_ALTO, min(int(h or self.alto), MAX_ALTO))
         if (w, h) == (self.ancho, self.alto):
             return
         self.ancho, self.alto = w, h
