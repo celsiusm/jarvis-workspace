@@ -205,3 +205,24 @@ def test_formato_de_contexto_emite_las_dos_formas(capsys):
 if __name__ == '__main__':
     import pytest
     sys.exit(pytest.main([__file__, '-q']))
+
+
+def test_stop_avisa_el_fin_y_no_imprime_nada(monkeypatch, capsys):
+    """Stop = el agente terminó de responder: POST /api/swarm/fin y silencio
+    (un hook Stop que imprime puede mantener al agente en marcha)."""
+    llamadas = []
+    monkeypatch.setenv('JARVIS_TERMINAL_ID', '12')
+    monkeypatch.setattr(hook, '_post', lambda ruta, cuerpo, t: llamadas.append((ruta, cuerpo)))
+    monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'hook_event_name': 'Stop'})))
+    hook.main()
+    assert llamadas == [('/api/swarm/fin', {'terminal_id': 12})]
+    assert capsys.readouterr().out == ''
+
+
+def test_stop_con_server_caido_no_rompe(monkeypatch, capsys):
+    monkeypatch.setenv('JARVIS_TERMINAL_ID', '12')
+    def _boom(*a, **k): raise OSError('caído')
+    monkeypatch.setattr(hook, '_post', _boom)
+    monkeypatch.setattr(sys, 'stdin', io.StringIO(json.dumps({'hook_event_name': 'Stop'})))
+    hook.main()
+    assert capsys.readouterr().out == ''

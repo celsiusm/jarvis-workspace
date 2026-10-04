@@ -325,6 +325,16 @@ def main():
     # what territory it can't step on. It's the good channel: zero turns, zero
     # latency, and it doesn't depend on the agent remembering to ask (which is
     # precisely what it didn't do).
+    # FIN (Stop): the agent just finished answering → Jarvis rings the bell NOW.
+    # Fire-and-forget; never prints anything (a Stop hook that prints can keep
+    # the agent going).
+    if evento == "Stop":
+        try:
+            _post("/api/swarm/fin", {"terminal_id": int(tid)}, TIMEOUT_POST_S)
+        except Exception:
+            pass
+        return
+
     if evento == "UserPromptSubmit":
         try:
             r = _get(f"/api/swarm/briefing/{tid}", TIMEOUT_BRIEF_S)

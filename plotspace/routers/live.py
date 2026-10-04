@@ -199,6 +199,46 @@ class HookOp(BaseModel):
     session_id: Optional[str] = None
 
 
+class HookFin(BaseModel):
+    terminal_id: int
+
+
+def _fila_terminal(tid: int):
+    conn = get_db()
+    try:
+        c = conn.cursor()
+        c.execute('SELECT id, project_id, nombre FROM terminals WHERE id = ? AND activa = 1', (tid,))
+        r = c.fetchone()
+        return dict(r) if r else None
+    finally:
+        conn.close()
+
+
+@router.post("/swarm/fin")
+async def swarm_fin(body: HookFin):
+    """Hook `Stop` del CLI: el agente ACABA de terminar de responder.
+
+    Es la señal exacta (el heurístico de quietud del pane tarda ~16 s): se emite
+    `agente_termino` YA — el frontend suena la campanita — y se le avisa a
+    agent_watch para que no repita ese mismo final. Nunca tira error (un 500 acá
+    ensuciaría el pane del agente)."""
+    try:
+        fila = await asyncio.to_thread(_fila_terminal, body.terminal_id)
+        if not fila:
+            return {'ok': False}
+        from plotspace.core import agent_watch
+        from plotspace.core.events import broadcaster
+        agent_watch.registrar_fin_hook(fila['id'])
+        await broadcaster.broadcast(fila['project_id'], {
+            'type': 'agente_termino',
+            'terminal_id': fila['id'],
+            'terminal_nombre': fila['nombre'],
+        })
+        return {'ok': True}
+    except Exception:
+        return {'ok': False}
+
+
 @router.post("/swarm/op")
 async def swarm_op(body: HookOp):
     """PostToolUse: el agente YA escribió. Registra la provenance real.

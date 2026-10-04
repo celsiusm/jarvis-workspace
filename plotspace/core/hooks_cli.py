@@ -42,6 +42,9 @@ _EVENTOS = (
     ('PostToolUse', 'Edit|Write|NotebookEdit'),
     ('PreToolUse',  'Edit|Write|NotebookEdit'),
     ('UserPromptSubmit', None),
+    # El agente terminó de responder: el hook avisa a Jarvis al instante y suena
+    # la campanita (el heurístico de quietud del pane tardaba ~16 s).
+    ('Stop', None),
 )
 
 
