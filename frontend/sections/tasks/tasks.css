@@ -26,7 +26,7 @@
   --tk-boot: color-mix(in oklch, var(--ob-info) 55%, var(--ob-fg-3));
   --tk-dead: var(--ob-err);
   --tk-idle: var(--ob-fg-3);
-  --tk-hair: color-mix(in oklch, var(--ob-fg-0) 8%, transparent);
+  --tk-hair: color-mix(in oklch, var(--ob-fg-0) 7%, transparent);
   --tk-r: 12px;
 
   position: relative;
@@ -35,9 +35,7 @@
   width: 100%;
   height: 100%;
   min-width: 0;
-  background:
-    radial-gradient(120% 60% at 0% -10%, color-mix(in oklch, var(--ob-accent) 9%, transparent), transparent 60%),
-    var(--ob-bg-0);
+  background: var(--ob-bg-0);
   color: var(--ob-fg-1);
   font-family: var(--font-ui);
   overflow: hidden;
@@ -63,404 +61,125 @@ html[data-theme="aurora"] .tk-root { --tk-work: var(--ob-accent); }
   background: var(--st, var(--ob-fg-3));
 }
 
-/* ══ Encabezado ═══════════════════════════════════════════════════ */
-.tk-head {
-  flex: 0 0 auto;
-  padding: 14px 14px 10px;
-  box-shadow: inset 0 -1px 0 var(--tk-hair);
-}
-.tk-head-row {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
-  min-width: 0;
-}
-.tk-live {
-  align-self: center;
-  width: 7px; height: 7px;
-  border-radius: 50%;
-  background: var(--ob-accent);
-  box-shadow: 0 0 0 3px var(--ob-accent-14, color-mix(in oklch, var(--ob-accent) 14%, transparent));
-  animation: tk-respira 2.4s var(--ease-out) infinite;
-}
+/* ══ Encabezado ═══════════════════════════════════════════════════
+   Minimal: un título sobrio, el conteo en gris y los estados como texto con un
+   punto (sin cápsulas ni anillos). El color solo aparece donde hay algo que mirar. */
+.tk-head { flex: 0 0 auto; padding: 16px 16px 8px; }
+.tk-head-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.tk-live { display: none; }
 .tk-title {
-  margin: 0;
-  font-family: var(--font-display);
-  font-style: italic;
-  font-weight: 400;
-  font-size: var(--text-xl);
-  letter-spacing: var(--ls-tight);
-  color: var(--ob-fg-0);
-  line-height: 1;
+  margin: 0; font: 600 14px/1.2 var(--font-ui); letter-spacing: -.005em; color: var(--ob-fg-0);
 }
-.tk-sub {
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--ob-fg-3);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-}
-.tk-total {
-  margin-left: auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--ob-fg-2);
-  padding: 1px 7px;
-  border-radius: var(--radius-pill);
-  box-shadow: inset 0 0 0 1px var(--tk-hair);
-}
+.tk-sub { display: none; }
+.tk-total { margin-left: auto; font: 500 12px var(--font-ui); color: var(--ob-fg-3); font-variant-numeric: tabular-nums; }
 .tk-total:empty { display: none; }
 
-.tk-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  margin-top: 10px;
-}
+.tk-chips { display: flex; flex-wrap: wrap; gap: 4px 14px; margin-top: 8px; }
 .tk-chips:empty { display: none; }
 .tk-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  height: 22px;
-  padding: 0 9px;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: color-mix(in oklch, var(--st) 72%, var(--ob-fg-0));
-  background: color-mix(in oklch, var(--st) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 26%, transparent);
-  white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px; font: 500 12px var(--font-ui);
+  color: var(--ob-fg-2); white-space: nowrap;
 }
-.tk-chip.tk-st-quieto { color: var(--ob-fg-2); }
-/* El que importa: alguien espera tu respuesta → brilla y late */
-.tk-chip.tk-st-esperando {
-  color: var(--ob-fg-0);
-  font-weight: 650;
-  background: color-mix(in oklch, var(--st) 24%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 70%, transparent),
-              0 0 14px -2px color-mix(in oklch, var(--st) 65%, transparent);
-  animation: tk-late 1.6s ease-in-out infinite;
-}
-.tk-chip.tk-st-esperando .tk-dot { animation: tk-pulso 1.6s ease-in-out infinite; }
-.tk-chip.tk-st-trabajando .tk-dot { animation: tk-pulso 1.8s ease-in-out infinite; }
+.tk-chip.tk-st-esperando { color: var(--ob-fg-0); font-weight: 600; }
+.tk-chip.tk-st-esperando .tk-dot, .tk-chip.tk-st-trabajando .tk-dot { animation: tk-pulso 1.8s ease-in-out infinite; }
 
 /* ══ Scroll + grupos ═════════════════════════════════════════════ */
-.tk-scroll {
-  flex: 1 1 auto;
-  min-height: 0;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding: 10px 10px 16px;
-  scrollbar-width: thin;
-}
-.tk-grupos {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.tk-grupo { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.tk-scroll { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 4px 8px 16px; scrollbar-width: thin; }
+.tk-grupos { display: flex; flex-direction: column; gap: 18px; }
+.tk-grupo { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 
 .tk-grupo-kicker {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--ob-fg-3);
+  display: flex; align-items: center; gap: 6px; font: 500 11.5px var(--font-ui); color: var(--ob-fg-3);
 }
-.tk-grupo-kicker svg { flex: 0 0 auto; }
+.tk-grupo-kicker svg { flex: 0 0 auto; opacity: .8; }
 
-/* Grupo de Jarvis: una tarjeta tintada por objetivo (Liquid Glass acento) */
-.tk-grupo-jarvis {
-  padding: 10px;
-  border-radius: 16px;
-  background: var(--lg-gloss), linear-gradient(180deg,
-    color-mix(in oklch, var(--ob-accent) 9%, transparent),
-    color-mix(in oklch, var(--ob-accent) 3%, transparent));
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 22%, transparent), var(--lg-inset);
-}
+/* Grupo de Jarvis: sin tarjeta tintada — el objetivo encabeza la lista y una barra fina marca el avance */
+.tk-grupo-jarvis { padding: 0; }
 .tk-grupo-jarvis .tk-grupo-kicker { color: var(--ob-accent-fg); }
-.tk-grupo-head { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 0 2px; }
+.tk-grupo-head { display: flex; flex-direction: column; gap: 6px; min-width: 0; padding: 0 8px 6px; }
 .tk-grupo-usuario .tk-grupo-head { flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px 10px; }
 .tk-grupo-usuario .tk-grupo-kicker { white-space: nowrap; }
 .tk-grupo-obj {
-  font-size: var(--text-base);
-  font-weight: 600;
-  line-height: 1.35;
-  color: var(--ob-fg-0);
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
+  font: 600 13px/1.35 var(--font-ui); color: var(--ob-fg-0);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
 }
 .tk-grupo-obj-vacio { color: var(--ob-fg-2); font-weight: 500; }
 .tk-grupo-prog { display: flex; flex-direction: column; gap: 5px; }
-.tk-barra {
-  display: flex;
-  gap: 2px;
-  height: 4px;
-  border-radius: var(--radius-pill);
-  overflow: hidden;
-  background: var(--tk-hair);
-}
+.tk-barra { display: flex; gap: 2px; height: 3px; border-radius: var(--radius-pill); overflow: hidden; background: var(--tk-hair); }
 .tk-seg { display: block; flex-basis: 0; min-width: 6px; background: var(--st); }
 .tk-seg.tk-st-quieto { background: color-mix(in oklch, var(--st) 55%, transparent); }
-.tk-grupo-res {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 2px 6px;
-  font-size: var(--text-xs);
-  color: var(--ob-fg-2);
-}
-.tk-gp { color: color-mix(in oklch, var(--st) 70%, var(--ob-fg-1)); white-space: nowrap; }
-.tk-gp.tk-st-quieto { color: var(--ob-fg-2); }
-.tk-gp.tk-st-esperando { font-weight: 650; }
+.tk-grupo-res { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; font: 400 12px var(--font-ui); color: var(--ob-fg-3); }
+.tk-gp { color: var(--ob-fg-2); white-space: nowrap; }
+.tk-gp.tk-st-esperando { color: var(--ob-fg-0); font-weight: 600; }
 .tk-sep { color: var(--ob-fg-4); }
 
-.tk-lista {
-  display: grid;
-  align-items: start;
-  grid-template-columns: minmax(0, 1fr);
-  gap: 6px;
-}
+.tk-lista { display: grid; align-items: start; grid-template-columns: minmax(0, 1fr); gap: 0; }
 
-/* ══ Fila de agente ══════════════════════════════════════════════ */
+/* ══ Fila de agente ══════════════════════════════════════════════
+   Una fila plana: logo · nombre y qué hace · estado. Sin tarjeta; el hover la tiñe. */
 .tk-agente {
-  position: relative;
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  padding: 10px 11px 10px 10px;
-  border-radius: var(--tk-r);
-  background: var(--lg-gloss), var(--lg-body);
-  box-shadow: var(--lg-ring), var(--lg-inset);
-  cursor: pointer;
-  overflow: hidden;
-  outline: none;
-  transition: box-shadow var(--dur-2) var(--ease-out), transform var(--dur-1) var(--ease-out);
+  position: relative; display: flex; align-items: flex-start; gap: 11px; min-width: 0;
+  padding: 10px 8px; border-radius: 10px; cursor: pointer; outline: none;
+  transition: background var(--dur-1) var(--ease-out);
 }
-.tk-agente:hover {
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 38%, var(--tk-hair)), var(--lg-inset), var(--lg-drop);
-}
-.tk-agente:active { transform: scale(.992); }
-.tk-agente:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--ob-accent), var(--lg-inset);
-}
+.tk-agente + .tk-agente { box-shadow: 0 -1px 0 var(--tk-hair); }
+.tk-agente:hover { background: color-mix(in oklch, var(--ob-fg-0) 4%, transparent); }
+.tk-agente:hover, .tk-agente:hover + .tk-agente { box-shadow: none; }
+.tk-agente:focus-visible { box-shadow: inset 0 0 0 2px var(--ob-accent-24); background: color-mix(in oklch, var(--ob-fg-0) 4%, transparent); }
 
-/* Borde de estado a la izquierda (sin reflow: pseudo absoluto) */
-.tk-agente::before {
-  content: '';
-  position: absolute;
-  left: 0; top: 10px; bottom: 10px;
-  width: 2px;
-  border-radius: 0 2px 2px 0;
-  background: var(--st);
-  opacity: .85;
-}
-.tk-agente.tk-st-quieto::before { opacity: .35; }
+/* ESPERANDO: alguien necesita tu respuesta — el único estado que se tiñe */
+.tk-agente.tk-st-esperando { background: color-mix(in oklch, var(--st) 9%, transparent); }
+.tk-agente.tk-st-esperando:hover { background: color-mix(in oklch, var(--st) 14%, transparent); }
+.tk-agente.tk-st-caido .tk-logo img { filter: grayscale(1); opacity: .55; }
 
-/* Trabajando: barrido sutil en la base + punto que respira */
-.tk-agente.tk-st-trabajando::after {
-  content: '';
-  position: absolute;
-  left: 0; right: 0; bottom: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent, color-mix(in oklch, var(--st) 80%, transparent), transparent);
-  transform: translateX(-100%);
-  animation: tk-barrido 2.2s var(--ease-in-out, ease-in-out) infinite;
-  opacity: .8;
-}
+.tk-logo { position: relative; flex: 0 0 auto; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 8px; background: var(--ob-bg-2); }
+.tk-logo .cli-logo-shell { display: grid; place-items: center; font: 700 12px var(--font-mono); color: var(--ob-fg-2); }
 
-/* ESPERANDO: el estado estrella — ámbar encendido, late y brilla */
-.tk-agente.tk-st-esperando {
-  background:
-    linear-gradient(180deg, color-mix(in oklch, var(--st) 16%, transparent), color-mix(in oklch, var(--st) 7%, transparent)),
-    var(--lg-body);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 70%, transparent), var(--lg-inset),
-              0 0 22px -6px color-mix(in oklch, var(--st) 70%, transparent);
-  animation: tk-late-card 1.6s ease-in-out infinite;
-}
-.tk-agente.tk-st-esperando:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--ob-accent), 0 0 22px -6px color-mix(in oklch, var(--st) 70%, transparent);
-}
-
-.tk-agente.tk-st-caido { background: linear-gradient(180deg, color-mix(in oklch, var(--st) 7%, transparent), transparent), var(--lg-body); }
-.tk-agente.tk-st-caido .tk-logo img { filter: grayscale(1); opacity: .6; }
-
-/* Logo del CLI con anillo de estado */
-.tk-logo {
-  position: relative;
-  flex: 0 0 auto;
-  width: 32px; height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 10px;
-  background: color-mix(in oklch, var(--ob-bg-void) 55%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 45%, var(--tk-hair));
-}
-.tk-logo .cli-logo-shell {
-  display: grid; place-items: center;
-  font-family: var(--font-mono); font-size: var(--text-sm); font-weight: 700;
-  color: var(--ob-fg-2);
-}
-.tk-st-trabajando .tk-logo,
-.tk-st-esperando .tk-logo {
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 75%, transparent),
-              0 0 12px -3px color-mix(in oklch, var(--st) 70%, transparent);
-}
-
-.tk-cuerpo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.tk-cuerpo { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
 .tk-fila1 { display: flex; align-items: center; gap: 8px; min-width: 0; }
-.tk-nombre {
-  flex: 1 1 auto;
-  min-width: 0;
-  font-size: var(--text-base);
-  font-weight: 650;
-  color: var(--ob-fg-0);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
+.tk-nombre { flex: 1 1 auto; min-width: 0; font: 600 13px var(--font-ui); color: var(--ob-fg-0); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
+/* Estado: texto con punto, sin cápsula */
 .tk-pill {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  height: 20px;
-  padding: 0 8px;
-  border-radius: var(--radius-pill);
-  font-size: var(--text-2xs);
-  font-weight: 600;
-  letter-spacing: .01em;
-  white-space: nowrap;
-  color: color-mix(in oklch, var(--st) 78%, var(--ob-fg-0));
-  background: color-mix(in oklch, var(--st) 12%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 30%, transparent);
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 6px; font: 500 11.5px var(--font-ui);
+  white-space: nowrap; color: var(--ob-fg-2);
 }
-.tk-pill svg { flex: 0 0 auto; }
-.tk-pill-dur {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  color: color-mix(in oklch, var(--st) 50%, var(--ob-fg-2));
-}
+.tk-pill svg { flex: 0 0 auto; width: 11px; height: 11px; }
+.tk-pill-dur { font: 400 11px var(--font-mono); color: var(--ob-fg-3); }
 .tk-pill-dur:empty { display: none; }
-.tk-pill-dur::before { content: '·'; margin-right: 4px; opacity: .6; }
-.tk-st-quieto .tk-pill { color: var(--ob-fg-2); }
-.tk-st-trabajando .tk-pill .tk-dot { animation: tk-pulso 1.8s ease-in-out infinite; }
+.tk-st-trabajando .tk-pill { color: color-mix(in oklch, var(--st) 70%, var(--ob-fg-1)); }
+.tk-st-esperando .tk-pill { color: var(--ob-fg-0); font-weight: 650; }
+.tk-st-caido .tk-pill { color: var(--st); }
+.tk-st-trabajando .tk-pill .tk-dot, .tk-st-esperando .tk-pill .tk-dot { animation: tk-pulso 1.8s ease-in-out infinite; }
 .tk-st-arrancando .tk-pill svg { animation: tk-gira 1.4s linear infinite; }
-.tk-st-esperando .tk-pill {
-  color: var(--ob-on-accent, var(--ob-bg-void));
-  background: var(--st);
-  box-shadow: 0 0 12px -2px color-mix(in oklch, var(--st) 80%, transparent);
-  font-weight: 700;
-}
-.tk-st-esperando .tk-pill-dur { color: inherit; opacity: .75; }
-html[data-theme="papel"] .tk-st-esperando .tk-pill,
-html[data-theme="alba"] .tk-st-esperando .tk-pill { color: var(--ob-bg-void); }
 
-/* Qué hace: título vivo del pane */
-.tk-hace {
-  font-size: var(--text-sm);
-  line-height: 1.35;
-  color: var(--ob-fg-1);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.tk-hace-vacio { color: var(--ob-fg-3); font-style: italic; }
+.tk-hace { font: 400 12px/1.4 var(--font-ui); color: var(--ob-fg-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tk-hace-vacio { color: var(--ob-fg-3); }
 
-.tk-tarea {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-  min-width: 0;
-  font-size: var(--text-xs);
-  line-height: 1.4;
-  color: var(--ob-fg-2);
-}
-.tk-lbl {
-  flex: 0 0 auto;
-  font-family: var(--font-mono);
-  font-size: var(--text-2xs);
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
-  color: var(--ob-fg-3);
-}
-.tk-tarea-txt {
-  min-width: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-}
+.tk-tarea { display: flex; align-items: baseline; gap: 6px; min-width: 0; font: 400 12px/1.4 var(--font-ui); color: var(--ob-fg-3); }
+.tk-lbl { flex: 0 0 auto; font: 500 11px var(--font-ui); color: var(--ob-fg-3); }
+.tk-lbl::after { content: ':'; }
+.tk-tarea-txt { min-width: 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 
-/* Meta: cierre, archivos, dev servers */
-.tk-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 6px;
-  margin-top: 2px;
-  min-width: 0;
-}
+/* Meta: cierre, archivos, dev servers — texto gris en línea, sin cajitas */
+.tk-meta { display: flex; flex-wrap: wrap; gap: 2px 12px; margin-top: 2px; min-width: 0; }
 .tk-ev, .tk-files, .tk-dev {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-width: 0;
-  max-width: 100%;
-  height: 20px;
-  padding: 0 7px;
-  border-radius: 7px;
-  font-size: var(--text-2xs);
-  color: var(--ob-fg-2);
-  background: color-mix(in oklch, var(--ob-bg-void) 45%, transparent);
-  box-shadow: inset 0 0 0 1px var(--tk-hair);
-  white-space: nowrap;
-  overflow: hidden;
+  display: inline-flex; align-items: center; gap: 5px; min-width: 0; max-width: 100%;
+  font: 400 11.5px var(--font-ui); color: var(--ob-fg-3); white-space: nowrap; overflow: hidden;
 }
 .tk-ev svg, .tk-files svg, .tk-dev svg { flex: 0 0 auto; }
-.tk-ev-ok  { color: color-mix(in oklch, var(--tk-done) 75%, var(--ob-fg-0)); }
-.tk-ev-mal { color: color-mix(in oklch, var(--tk-dead) 80%, var(--ob-fg-0)); box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--tk-dead) 30%, transparent); }
-.tk-ev-mot {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--ob-fg-2);
-}
+.tk-ev-ok  { color: color-mix(in oklch, var(--tk-done) 70%, var(--ob-fg-2)); }
+.tk-ev-mal { color: color-mix(in oklch, var(--tk-dead) 75%, var(--ob-fg-1)); }
+.tk-ev-mot { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--ob-fg-3); }
 .tk-ev-mot::before { content: '— '; opacity: .6; }
-.tk-files {
-  font-family: var(--font-mono);
-  height: auto;
-  min-height: 20px;
-  padding-block: 2px;
-  flex-wrap: wrap;
-  row-gap: 1px;
-  white-space: normal;
-}
+.tk-files { font-family: var(--font-mono); font-size: 11px; flex-wrap: wrap; row-gap: 1px; white-space: normal; }
 .tk-file { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tk-file + .tk-file::before { content: ', '; color: var(--ob-fg-4); }
 .tk-file b { font-weight: 500; color: var(--ob-fg-3); margin-left: 2px; }
 .tk-mas { color: var(--ob-fg-3); margin-left: 3px; }
-.tk-dev {
-  font-family: var(--font-mono);
-  color: color-mix(in oklch, var(--ob-info) 80%, var(--ob-fg-0));
-  text-decoration: none;
-}
-.tk-dev:hover { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-info) 45%, transparent); }
-.tk-dev:focus-visible { outline: none; box-shadow: inset 0 0 0 2px var(--ob-accent); }
+.tk-dev { font-family: var(--font-mono); font-size: 11px; color: color-mix(in oklch, var(--ob-info) 75%, var(--ob-fg-2)); text-decoration: none; }
+.tk-dev:hover { text-decoration: underline; text-underline-offset: 2px; }
+.tk-dev:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ob-accent-24); border-radius: 4px; }
 
 /* ══ Vacío ═══════════════════════════════════════════════════════ */
 .tk-vacio {
@@ -473,31 +192,22 @@ html[data-theme="alba"] .tk-st-esperando .tk-pill { color: var(--ob-bg-void); }
   color: var(--ob-fg-2);
 }
 .tk-vacio[hidden] { display: none; }
-.tk-vacio-orb {
-  width: 52px; height: 52px;
-  display: grid; place-items: center;
-  border-radius: 16px;
-  color: var(--ob-accent-fg);
-  background: var(--lg-gloss), color-mix(in oklch, var(--ob-accent) 10%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 26%, transparent), var(--lg-glow);
-  margin-bottom: 4px;
-}
+.tk-vacio-orb { width: 36px; height: 36px; display: grid; place-items: center; border-radius: 10px; color: var(--ob-fg-3); background: var(--ob-bg-2); margin-bottom: 4px; }
 .tk-vacio-tit { font-size: var(--text-md); font-weight: 600; color: var(--ob-fg-0); }
 .tk-vacio-txt { max-width: 34ch; font-size: var(--text-sm); line-height: 1.5; color: var(--ob-fg-2); }
 
-/* ══ Ancho: dock ensanchado → grilla de tarjetas ═════════════════ */
+/* ══ Ancho: dock ensanchado → columnas ══════════════════════════ */
 @container tk-panel (min-width: 620px) {
-  .tk-head { padding: 18px 20px 12px; }
-  .tk-scroll { padding: 14px 16px 20px; }
-  .tk-lista { grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 8px; }
-  .tk-grupo-jarvis { padding: 12px 12px 12px; }
+  .tk-head { padding: 20px 20px 10px; }
+  .tk-scroll { padding: 6px 14px 20px; }
+  .tk-lista { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 2px 10px; }
+  .tk-agente + .tk-agente { box-shadow: none; }
   .tk-grupo-prog { flex-direction: row; align-items: center; gap: 12px; }
   .tk-barra { flex: 0 0 160px; }
 }
-/* Angosto (<340px): la píldora deja la duración y el nombre manda */
+/* Angosto (<340px): la duración se va y el nombre manda */
 @container tk-panel (max-width: 339px) {
-  .tk-agente { padding: 9px 9px 9px 9px; gap: 8px; }
-  .tk-logo { width: 28px; height: 28px; border-radius: 9px; }
+  .tk-agente { padding: 9px 6px; gap: 9px; }
   .tk-pill-dur { display: none; }
 }
 
@@ -510,17 +220,7 @@ html[data-theme="alba"] .tk-st-esperando .tk-pill { color: var(--ob-bg-void); }
 
 /* ══ Animaciones ═════════════════════════════════════════════════ */
 @keyframes tk-pulso { 0%, 100% { transform: scale(1); opacity: 1; } 50% { transform: scale(1.45); opacity: .55; } }
-@keyframes tk-respira { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
 @keyframes tk-gira { to { transform: rotate(360deg); } }
-@keyframes tk-barrido { 0% { transform: translateX(-100%); } 100% { transform: translateX(100%); } }
-@keyframes tk-late {
-  0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 70%, transparent), 0 0 10px -3px color-mix(in oklch, var(--st) 55%, transparent); }
-  50%      { box-shadow: inset 0 0 0 1px var(--st), 0 0 18px 0 color-mix(in oklch, var(--st) 75%, transparent); }
-}
-@keyframes tk-late-card {
-  0%, 100% { box-shadow: inset 0 0 0 1px color-mix(in oklch, var(--st) 60%, transparent), var(--lg-inset), 0 0 16px -8px color-mix(in oklch, var(--st) 60%, transparent); }
-  50%      { box-shadow: inset 0 0 0 1.5px var(--st), var(--lg-inset), 0 0 26px -4px color-mix(in oklch, var(--st) 80%, transparent); }
-}
 @keyframes tk-foco {
   0%   { outline-color: var(--ob-accent); outline-offset: 6px; }
   25%  { outline-color: var(--ob-accent); outline-offset: 1px; }
@@ -528,5 +228,5 @@ html[data-theme="alba"] .tk-st-esperando .tk-pill { color: var(--ob-bg-void); }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .tk-live, .tk-chip, .tk-dot, .tk-agente, .tk-agente::after, .tk-pill svg { animation: none !important; }
+  .tk-dot, .tk-pill svg { animation: none !important; }
 }

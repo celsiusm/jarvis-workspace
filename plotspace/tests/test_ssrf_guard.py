@@ -69,6 +69,41 @@ def test_url_lan_y_publica_por_ip_permitida():
     assert url_destino_segura('http://8.8.8.8/')[0] is True
 
 
+# ── Excepción acotada: loopback SOLO en los puertos de tus dev servers ───────
+def test_loopback_permitido_solo_en_puertos_declarados():
+    from plotspace.core.ssrf import es_loopback_permitido
+    assert es_loopback_permitido('http://localhost:5173/app', {5173})
+    assert es_loopback_permitido('http://127.0.0.1:5173', {5173})
+    assert es_loopback_permitido('http://[::1]:5173/', {5173})
+    assert not es_loopback_permitido('http://localhost:5174/', {5173})   # otro puerto
+    assert not es_loopback_permitido('http://localhost:3000/', {5173})   # Jarvis
+    assert not es_loopback_permitido('http://localhost:5173/', set())
+    assert not es_loopback_permitido('http://evil.com:5173/', {5173})    # nombre ≠ loopback
+    assert not es_loopback_permitido('ftp://localhost:5173/', {5173})
+    assert not es_loopback_permitido('http://169.254.169.254:80/', {80})  # metadata nunca
+
+
+def test_url_destino_segura_con_loopback_permitido():
+    assert url_destino_segura('http://localhost:5173/', {5173})[0] is True
+    assert url_destino_segura('http://localhost:5174/', {5173})[0] is False
+    assert url_destino_segura('http://169.254.169.254/x', {80})[0] is False
+    # sin lista, la política original no cambia
+    assert url_destino_segura('http://localhost:5173/')[0] is False
+
+
+def test_puertos_vivos_de_dev_detect():
+    from plotspace.core import dev_detect
+    guardado = dict(dev_detect._detectados)
+    dev_detect._detectados.clear()
+    dev_detect._persist_cargado = True
+    try:
+        dev_detect._detectados[1] = {'http://localhost:5173': {}, 'http://localhost:3000': {}}
+        dev_detect._detectados[2] = {'http://localhost:8000': {}}
+        assert dev_detect.puertos_vivos() == {5173, 8000}      # el 3000 (Jarvis) nunca
+    finally:
+        dev_detect._detectados.clear(); dev_detect._detectados.update(guardado)
+
+
 if __name__ == '__main__':
     import traceback
     fallos = 0

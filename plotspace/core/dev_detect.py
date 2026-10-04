@@ -398,6 +398,19 @@ def urls_detectadas(project_id: int) -> list:
     return list(_detectados.get(project_id, {}).keys())
 
 
+def puertos_vivos() -> set:
+    """Puertos de los dev servers detectados (de TODOS los proyectos). El browser
+    server-side solo deja abrir loopback en estos (ver core/ssrf.py)."""
+    _asegurar_cargado()
+    puertos = set()
+    for urls in _detectados.values():
+        for url in urls:
+            p = puerto_de(url)
+            if p and not puerto_excluido(p):
+                puertos.add(p)
+    return puertos
+
+
 def servers_detectados(project_id: int) -> list:
     """Detalle de cada entrada viva: [{url, terminal_id, terminal_nombre, tipo}],
     en orden de detección. tipo = 'server' (dev server con proceso) o 'demo'

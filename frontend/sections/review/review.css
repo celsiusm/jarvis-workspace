@@ -23,21 +23,19 @@
 /* ── Topbar ── */
 .rv-top {
   display: flex; align-items: center; gap: 10px;
-  padding: 12px 16px;
-  border-bottom: 1px solid var(--ob-line-1);
+  padding: 14px 16px 8px;
   flex-shrink: 0;
 }
-.rv-titulo { font: italic 400 var(--text-xl) var(--font-display); color: var(--ob-fg-0); }
+/* Minimal: título sobrio (sin cursiva ni mayúsculas mono); los números en gris. */
+.rv-titulo { font: 600 14px var(--font-ui); letter-spacing: -.005em; color: var(--ob-fg-0); }
 .rv-branch {
-  font: 600 var(--text-2xs) var(--font-mono);
-  letter-spacing: var(--ls-caps);
-  text-transform: uppercase;
+  font: 500 12px var(--font-ui);
   color: var(--ob-fg-3);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%;
 }
 .rv-branch b { color: var(--ob-accent-fg); font-weight: 600; }
 .rv-sum {
-  font: 500 var(--text-2xs) var(--font-mono);
+  font: 500 12px var(--font-ui);
   color: var(--ob-fg-3); white-space: nowrap;
   font-variant-numeric: tabular-nums;
 }
@@ -64,16 +62,18 @@
   border-right: 1px solid var(--ob-line-1);
 }
 .rv-search {
-  margin: 8px 8px 4px;
-  padding: 6px 9px;
-  font: 400 var(--text-xs) var(--font-ui);
+  margin: 4px 10px 6px;
+  padding: 7px 10px;
+  font: 400 12.5px var(--font-ui);
   color: var(--ob-fg-0);
-  background: var(--ob-bg-3);
-  border: 1px solid var(--ob-line-2);
-  border-radius: var(--radius-sm);
+  background: var(--ob-bg-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
   outline: none;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
-.rv-search:focus { border-color: var(--ob-accent-40, var(--ob-accent)); }
+.rv-search::placeholder, .rv-msg::placeholder { color: var(--ob-fg-3); }
+.rv-search:focus { background: var(--ob-bg-0); border-color: var(--ob-accent-24); }
 .rv-lista {
   flex: 1; min-height: 0;
   overflow-y: auto;
@@ -83,8 +83,8 @@
 /* Grupo por agente */
 .rv-grupo { margin-bottom: 8px; }
 .rv-ghead {
-  display: flex; align-items: center; gap: 7px;
-  padding: 4px 4px 4px 2px;
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 6px 4px 7px;
   position: sticky; top: 0;
   background: var(--ob-bg-1);
   z-index: 1;
@@ -100,33 +100,30 @@
 .rv-gsel.on { background: var(--ob-accent); border-color: var(--ob-accent); }
 .rv-gname {
   flex: 1; min-width: 0;
-  font: 600 var(--text-2xs) var(--font-ui);
-  letter-spacing: .04em; text-transform: uppercase;
-  color: var(--ob-fg-2);
+  font: 600 12px var(--font-ui);
+  text-transform: capitalize;
+  color: var(--ob-fg-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rv-gcount {
-  font: 600 var(--text-2xs) var(--font-mono);
-  color: var(--ob-fg-4);
-  background: var(--ob-bg-3);
-  padding: 1px 6px; border-radius: var(--radius-pill, 999px);
+  font: 500 11.5px var(--font-ui);
+  color: var(--ob-fg-3); font-variant-numeric: tabular-nums;
   flex-shrink: 0;
 }
 
 /* Fila de archivo */
 .rv-fila {
-  display: flex; align-items: center; gap: 7px;
-  padding: 5px 7px;
-  border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 7px;
+  border-radius: 8px;
   cursor: pointer;
   transition: background var(--dur-1) var(--ease-out);
 }
 .rv-fila:hover { background: var(--ob-bg-3); }
-.rv-fila.activo { background: var(--ob-accent-08); border-color: var(--ob-accent-14); }
+.rv-fila.activo { background: var(--ob-bg-3); }
 /* Seleccionada para commit: tinte de acento + barra izquierda. Se distingue del
    activo (que es "el diff abierto"). */
-.rv-fila.sel { background: var(--ob-accent-08); box-shadow: inset 2px 0 0 var(--ob-accent); }
+.rv-fila.sel { background: var(--ob-accent-08); }
 .rv-fila.activo.sel { background: var(--ob-accent-14); }
 /* Checkbox propio: el nativo se ve BLANCO sobre el tema oscuro. Mismo lenguaje
    que el selector de grupo (.rv-gsel): borde sutil, acento sólido al marcar y
@@ -155,19 +152,17 @@
 .rv-check:checked::after { transform: rotate(-45deg) scale(1); }
 .rv-check:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ob-accent-24); }
 .rv-estado {
-  width: 16px; height: 16px; flex-shrink: 0;
-  display: inline-flex; align-items: center; justify-content: center;
-  border-radius: 4px; font: 700 var(--text-2xs) var(--font-mono);
+  width: 12px; flex-shrink: 0; text-align: center; font: 600 11px var(--font-mono);
 }
-.rv-estado.M { color: var(--ob-work); background: var(--ob-work-08); }
-.rv-estado.A { color: var(--ob-run);  background: var(--ob-run-08); }
-.rv-estado.D { color: var(--ob-err);  background: var(--ob-err-08); }
-.rv-estado.R { color: var(--ob-accent-fg); background: var(--ob-accent-08); }
-.rv-estado.U { color: var(--ob-run);  background: var(--ob-run-08); }
-.rv-estado.\? { color: var(--ob-run);  background: var(--ob-run-08); }
+.rv-estado.M { color: var(--ob-work); }
+.rv-estado.A { color: var(--ob-run); }
+.rv-estado.D { color: var(--ob-err); }
+.rv-estado.R { color: var(--ob-accent-fg); }
+.rv-estado.U { color: var(--ob-run); }
+.rv-estado.\? { color: var(--ob-run); }
 .rv-path {
   flex: 1; min-width: 0;
-  font: 400 var(--text-xs) var(--font-mono);
+  font: 400 12px var(--font-mono);
   color: var(--ob-fg-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   direction: rtl; text-align: left;
@@ -188,13 +183,12 @@
 .rv-grupo.gen.plegado .rv-gsel { visibility: hidden; }
 .rv-gtoggle {
   flex-shrink: 0;
-  font: 500 var(--text-2xs) var(--font-ui);
-  color: var(--ob-fg-2);
-  background: none; border: 1px solid var(--ob-line-2);
-  border-radius: var(--radius-pill, 999px);
-  padding: 1px 8px; cursor: pointer;
+  font: 500 11.5px var(--font-ui);
+  color: var(--ob-fg-3);
+  background: none; border: 0; border-radius: 6px;
+  padding: 2px 6px; cursor: pointer;
 }
-.rv-gtoggle:hover { color: var(--ob-fg-0); border-color: var(--ob-line-3); }
+.rv-gtoggle:hover { color: var(--ob-fg-0); background: var(--ob-bg-3); }
 .rv-open {
   display: inline-flex; align-items: center; justify-content: center;
   width: 20px; height: 20px; flex-shrink: 0;
@@ -207,26 +201,27 @@
 .rv-commit {
   flex-shrink: 0;
   display: flex; gap: 6px; align-items: center;
-  padding: 8px; border-top: 1px solid var(--ob-line-1);
+  padding: 10px; border-top: 1px solid var(--ob-line-1);
 }
 .rv-msg {
   flex: 1; min-width: 0;
-  padding: 6px 9px;
-  font: 400 var(--text-xs) var(--font-ui);
+  padding: 7px 10px;
+  font: 400 12.5px var(--font-ui);
   color: var(--ob-fg-0);
-  background: var(--ob-bg-3);
-  border: 1px solid var(--ob-line-2);
-  border-radius: var(--radius-sm);
+  background: var(--ob-bg-2);
+  border: 1px solid transparent;
+  border-radius: 8px;
   outline: none;
+  transition: border-color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
-.rv-msg:focus { border-color: var(--ob-accent-40, var(--ob-accent)); }
+.rv-msg:focus { background: var(--ob-bg-0); border-color: var(--ob-accent-24); }
 .rv-commitbtn {
   flex-shrink: 0;
-  padding: 6px 11px;
-  font: 600 var(--text-xs) var(--font-ui);
+  padding: 7px 12px;
+  font: 600 12px var(--font-ui);
   color: var(--ob-on-accent, #fff);
   background: var(--ob-accent);
-  border: none; border-radius: var(--radius-sm); cursor: pointer;
+  border: none; border-radius: 8px; cursor: pointer;
   transition: filter var(--dur-1), opacity var(--dur-1);
 }
 .rv-commitbtn:hover:not(:disabled) { filter: brightness(1.08); }
@@ -240,11 +235,11 @@
 }
 .rv-filebar {
   flex-shrink: 0;
-  padding: 7px 14px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--ob-line-1);
   background: var(--ob-bg-1);
-  font: 600 var(--text-xs) var(--font-mono);
-  color: var(--ob-fg-0);
+  font: 500 12px var(--font-mono);
+  color: var(--ob-fg-1);
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
 }
 .rv-fpath { direction: rtl; text-align: left; display: inline-block; max-width: 100%; }
@@ -309,4 +304,9 @@
     border-right: none; border-bottom: 1px solid var(--ob-line-1);
   }
   .rv-branch { display: none; }
+}
+
+/* Muy angosto: la hora de actualización sobra (el botón de refrescar se salía del marco). */
+@container (max-width: 420px) {
+  .rv-ago { display: none; }
 }
