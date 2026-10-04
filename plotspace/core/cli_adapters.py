@@ -71,6 +71,11 @@ _QWEN_EVENTOS = (
     # costo de declararlo de más es cero, el de no declararlo es quedarse sin el
     # canal bueno (el que llega ANTES de que el agente piense).
     ('UserPromptSubmit', None),
+    # Fin de respuesta → campanita al instante. `Stop` (nombre de Claude) y
+    # `AfterAgent` (nombre del Gemini CLI, del que qwen es fork): el que esta
+    # versión no conozca se ignora sin costo.
+    ('Stop', None),
+    ('AfterAgent', None),
 )
 
 

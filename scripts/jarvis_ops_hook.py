@@ -328,7 +328,7 @@ def main():
     # FIN (Stop): the agent just finished answering → Jarvis rings the bell NOW.
     # Fire-and-forget; never prints anything (a Stop hook that prints can keep
     # the agent going).
-    if evento == "Stop":
+    if evento in ("Stop", "AfterAgent"):
         try:
             _post("/api/swarm/fin", {"terminal_id": int(tid)}, TIMEOUT_POST_S)
         except Exception:

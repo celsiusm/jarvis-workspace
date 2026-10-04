@@ -51,7 +51,7 @@ SUPRESION_S = 10            # keyword TASK_* hace <10s → no duplicar sonido
 GRACIA_ARRANQUE_S = 60      # terminal joven (<60s para el poller) → no emitir:
                             # el boot de las CLIs es multifase (banner → quieto
                             # → ráfaga final) y dispara falsos "terminé"
-CONFIRMACION_FIN_S = 12     # Tras la quietud (evaluar), el "terminé" NO suena al
+CONFIRMACION_FIN_S = 4      # Tras la quietud (evaluar), el "terminé" NO suena al
                             # toque: se confirma que el pane sigue IGUAL estos
                             # segundos. Un turno que termina y el agente RETOMA
                             # poco después (típico: commitea una parte y sigue) NO
