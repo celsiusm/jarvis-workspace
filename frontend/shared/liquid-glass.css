@@ -94,7 +94,6 @@
    Son transitorios → pueden usar blur real del fondo. */
 :root[data-glass="on"] #modal-new-terminal .tl2-modal,
 :root[data-glass="on"] .qp-panel,
-:root[data-glass="on"] .sx-slab,
 :root[data-glass="on"] .gq-card,
 :root[data-glass="on"] .ob-confirm,
 :root[data-glass="on"] .orch-more-menu,
@@ -107,6 +106,8 @@
           backdrop-filter: var(--lg-blur);
   box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop-lg);
 }
+/* Configuración: losa SIN blur (el desenfoque sobre terminales vivas costaba FPS). */
+:root[data-glass="on"] .sx-slab { background: var(--ob-bg-1); box-shadow: 0 0 0 1px var(--sx-hair, var(--ob-line-2)), var(--lg-drop-lg); }
 /* El toast conserva su borde izquierdo de color (es la señal de tipo). */
 :root[data-glass="on"] .ob-toast {
   background: var(--lg-gloss), var(--lg-body-float);
@@ -155,6 +156,38 @@
               inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 60%, white 20%),
               0 8px 24px -8px var(--ob-accent-glow);
 }
+
+/* ── 5b · Botones de Configuración, Extensiones, Navegador y Review ────────
+   Mismo material que el resto (gloss + anillo + bisel), SIN backdrop-filter: son
+   superficies chicas y repetidas, el blur acá costaría FPS. Los de acento heredan la
+   receta de la sección 5. */
+:root[data-glass="on"] :is(.sx-btn:not(.pri):not(.gho), .kb-bind, .ex-tile:not(.on), .br-chip, .rv-gtoggle, .sx-seg) {
+  background: var(--lg-gloss), var(--lg-body);
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+:root[data-glass="on"] .sx-btn.gho { background: var(--lg-gloss); box-shadow: var(--lg-ring); }
+:root[data-glass="on"] :is(.sx-btn:not(.pri), .kb-bind, .ex-tile:not(.on), .br-chip):hover:not(:disabled) {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset);
+}
+:root[data-glass="on"] :is(.sx-seg button.on, .ex-view-b.on, .br-ls[aria-pressed="true"]) {
+  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
+  box-shadow: var(--lg-ring), var(--lg-inset);
+}
+:root[data-glass="on"] :is(.ex-tile.on) {
+  background: var(--lg-gloss), linear-gradient(180deg, var(--ob-accent-24), var(--ob-accent-08));
+  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset);
+}
+:root[data-glass="on"] .vz-key { background: var(--lg-gloss), var(--lg-spec), var(--lg-body); box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop); }
+:root[data-glass="on"] .vz-key:hover { box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-drop); }
+/* primario de Configuración (Nueva skill, etc.): vidrio teñido como los CTA */
+:root[data-glass="on"] .sx-btn.pri {
+  background: var(--lg-gloss), var(--lg-accent-body);
+  color: var(--ob-on-accent);
+  box-shadow: inset 0 1px 0.5px oklch(100% 0 0 / 0.38), inset 0 -6px 12px -8px oklch(0% 0 0 / 0.35),
+              inset 0 0 0 1px color-mix(in oklch, var(--ob-accent) 60%, white 12%), 0 6px 18px -8px var(--ob-accent-glow);
+}
+:root[data-glass="on"] .sx-btn.pri:hover:not(:disabled) { filter: brightness(1.06); }
 
 /* ── 6 · Home ───────────────────────────────────────────────── */
 :root[data-glass="on"] .hc-top {

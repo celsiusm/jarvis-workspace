@@ -44,9 +44,8 @@ html[data-theme="alba"] .mem-overlay { --mem-scrim: color-mix(in oklch, var(--ob
   z-index: var(--z-modal);
   display: grid; place-items: center;
   padding: 20px;
-  background: var(--mem-scrim);
-  -webkit-backdrop-filter: blur(8px) saturate(120%);
-  backdrop-filter: blur(8px) saturate(120%);
+  /* velo liso (sin backdrop-filter: desenfocar el workspace entero con terminales vivas costaba FPS) */
+  background: var(--mem-scrim, color-mix(in oklch, var(--ob-bg-void) 82%, transparent));
   animation: ob-fade-in var(--dur-2) var(--ease-out);
 }
 .mem-overlay.saliendo { opacity: 0; transition: opacity 150ms var(--ease-out); }
@@ -60,8 +59,6 @@ html[data-theme="alba"] .mem-overlay { --mem-scrim: color-mix(in oklch, var(--ob
   display: flex; flex-direction: column;
   border-radius: var(--mem-r);
   background: var(--lg-spec), var(--lg-body-float), var(--ob-bg-1);
-  -webkit-backdrop-filter: var(--lg-blur);
-  backdrop-filter: var(--lg-blur);
   box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop-lg);
   overflow: hidden;
   isolation: isolate;
@@ -416,6 +413,7 @@ kbd {
 .mem-grupo-head b { margin-left: auto; font-weight: 600; color: var(--ob-fg-4); letter-spacing: 0; }
 
 .mem-card {
+  content-visibility: auto; contain-intrinsic-size: auto 110px;
   position: relative;
   display: flex; flex-direction: column; gap: 4px;
   width: 100%;
@@ -826,8 +824,6 @@ kbd {
   height: 36px;
   border-radius: var(--radius-pill);
   background: var(--lg-gloss), var(--lg-body-float);
-  -webkit-backdrop-filter: var(--lg-blur);
-  backdrop-filter: var(--lg-blur);
   box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop);
 }
 .mem-graf-buscar { gap: 7px; padding: 0 14px 0 12px; width: min(260px, 45cqw); color: var(--ob-fg-3); cursor: text; }
@@ -861,8 +857,6 @@ kbd {
   display: flex; flex-direction: column; gap: 6px;
   border-radius: 14px;
   background: var(--lg-spec), var(--lg-body-float);
-  -webkit-backdrop-filter: var(--lg-blur);
-  backdrop-filter: var(--lg-blur);
   box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop-lg);
   pointer-events: none;
   animation: mem-pop var(--dur-2) var(--ease-snap);
@@ -1090,8 +1084,6 @@ kbd {
   padding: 7px 13px;
   border-radius: var(--radius-pill);
   background: var(--lg-gloss), var(--lg-body-float);
-  -webkit-backdrop-filter: var(--lg-blur);
-  backdrop-filter: var(--lg-blur);
   box-shadow: var(--lg-ring), var(--lg-inset);
   font: 500 var(--text-2xs) var(--font-mono); letter-spacing: var(--ls-wide); text-transform: uppercase; color: var(--ob-fg-3);
 }

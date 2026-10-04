@@ -65,9 +65,9 @@
   --sx-well:    color-mix(in oklch, var(--ob-fg-0) 4.5%, transparent);  /* módulo interno */
   --sx-input:   color-mix(in oklch, var(--ob-bg-0) 55%, transparent);   /* campo hundido */
 
-  background: color-mix(in oklch, var(--ob-bg-void) 58%, transparent);
-  backdrop-filter: blur(26px) saturate(120%);
-  -webkit-backdrop-filter: blur(26px) saturate(120%);
+  /* SIN backdrop-filter: desenfocar todo el workspace (con las terminales vivas debajo)
+     era lo que hacía caer los FPS al abrir Configuración. Un velo liso cuesta cero. */
+  background: color-mix(in oklch, var(--ob-bg-void) 72%, transparent);
   animation: sx-veil-in 260ms var(--ease-out);
 }
 .jw-settings[hidden] { display: none; }
@@ -644,74 +644,37 @@
 /* ─────────────────────────────────────────────────────────────
    1 · VOZ — la tecla como objeto físico
    ───────────────────────────────────────────────────────────── */
-.vz { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 22px; align-items: start; }
+.vz { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 28px; align-items: center; }
 
-.vz-col { display: flex; flex-direction: column; align-items: center; gap: 9px; }
+.vz-col { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+/* Minimal: la tecla ya no es un objeto 3D — un recuadro liso con el nombre, y se enciende al capturar. */
 .vz-key {
-  position: relative;
-  display: grid;
-  place-items: center;
-  width: 136px;
-  height: 92px;
-  border-radius: 14px;
-  cursor: pointer;
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--ob-fg-0) 13%, transparent),
-    color-mix(in oklch, var(--ob-fg-0) 5%, transparent));
-  box-shadow:
-    inset 0 1.5px 0 color-mix(in oklch, white 22%, transparent),
-    inset 0 -3px 0 color-mix(in oklch, black 34%, transparent),
-    inset 0 0 0 1px color-mix(in oklch, white 8%, transparent),
-    0 8px 20px -10px oklch(0% 0 0 / .7);
-  transition: transform var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
+  position: relative; display: grid; place-items: center; width: 120px; height: 76px;
+  border-radius: 12px; cursor: pointer; background: var(--ob-bg-2);
+  transition: background var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out);
 }
-.vz-key:hover { transform: translateY(-1px); }
-.vz-key:active { transform: translateY(2px); box-shadow: inset 0 1px 0 color-mix(in oklch, white 12%, transparent), inset 0 -1px 0 color-mix(in oklch, black 30%, transparent); }
-.vz-key:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 3px; }
+.vz-key:hover { background: var(--ob-bg-3); }
+.vz-key:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ob-accent-24); }
 .vz-key kbd {
-  max-width: 100%;
-  padding: 0 8px;
-  font: 600 26px var(--font-mono);
-  color: var(--ob-fg-0);
-  letter-spacing: -.02em;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-align: center;
+  max-width: 100%; padding: 0 8px; font: 600 22px var(--font-mono); color: var(--ob-fg-0);
+  letter-spacing: -.02em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
 }
 /* «Mouse →», «Click der.»: el binding puede ser un botón, no una letra. */
-.vz-key.largo kbd { font-size: 15px; letter-spacing: 0; }
+.vz-key.largo kbd { font-size: 14px; letter-spacing: 0; }
 .vz-key.capturando kbd { font-size: 12px; color: var(--ob-accent-fg); }
-.vz-key.capturando { box-shadow: inset 0 0 0 1.5px var(--ob-accent), 0 0 24px -6px var(--ob-accent-glow); }
-.vz-key-h { font: 500 10px var(--font-mono); color: var(--ob-fg-3); letter-spacing: .04em; }
-.vz-col:hover .vz-key-h { color: var(--ob-fg-3); }
+.vz-key.capturando { box-shadow: inset 0 0 0 1.5px var(--ob-accent); }
+.vz-key-h { font: 400 11.5px var(--font-ui); color: var(--ob-fg-3); }
 
-.vz-txt p { margin: 0 0 8px; max-width: 64ch; font: 400 12.5px/1.6 var(--font-ui); color: var(--ob-fg-2); }
+.vz-txt p { margin: 0 0 6px; max-width: 60ch; font: 400 13px/1.55 var(--font-ui); color: var(--ob-fg-1); }
 .vz-txt p b { color: var(--ob-fg-0); font-weight: 600; }
 .vz-sec { color: var(--ob-fg-3) !important; font-size: 12px !important; }
 
-/* Ruta de la señal: de dónde a dónde va tu voz */
-.vz-ruta { display: flex; align-items: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
-.vz-nodo {
-  padding: 4px 10px;
-  border-radius: 99px;
-  font: 500 11px var(--font-mono);
-  color: var(--ob-fg-3);
-  background: color-mix(in oklch, var(--ob-fg-4) 12%, transparent);
-}
-.vz-nodo.on { color: var(--ob-accent-fg); background: var(--ob-accent-14); }
-.vz-flecha {
-  width: 16px; height: 1px;
-  background: linear-gradient(90deg, var(--ob-line-2), color-mix(in oklch, var(--ob-line-3) 60%, transparent));
-  position: relative;
-}
-.vz-flecha::after {
-  content: '';
-  position: absolute; right: -1px; top: -2px;
-  border-left: 4px solid var(--ob-line-3);
-  border-top: 2.5px solid transparent;
-  border-bottom: 2.5px solid transparent;
-}
+/* Ruta de la señal: una línea de texto, no cuatro cápsulas */
+.vz-ruta { display: flex; align-items: center; gap: 8px; margin-top: 12px; flex-wrap: wrap; }
+.vz-nodo { font: 500 12px var(--font-ui); color: var(--ob-fg-3); }
+.vz-nodo.on { color: var(--ob-accent-fg); font-family: var(--font-mono); }
+.vz-flecha { width: auto; height: auto; background: none; }
+.vz-flecha::after { content: '›'; position: static; border: 0; color: var(--ob-fg-4); font: 400 14px var(--font-ui); }
 
 /* ─────────────────────────────────────────────────────────────
    2 · TECLADO — mapa real
@@ -720,83 +683,35 @@
 .kb-f { display: grid; grid-template-columns: repeat(30, 1fr); gap: 6px; }
 
 .kb-k {
-  position: relative;
-  display: grid;
-  place-items: center;
-  height: 38px;
-  border: 0;
-  border-radius: 7px;
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--ob-fg-0) 5%, transparent),
-    color-mix(in oklch, var(--ob-fg-0) 2%, transparent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklch, white 7%, transparent),
-    inset 0 -2px 0 color-mix(in oklch, black 26%, transparent),
-    inset 0 0 0 1px color-mix(in oklch, white 3%, transparent);
-  color: var(--ob-fg-3);
-  font: 500 11px var(--font-mono);
-  cursor: default;
-  transition: color var(--dur-1) var(--ease-out), box-shadow var(--dur-1) var(--ease-out),
-              transform var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
+  position: relative; display: grid; place-items: center; height: 36px; border: 0; border-radius: 7px;
+  background: color-mix(in oklch, var(--ob-fg-0) 3.5%, transparent);
+  color: var(--ob-fg-4); font: 500 11px var(--font-mono); cursor: default;
+  transition: color var(--dur-1) var(--ease-out), background var(--dur-1) var(--ease-out);
 }
-.kb-k.bound {
-  cursor: pointer;
-  color: var(--ob-fg-0);
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--ob-accent) 26%, transparent),
-    color-mix(in oklch, var(--ob-accent) 12%, transparent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklch, white 20%, transparent),
-    inset 0 -2px 0 color-mix(in oklch, black 28%, transparent),
-    inset 0 0 0 1px var(--ob-accent-24),
-    0 3px 12px -6px var(--ob-accent-glow);
-}
-.kb-k.bound:hover { transform: translateY(-1px); box-shadow: inset 0 1px 0 color-mix(in oklch, white 26%, transparent), inset 0 -2px 0 color-mix(in oklch, black 28%, transparent), inset 0 0 0 1px var(--ob-accent), 0 6px 18px -6px var(--ob-accent-glow); }
-.kb-k.bound:active { transform: translateY(1px); }
-.kb-k.bound:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
-.kb-k.cfg { box-shadow: inset 0 1px 0 color-mix(in oklch, white 20%, transparent), inset 0 -2px 0 color-mix(in oklch, black 28%, transparent), inset 0 0 0 1.5px var(--ob-accent-fg), 0 3px 12px -6px var(--ob-accent-glow); }
+/* lo ocupado se ve por el color del texto y un fondo de acento muy suave */
+.kb-k.bound { cursor: pointer; color: var(--ob-fg-0); background: var(--ob-accent-14); }
+.kb-k.bound:hover { background: color-mix(in oklch, var(--ob-accent) 28%, transparent); }
+.kb-k.bound:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ob-accent-24); }
+.kb-k.cfg { box-shadow: inset 0 0 0 1px var(--ob-accent-24); }
 /* punto = necesita Ctrl */
-.kb-mod {
-  position: absolute; top: 4px; right: 5px;
-  width: 4px; height: 4px; border-radius: 99px;
-  background: var(--ob-accent-fg);
-}
+.kb-mod { position: absolute; top: 4px; right: 5px; width: 4px; height: 4px; border-radius: 99px; background: var(--ob-accent-fg); }
 
-.kb-cap { margin: 14px 0 0; font: 400 12.5px var(--font-ui); color: var(--ob-fg-2); min-height: 20px; }
-.kb-cap-k {
-  display: inline-block;
-  margin-right: 8px;
-  padding: 3px 8px;
-  border-radius: 6px;
-  font: 500 11.5px var(--font-mono);
-  color: var(--ob-fg-0);
-  background: color-mix(in oklch, var(--ob-accent) 20%, transparent);
-}
+.kb-cap { margin: 14px 0 0; font: 400 13px var(--font-ui); color: var(--ob-fg-2); min-height: 20px; }
+.kb-cap-k { display: inline-block; margin-right: 8px; font: 600 12px var(--font-mono); color: var(--ob-accent-fg); }
 
 .kb-bind {
-  display: inline-flex; align-items: center; gap: 8px;
-  height: 32px; padding: 0 12px;
-  border: 0; border-radius: 8px;
-  background: var(--sx-well);
-  box-shadow: inset 0 0 0 1px var(--sx-hair);
-  color: var(--ob-fg-3);
-  font: 500 11.5px var(--font-ui);
-  cursor: pointer;
-  transition: box-shadow var(--dur-1) var(--ease-out);
+  display: inline-flex; align-items: center; gap: 8px; height: 30px; padding: 0 11px; border: 0; border-radius: 8px;
+  background: var(--ob-bg-2); color: var(--ob-fg-3); font: 500 12px var(--font-ui); cursor: pointer;
+  transition: background var(--dur-1) var(--ease-out);
 }
 .kb-bind kbd { font: 600 12px var(--font-mono); color: var(--ob-fg-0); }
-.kb-bind:hover { box-shadow: inset 0 0 0 1px var(--ob-accent-24); }
-.kb-bind:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.kb-bind:hover { background: var(--ob-bg-3); }
+.kb-bind:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ob-accent-24); }
 .kb-bind.capturando { box-shadow: inset 0 0 0 1.5px var(--ob-accent); }
 .kb-bind.capturando kbd { color: var(--ob-accent-fg); font-size: 11px; }
 
-.kb-otros { display: flex; flex-direction: column; gap: 9px; font: 400 12px var(--font-ui); color: var(--ob-fg-3); }
-.kb-chip {
-  display: inline-block; min-width: 92px; margin-right: 10px;
-  padding: 3px 8px; border-radius: 6px;
-  font: 500 11px var(--font-mono); color: var(--ob-fg-2);
-  background: color-mix(in oklch, var(--ob-fg-4) 12%, transparent);
-}
+.kb-otros { display: flex; flex-direction: column; gap: 8px; font: 400 12.5px var(--font-ui); color: var(--ob-fg-3); }
+.kb-chip { display: inline-block; min-width: 110px; margin-right: 10px; font: 500 12px var(--font-mono); color: var(--ob-fg-1); }
 
 /* ─────────────────────────────────────────────────────────────
    3 · APARIENCIA — banco de pruebas + espectro
@@ -933,7 +848,7 @@
 
 .ap-ton { display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .ap-ton-r { display: grid; grid-template-columns: 92px minmax(0, 1fr); align-items: center; gap: 14px; width: 100%; max-width: 380px; }
-.ap-ton-l { font: 500 11.5px var(--font-mono); color: var(--ob-fg-3); letter-spacing: .02em; }
+.ap-ton-l { font: 500 12.5px var(--font-ui); color: var(--ob-fg-3); letter-spacing: .02em; }
 
 /* Escala de la app — la misma regla de la tonalidad, pero graduada: los
    extremos y el 100% rotulados bajo la pista. --esc-det (inline, lo calcula
@@ -1280,21 +1195,19 @@
   display: block;
   max-width: 100%;
   padding: 0 8px;
-  font: 600 26px var(--font-mono);
+  font: 600 22px var(--font-mono);
   color: var(--ob-fg-0);
   letter-spacing: -.02em;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.vz-key.largo .settings-kbd { font-size: 15px; letter-spacing: 0; }
+.vz-key.largo .settings-kbd { font-size: 14px; letter-spacing: 0; }
 .vz-key .settings-keybind-listening {
   font: 600 12px var(--font-ui); color: var(--ob-accent-fg); text-align: center; padding: 0 10px;
 }
-.vz-key .settings-keybind-hint { display: block; margin-top: 5px; font: 500 10px var(--font-mono); color: var(--ob-fg-3); }
-.vz-key.capturando {
-  box-shadow: inset 0 0 0 1.5px var(--ob-accent), 0 0 24px -6px var(--ob-accent-glow);
-}
+.vz-key .settings-keybind-hint { display: block; margin-top: 5px; font: 400 11px var(--font-ui); color: var(--ob-fg-3); }
+.vz-key.capturando { box-shadow: inset 0 0 0 1.5px var(--ob-accent); }
 
 .kb-bind .settings-kbd { font: 600 12px var(--font-mono); color: var(--ob-fg-0); }
 .kb-bind .settings-keybind-listening { font: 600 11px var(--font-ui); color: var(--ob-accent-fg); }
@@ -1308,8 +1221,8 @@
   cursor: pointer;
   transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
-.kb-reset:hover { background: color-mix(in oklch, var(--ob-fg-0) 10%, transparent); color: var(--ob-fg-0); }
-.kb-reset:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
+.kb-reset:hover { background: var(--ob-bg-3); color: var(--ob-fg-0); }
+.kb-reset:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--ob-accent-24); }
 
 /* Cuentas: copiar el correo desde el detalle + guardar una sesión suelta */
 .ct-copy {
@@ -1379,3 +1292,6 @@
 .fd-sl { display: grid; grid-template-columns: 138px minmax(0, 1fr); align-items: center; gap: 12px; }
 .fd-sl-l { font: 500 11.5px var(--font-mono); color: var(--ob-fg-3); letter-spacing: .02em; }
 .fd-nota { margin: 0; font: 400 11.5px/1.55 var(--font-ui); color: var(--ob-fg-3); max-width: 70ch; }
+
+/* Listas largas: lo que está fuera de pantalla no se pinta ni se mide. */
+.ex-card, .sx-set { content-visibility: auto; contain-intrinsic-size: auto 120px; }
