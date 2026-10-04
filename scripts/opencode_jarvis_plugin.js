@@ -59,6 +59,20 @@ export const JarvisSwarm = async ({ directory, worktree }) => {
   const cwd = worktree || directory || "";
   const before = new Map();                  // callID → old content (for write)
   return {
+    // opencode finished answering (session idle): ring the bell NOW. The server
+    // de-dupes per terminal, so subagent/duplicate idles are harmless.
+    event: async ({ event }) => {
+      try {
+        if (event && event.type === "session.idle") {
+          await fetch(`http://127.0.0.1:${PORT}/api/swarm/fin`, {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ terminal_id: Number(TID) }),
+            signal: AbortSignal.timeout(1500),
+          });
+        }
+      } catch { /* observer: never break the agent */ }
+    },
     // The "before" of a write (full overwrite) doesn't come in the args: it's
     // read from disk BEFORE it's overwritten. For edit it's not needed (it
     // brings old+new).

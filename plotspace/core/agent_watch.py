@@ -51,7 +51,7 @@ SUPRESION_S = 10            # keyword TASK_* hace <10s → no duplicar sonido
 GRACIA_ARRANQUE_S = 60      # terminal joven (<60s para el poller) → no emitir:
                             # el boot de las CLIs es multifase (banner → quieto
                             # → ráfaga final) y dispara falsos "terminé"
-CONFIRMACION_FIN_S = 12     # Tras la quietud (evaluar), el "terminé" NO suena al
+CONFIRMACION_FIN_S = 4      # Tras la quietud (evaluar), el "terminé" NO suena al
                             # toque: se confirma que el pane sigue IGUAL estos
                             # segundos. Un turno que termina y el agente RETOMA
                             # poco después (típico: commitea una parte y sigue) NO
@@ -462,12 +462,31 @@ def registrar_keyword(terminal_id: int, ts: float = None):
     _ultimo_keyword[terminal_id] = time.monotonic() if ts is None else ts
 
 
+# El hook `Stop` del CLI (Claude Code) avisa el instante EXACTO en que terminó de
+# responder → el sonido sale al toque. El heurístico de quietud llega ~16 s
+# después (4 s quieto + CONFIRMACION_FIN_S): sin una supresión más larga que ese
+# retraso, sonaría una SEGUNDA vez por el mismo final.
+SUPRESION_HOOK_S = 40
+_ultimo_hook: dict = {}     # terminal_id → time.monotonic() del último Stop
+
+
+def registrar_fin_hook(terminal_id: int, ts: float = None):
+    """El hook Stop del CLI avisó que terminó: el heurístico no repite ese final
+    (ni el que ya estuviera confirmándose)."""
+    _ultimo_hook[terminal_id] = time.monotonic() if ts is None else ts
+    _fin_pendiente.pop(terminal_id, None)
+
+
 def suprimido(terminal_id: int, ahora: float = None) -> bool:
-    """¿Hubo un keyword hace <SUPRESION_S? Entonces el sonido ya sonó."""
+    """¿Hubo un keyword hace <SUPRESION_S, o un Stop del hook hace
+    <SUPRESION_HOOK_S? Entonces el sonido ya sonó."""
+    ahora = time.monotonic() if ahora is None else ahora
+    th = _ultimo_hook.get(terminal_id)
+    if th is not None and ahora - th < SUPRESION_HOOK_S:
+        return True
     t = _ultimo_keyword.get(terminal_id)
     if t is None:
         return False
-    ahora = time.monotonic() if ahora is None else ahora
     return ahora - t < SUPRESION_S
 
 
@@ -670,6 +689,7 @@ async def _ciclo():
         if tid not in vivas:
             _estados.pop(tid, None)
             _ultimo_keyword.pop(tid, None)
+            _ultimo_hook.pop(tid, None)
             _fin_pendiente.pop(tid, None)       # fin a confirmar de una terminal muerta
             _rotacion_terminal.pop(tid, None)   # cooldown de rotación por terminal
             _descarte_logueado.pop(tid, None)   # dedupe del audit de descartes

@@ -572,3 +572,17 @@ def test_terminales_trabajando_incluye_las_que_rearman_desde_idle():
     # enciende YA, sin esperar los 4 polls de re-armado → no parpadea.
     estados = {1: {'fase': 'idle', 'cambios': 2}, 2: {'fase': 'idle', 'cambios': 0}}
     assert terminales_trabajando(estados, {}) == [1]
+
+
+# ─── Stop del hook: el sonido sale al instante y el heurístico no lo repite ───
+
+def test_stop_del_hook_suprime_el_heuristico_por_40s():
+    from plotspace.core import agent_watch as aw
+    aw._ultimo_hook.clear(); aw._fin_pendiente.clear()
+    aw._fin_pendiente[7] = (1.0, 123)               # un 'terminé' por confirmar
+    aw.registrar_fin_hook(7, ts=100.0)
+    assert 7 not in aw._fin_pendiente               # se cancela el pendiente
+    assert aw.suprimido(7, ahora=100.0 + 20) is True   # cubre los ~16 s del heurístico
+    assert aw.suprimido(7, ahora=100.0 + aw.SUPRESION_HOOK_S + 1) is False
+    assert aw.suprimido(8, ahora=100.0) is False    # solo esa terminal
+    aw._ultimo_hook.clear()

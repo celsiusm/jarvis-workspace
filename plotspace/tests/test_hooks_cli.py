@@ -281,3 +281,16 @@ def test_raiz_en_tmp_es_efimera(tmp_path):
 
 
 import os  # noqa: E402
+
+
+# ─── Stop: el agente terminó de responder → campanita al instante ────────────
+
+def test_instala_el_evento_stop_sin_matcher(tmp_path):
+    p = tmp_path / 'settings.json'
+    asegurar_hooks_provenance(str(p), f'python3 /r/{NOMBRE_SCRIPT}')
+    grupos = _leer(p)['hooks']['Stop']
+    assert len(grupos) == 1 and 'matcher' not in grupos[0]
+    assert NOMBRE_SCRIPT in grupos[0]['hooks'][0]['command']
+    # idempotente
+    assert asegurar_hooks_provenance(str(p), f'python3 /r/{NOMBRE_SCRIPT}') is False
+    assert len(_leer(p)['hooks']['Stop']) == 1
