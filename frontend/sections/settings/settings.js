@@ -193,7 +193,9 @@
   function _irAMemoria() {
     const volverA = _seccion && _seccion !== 'memoria' ? _seccion : null;
     close();
-    window.JarvisMemory?.abrir?.({ alCerrar: () => open(volverA) });
+    // instantaneo: Configuración cierra y Memoria abre en el mismo frame; si Memoria
+    // entrara con fade desde 0 se vería un parpadeo (se va el velo y vuelve).
+    window.JarvisMemory?.abrir?.({ alCerrar: () => open(volverA), instantaneo: true });
   }
 
   function setSeccion(sec) {
