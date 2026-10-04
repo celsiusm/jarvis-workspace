@@ -48,7 +48,29 @@
     return tipoIa === 'manual' ? null : '\x16';
   }
 
-  const api = { planDePaste, nombreImagenPegada, fallbackImagenPaste };
+  // ¿Envolver el texto pegado con los marcadores de bracketed paste (ESC[200~ …
+  // ESC[201~)? Solo tienen sentido si la app del pane los pidió (ESC[?2004h):
+  // una que NO — el prompt de contraseña de sudo/ssh, `cat`, `read`, un REPL
+  // sin readline — los recibe como teclas literales y el paste sale
+  // "^[[200~clave^[[201~" (la contraseña pegada nunca coincidía).
+  //   visto  → xterm ya vio al menos un ESC[?2004h/l en ESTE stream (sabe el
+  //            estado real). Tras un re-attach (seed) NO lo sabe — tmux absorbe
+  //            ese modo y el seed no lo re-enuncia — y ahí se conserva el
+  //            default histórico: envolver (readline y los agentes lo piden).
+  //   activo → term.modes.bracketedPasteMode (el estado conocido).
+  function debeEnvolverPaste({ visto, activo } = {}) {
+    return visto ? !!activo : true;
+  }
+
+  // Texto pegado → lo que viaja al PTY. Sanea los marcadores embebidos (un
+  // ESC[201~ adentro cerraría el paste antes de tiempo y el resto se leería
+  // como teclado → inyección de comandos) y normaliza los saltos a \r.
+  function prepararPaste(texto, envolver) {
+    const limpio = String(texto).replace(/\r?\n/g, '\r').replace(/\x1b\[20[01]~/g, '');
+    return envolver === false ? limpio : '\x1b[200~' + limpio + '\x1b[201~';
+  }
+
+  const api = { planDePaste, nombreImagenPegada, fallbackImagenPaste, debeEnvolverPaste, prepararPaste };
   global.TerminalPaste = Object.assign(global.TerminalPaste || {}, api);
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof window !== 'undefined' ? window : globalThis);

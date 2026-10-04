@@ -1300,3 +1300,7 @@
 .ct-diag-w { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
 .ct-diag { margin: 0; max-width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--ob-bg-2); color: var(--ob-fg-2); font: 400 11.5px/1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
 .ct-diag[hidden] { display: none; }
+
+/* Aviso de "terminé": chips de tono + volumen (Voz → Avisos) */
+.sn-tonos { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 6px; }
+.sn-vol { width: min(260px, 100%); flex: none; }

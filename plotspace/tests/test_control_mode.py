@@ -479,6 +479,149 @@ def test_comando_con_respuesta_sobre_cliente_cerrado():
     asyncio.run(escenario())
 
 
+# ─── Tipeo: el bloque %begin/%end de CADA comando se atribuye a SU dueño ──────
+
+def test_targets_exactos_no_resuelven_por_prefijo():
+    """Sin '=' tmux resuelve `jarvis_1` por PREFIJO si esa sesión murió y existe
+    `jarvis_12`: el tipeo de la 1 caería en la 12. El cliente usa SIEMPRE el
+    target exacto (`=nombre` para attach, `=nombre:` para un pane)."""
+    from plotspace.core.control_mode import ClienteControl
+    c = ClienteControl('jarvis_1')
+    assert c.target_sesion == '=jarvis_1'
+    assert c.pane == '=jarvis_1:'
+
+
+def test_enviar_bytes_apunta_al_pane_exacto():
+    import asyncio
+
+    async def escenario():
+        c = _cliente_sin_proc()
+        c._loop = asyncio.get_running_loop()
+        escritos = []
+        c._escribir_stdin = escritos.append
+        await c.enviar_bytes(b'hola')
+        assert len(escritos) == 1
+        linea = escritos[0].decode()
+        assert linea.startswith('send-keys -t =pytest_seco: -H 68 6f 6c 61')
+
+    asyncio.run(escenario())
+
+
+def test_fire_and_forget_consume_su_bloque_y_no_desfasa_las_respuestas():
+    """CADA comando que escribimos (también send-keys y refresh-client, que no
+    devuelven nada) produce un bloque %begin/%end. Si el tipeo recién escrito
+    no consume SU bloque, el siguiente comando_con_respuesta recibe la
+    respuesta del tipeo (vacía) en vez de la suya: el seed quedaba degradado."""
+    import asyncio
+
+    async def escenario():
+        c = _cliente_sin_proc()
+        c._loop = asyncio.get_running_loop()
+        c._bloques_espurios = 0
+        c.comando('refresh-client -C 80x24')           # fire-and-forget
+        await c.enviar_bytes(b'ab')                    # un send-keys
+        t = asyncio.create_task(c.comando_con_respuesta('display-message -p x'))
+        await asyncio.sleep(0)
+        # tmux responde EN ORDEN de escritura: resize, send-keys, display
+        c._despachar(('respuesta', []))
+        c._despachar(('respuesta', []))
+        assert not t.done()
+        c._despachar(('respuesta', ['real']))
+        ok, cuerpo = await t
+        assert ok is True and cuerpo == ['real']
+        assert not c._esperas
+
+    asyncio.run(escenario())
+
+
+def test_bloque_tardio_de_un_timeout_no_se_atribuye_al_siguiente_comando():
+    """Un comando_con_respuesta que vence su timeout deja su Future cancelado;
+    su bloque llega DESPUÉS y debe consumirse (descartarse), no pasar al
+    comando siguiente — saltear el Future sin consumir corría la cuenta para
+    siempre."""
+    import asyncio
+
+    async def escenario():
+        c = _cliente_sin_proc()
+        c._loop = asyncio.get_running_loop()
+        c._bloques_espurios = 0
+        try:
+            await c.comando_con_respuesta('display -p uno', timeout=0.01)
+            assert False, 'debía vencer'
+        except (asyncio.TimeoutError, TimeoutError):
+            pass
+        t2 = asyncio.create_task(c.comando_con_respuesta('display -p dos'))
+        await asyncio.sleep(0)
+        c._despachar(('respuesta', ['uno-tardio']))     # el bloque del que venció
+        c._despachar(('respuesta', ['dos']))
+        ok, cuerpo = await t2
+        assert cuerpo == ['dos']
+
+    asyncio.run(escenario())
+
+
+def test_espera_real_ignora_el_tipeo():
+    """El poller de modos cede el paso a un seed/probe REAL en vuelo, no a cada
+    tecla: los fire-and-forget no cuentan como espera."""
+    import asyncio
+
+    async def escenario():
+        c = _cliente_sin_proc()
+        c._loop = asyncio.get_running_loop()
+        await c.enviar_bytes(b'x')
+        c.comando('refresh-client -C 80x24')
+        assert c._esperas and not c.espera_real()
+        t = asyncio.create_task(c.comando_con_respuesta('display -p y'))
+        await asyncio.sleep(0)
+        assert c.espera_real()
+        c._terminar()
+        try:
+            await t
+        except (asyncio.CancelledError, RuntimeError):
+            pass
+
+    asyncio.run(escenario())
+
+
+def test_escritura_grande_hace_cola_y_no_se_intercala_con_otros_emisores():
+    """Un paste grande sale por un thread. Mientras ese write está en vuelo, el
+    poller de modos / un resize / una tecla escribían POR ENCIMA y su línea se
+    colaba a mitad de un `send-keys -H …` (tmux rechaza la línea partida y el
+    paste perdía un tramo). Ahora todo lo que llega hace cola y sale después,
+    en orden y entero."""
+    import asyncio
+    import threading
+
+    async def escenario():
+        c = _cliente_sin_proc()
+        c._loop = asyncio.get_running_loop()
+        escritos = []
+        suelta = threading.Event()
+
+        def stub(payload):
+            if len(payload) > 16384:
+                suelta.wait(5)          # tmux lento consumiendo el paste
+            escritos.append(payload)
+
+        c._escribir_stdin = stub
+        grande = asyncio.create_task(c.enviar_bytes(b'a' * 20000))
+        await asyncio.sleep(0.05)       # el thread quedó bloqueado en el write grande
+        c.comando('display-message -p intruso')     # el poller / un resize
+        tecla = asyncio.create_task(c.enviar_bytes(b'z'))
+        await asyncio.sleep(0.05)
+        assert escritos == [], 'nada puede colarse mientras el write grande está en vuelo'
+        suelta.set()
+        await asyncio.wait_for(asyncio.gather(grande, tecla), 5)
+        assert len(escritos) == 3
+        assert len(escritos[0]) > 16384 and escritos[0].startswith(b'send-keys')
+        assert escritos[1] == b'display-message -p intruso\n'
+        assert escritos[2].startswith(b'send-keys') and b'7a' in escritos[2]
+        # cada línea del paste salió ENTERA (termina en \n, ninguna cortada)
+        assert escritos[0].endswith(b'\n')
+
+    asyncio.run(escenario())
+
+
 # ─── Registro de dueños (un cliente de control DUEÑO por terminal) ────────────
 
 def test_registro_duenos_swap_y_liberar():

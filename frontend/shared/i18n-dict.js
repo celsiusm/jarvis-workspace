@@ -1380,6 +1380,14 @@
     "Sonido al terminar una tarea": "Sound when a task finishes",
     "Un acorde corto cuando un agente termina o queda esperando respuesta.":
       "A short chord when an agent finishes or is waiting for an answer.",
+    "Tono del aviso": "Alert tone",
+    "Tocá uno para elegirlo y oírlo.": "Tap one to pick it and hear it.",
+    "Volumen del aviso": "Alert volume",
+    "Acorde": "Chord",
+    "Campana": "Bell",
+    "Ding": "Ding",
+    "Digital": "Digital",
+    "Suave": "Soft",
     "Apagadas — al activarlas el navegador va a pedir permiso.": "Off — turning them on asks the browser for permission.",
     "Activadas": "On",
     // Teclado

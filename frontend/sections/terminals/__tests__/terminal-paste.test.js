@@ -76,4 +76,32 @@ assert.strictEqual(P.fallbackImagenPaste(undefined), '\x16');
 // bash (manual): no hay quién lea el clipboard del OS → null (mostrar error).
 assert.strictEqual(P.fallbackImagenPaste('manual'), null);
 
+// ─── debeEnvolverPaste: marcadores de bracketed paste SOLO si la app los pidió ──
+// Un prompt de contraseña (sudo/ssh), `cat`, `read` o un REPL sin readline NO los
+// entiende: recibía "^[[200~clave^[[201~" y la contraseña pegada fallaba.
+// Estado conocido (xterm vio ESC[?2004h/l): se respeta.
+assert.strictEqual(P.debeEnvolverPaste({ visto: true, activo: true }), true);    // bash/readline, claude
+assert.strictEqual(P.debeEnvolverPaste({ visto: true, activo: false }), false);  // sudo, cat, read…
+// Estado DESCONOCIDO (tras un re-attach el seed no re-enuncia el modo): se conserva
+// el default histórico — envolver (readline y los agentes lo piden; sin marcadores
+// un paste multilínea se ejecutaría línea por línea).
+assert.strictEqual(P.debeEnvolverPaste({ visto: false, activo: false }), true);
+assert.strictEqual(P.debeEnvolverPaste({}), true);
+assert.strictEqual(P.debeEnvolverPaste(), true);
+
+// ─── prepararPaste: saneo + marcadores ───────────────────────────────────────
+assert.strictEqual(P.prepararPaste('ls -la', true), '\x1b[200~ls -la\x1b[201~');
+assert.strictEqual(P.prepararPaste('ls -la'), '\x1b[200~ls -la\x1b[201~');       // default: envolver
+assert.strictEqual(P.prepararPaste('clave123', false), 'clave123');                // sin marcadores
+// saltos de línea → \r (con o sin marcadores)
+assert.strictEqual(P.prepararPaste('a\nb\r\nc', true), '\x1b[200~a\rb\rc\x1b[201~');
+assert.strictEqual(P.prepararPaste('a\nb', false), 'a\rb');
+// marcadores EMBEBIDOS fuera: un ESC[201~ adentro cerraría el paste antes de
+// tiempo y el resto se leería como teclado (inyección de comandos).
+assert.strictEqual(
+  P.prepararPaste('x\x1b[201~rm -rf ~\x1b[200~y', true),
+  '\x1b[200~xrm -rf ~y\x1b[201~',
+);
+assert.strictEqual(P.prepararPaste('x\x1b[201~y', false), 'xy');
+
 console.log('terminal-paste.test.js OK');
