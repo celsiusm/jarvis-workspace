@@ -458,6 +458,8 @@
         </div>`;
     };
 
+    // Tono/volumen guardados del aviso "terminé" (defaults si no hay módulo ni storage).
+    const _sndPrefs = () => (window.JarvisSonido?.prefs?.() ?? { perfil: 'acorde', vol: 40 });
     const pintar = () => {
       b.innerHTML =
         blk('tecla', 'push-to-talk', pintarTecla(), { key: ptt?.label || 'Hablar' }) +
@@ -475,7 +477,23 @@
             sw('sx-snd', window.JarvisSonido ? window.JarvisSonido.get()
                         : localStorage.getItem('jarvis.sonidoTareas') !== 'off',
                _t('Sonido al terminar tareas')),
-            'Sonido al terminar tareas'),
+            'Sonido al terminar tareas') +
+          setRow('Tono del aviso',
+            'Tocá uno para elegirlo y oírlo.',
+            `<span class="sn-tonos" role="group" aria-label="${esc(_t('Tono del aviso'))}">${
+              (window.JarvisSonidoFin?.ORDEN || []).map(id => `
+              <button type="button" class="sx-btn sm sn-tono${id === _sndPrefs().perfil ? ' pri' : ''}"
+                      data-tono="${id}" aria-pressed="${id === _sndPrefs().perfil}">${esc(_t(window.JarvisSonidoFin.PERFILES[id].label))}</button>`).join('')
+            }</span>`,
+            'Tono del aviso') +
+          setRow('Volumen del aviso',
+            '',
+            `<span class="sx-slider sn-vol">
+               <input type="range" id="sx-snd-vol" min="${window.JarvisSonidoFin?.VOL_MIN ?? 5}" max="${window.JarvisSonidoFin?.VOL_MAX ?? 100}"
+                      step="5" value="${_sndPrefs().vol}" aria-label="${esc(_t('Volumen del aviso'))}">
+               <output id="sx-snd-vol-o">${_sndPrefs().vol}%</output>
+             </span>`,
+            'Volumen del aviso'),
           { key: 'Avisos' });
 
       // Dictado
@@ -505,6 +523,24 @@
           if (notifDesc) notifDesc.textContent = _t('Apagadas — al activarlas el navegador va a pedir permiso.');
         }
       });
+      // Tono y volumen del aviso "terminé": tocar un tono lo elige Y lo reproduce;
+      // el slider suena al soltar (probar en cada pixel del arrastre sería ruido).
+      b.querySelectorAll('.sn-tono').forEach(btn => btn.addEventListener('click', () => {
+        window.JarvisSonido?.setPrefs({ perfil: btn.dataset.tono });
+        b.querySelectorAll('.sn-tono').forEach(x => {
+          const on = x === btn;
+          x.classList.toggle('pri', on);
+          x.setAttribute('aria-pressed', String(on));
+        });
+        window.JarvisSonido?.probar('TASK_DONE');
+      }));
+      const vol = b.querySelector('#sx-snd-vol');
+      const volO = b.querySelector('#sx-snd-vol-o');
+      vol?.addEventListener('input', () => {
+        if (volO) volO.textContent = `${vol.value}%`;
+        window.JarvisSonido?.setPrefs({ vol: vol.value });
+      });
+      vol?.addEventListener('change', () => window.JarvisSonido?.probar('TASK_DONE'));
       // Sonido de eventos de agente (fuente de verdad: window.JarvisSonido)
       const snd = b.querySelector('#sx-snd');
       snd?.addEventListener('change', () => {

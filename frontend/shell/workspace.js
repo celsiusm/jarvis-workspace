@@ -790,17 +790,26 @@ function _tocarNotas(notas, tipo = 'sine', vol = 0.16) {
     osc.frequency.value = n.freq;
     const start = t0 + n.start;
     const end   = start + n.dur;
-    // envolvente ataque/decay suave para que no "clickee"
+    // envolvente ataque/decay suave para que no "clickee". n.g = peso de la nota
+    // dentro del tono (timbres con varios parciales; ver shared/sonido-fin.js).
+    const pico = Math.max(0.0002, vol * (n.g == null ? 1 : n.g));
     g.gain.setValueAtTime(0.0001, start);
-    g.gain.exponentialRampToValueAtTime(vol, start + 0.015);
+    g.gain.exponentialRampToValueAtTime(pico, start + 0.015);
     g.gain.exponentialRampToValueAtTime(0.0001, end);
     osc.connect(g); g.connect(ctx.destination);
     osc.start(start); osc.stop(end + 0.02);
   }
 }
 
-function sonarEventoTarea(event) {
-  if (!sonidoTareas) return;
+function sonarEventoTarea(event, forzar) {
+  // forzar=true: el botón "Probar" de Configuración suena aunque el aviso esté apagado.
+  if (!sonidoTareas && !forzar) return;
+  // El tono y el volumen los elige el usuario (Configuración → Voz → Avisos); el
+  // plan viene de shared/sonido-fin.js. Sin ese módulo (cache vieja) queda el chime
+  // histórico de abajo.
+  const SF = window.JarvisSonidoFin;
+  const plan = SF ? SF.plan(event, SF.leerPrefs(localStorage)) : null;
+  if (plan) { _tocarNotas(plan.notas, plan.tipo, plan.gain); return; }
   if (event === 'TASK_DONE') {
     // acorde ascendente (C5 → E5 → G5): "terminé bien"
     _tocarNotas([
@@ -815,6 +824,16 @@ function sonarEventoTarea(event) {
       { freq: 311.13, start: 0.14, dur: 0.22 },
     ], 'triangle', 0.18);
   }
+}
+
+// Los navegadores NO dejan sonar audio hasta que el usuario interactúa con la
+// página: un AudioContext creado en el primer aviso (que llega por WebSocket, sin
+// gesto) nace suspendido y, tras un F5 sin tocar nada, el "terminé" caía MUDO.
+// Se crea/reanuda en el primer gesto (tecla o click) — para cuando termina un
+// agente el contexto ya está corriendo. Con el contexto ya vivo, _ctx() lo reanuda
+// si el navegador lo volvió a suspender (una pestaña dormida mucho rato).
+for (const _ev of ['keydown', 'pointerdown']) {
+  window.addEventListener(_ev, () => { _ctx(); }, { once: true, capture: true, passive: true });
 }
 
 // El sonido "terminé" sale cuando el agente terminó DE VERDAD todo su trabajo: la
@@ -867,6 +886,12 @@ window.JarvisSonido = {
     _sincronizarBotonSonido();
     if (sonidoTareas) sonarEventoTarea('TASK_DONE');  // feedback al activar
   },
+  // Tono + volumen del aviso "terminé" (Configuración → Voz → Avisos).
+  prefs: () => (window.JarvisSonidoFin ? window.JarvisSonidoFin.leerPrefs(localStorage)
+                                       : { perfil: 'acorde', vol: 40 }),
+  setPrefs: (p) => { window.JarvisSonidoFin?.guardarPrefs(localStorage, p); },
+  // Suena ya, aunque el aviso esté apagado (el usuario está probando el tono).
+  probar: (evento) => sonarEventoTarea(evento || 'TASK_DONE', true),
 };
 
 // Limpia el chat del panel y restaura el historial del proyecto activo.
