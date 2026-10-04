@@ -26,6 +26,7 @@
   let _uso       = { eventos: [], conteo: {} };   // stream de recall (/memory/uso)
   let _cargando  = false;
   let _error     = false;
+  let _errorDetalle = "";
 
   let _tab       = 'lista';       // 'lista' | 'grafo' | 'live' | 'resumen'
   const TABS = ['lista', 'grafo', 'live', 'resumen'];
@@ -85,20 +86,30 @@
   /* ══ Datos ═══════════════════════════════════════════════════════ */
   async function _cargar() {
     const pid = _projectId;
-    _cargando = true; _error = false;
+    _cargando = true; _error = false; _errorDetalle = '';
+    // Los tres pedidos salen JUNTOS (antes eran en fila: la pantalla tardaba la suma y
+    // el esqueleto se veía parpadear antes del contenido).
+    const pMem = fetch(`/api/projects/${pid}/memory`).catch(() => null);
+    const pSalud = fetch(`/api/projects/${pid}/memory/salud`).catch(() => null);
+    const pUso = _cargarUso();
+    const r = await pMem;
     try {
-      const r = await fetch(`/api/projects/${pid}/memory`);
-      if (!r.ok) throw new Error(String(r.status));
+      if (!r) throw new Error('sin respuesta del servidor');
+      if (!r.ok) {
+        let det = '';
+        try { det = (await r.json()).detail || ''; } catch { /* cuerpo no JSON */ }
+        throw new Error(`HTTP ${r.status}${det ? ' · ' + det : ''}`);
+      }
       const data = await r.json();
       if (pid !== _projectId) return;
       _memorias = data.memorias || [];
       _edges    = data.edges || [];
-    } catch { _error = true; }
+    } catch (e) { _error = true; _errorDetalle = String((e && e.message) || e); }
     try {
-      const rs = await fetch(`/api/projects/${pid}/memory/salud`);
-      _salud = rs.ok ? await rs.json() : null;
+      const rs = await pSalud;
+      _salud = rs && rs.ok ? await rs.json() : null;
     } catch { _salud = null; }
-    await _cargarUso();
+    await pUso;
     _cargando = false;
   }
 
@@ -208,7 +219,7 @@
     _modo = 'ver'; _leyendo = false; _saludFiltro = null;
 
     const ov = document.createElement('div');
-    ov.className = 'mem-overlay';
+    ov.className = 'mem-overlay' + (opts && opts.instantaneo ? ' sin-entrada' : '');
     ov.innerHTML = `
       <div class="mem-modal" role="dialog" aria-modal="true" aria-label="Memoria del proyecto">
         <div class="mem-aura" aria-hidden="true"></div>
@@ -234,7 +245,7 @@
         </header>
         <div class="mem-constel" id="mem-constel"></div>
         <main class="mem-body" id="mem-body">
-          <div class="mem-cargando" role="status">${_skeleton()}</div>
+          <div class="mem-cargando" role="status"></div>
         </main>
       </div>`;
     document.body.appendChild(ov);
@@ -247,10 +258,17 @@
     document.addEventListener('keydown', _onKey);
     _marcarTabs();
 
+    // Esqueleto SOLO si la carga tarda (>220 ms): con respuesta rápida el contenido entra
+    // directo, sin el flash esqueleto → contenido que se veía como un parpadeo.
+    const cuerpo = ov.querySelector('.mem-cargando');
+    const tSkel = setTimeout(() => { if (_cargando && cuerpo && cuerpo.isConnected) cuerpo.innerHTML = _skeleton(); }, 220);
+    ov.classList.add('inicial');           // sin animaciones de entrada por tarjeta en el 1.er pintado
     await _cargar();
+    clearTimeout(tSkel);
     if (!document.body.contains(ov)) return;
     if (!_slugAbierta || !_mem(_slugAbierta)) _slugAbierta = _ordenLista(_filtradas())[0]?.slug || null;
     _renderTodo();
+    setTimeout(() => ov.classList.remove('inicial'), 700);
   }
 
   function _skeleton() {
@@ -338,6 +356,7 @@
           <span class="mem-vacio-icono">${icon('alert', 22)}</span>
           <b>No pude leer la memoria del proyecto.</b>
           <span>Revisá que el servidor esté vivo y probá de nuevo.</span>
+          ${_errorDetalle ? `<code class="mem-error-det" data-i18n-skip>${esc(_errorDetalle)}</code>` : ''}
           <button type="button" class="mem-btn" id="mem-reintentar">${icon('refresh', 12)} Reintentar</button>
         </div>`;
       body.querySelector('#mem-reintentar').addEventListener('click', async () => {

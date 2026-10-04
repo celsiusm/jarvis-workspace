@@ -1254,3 +1254,14 @@ kbd {
   .mem-live-anillo[data-estado="trabajando"]::after,
   .mem-live-arista.write, .mem-live-arista.pendiente, .mem-fchip.flash, .mem-gn.fire .pulso { animation: none; }
 }
+
+/* Primer pintado: el modal ya entra con su propia animación; las tarjetas/paneles no
+   se animan además una por una (eso, sumado al esqueleto, se leía como parpadeo). */
+.mem-overlay.inicial .mem-body *, .mem-overlay.inicial .mem-constel * { animation: none !important; }
+.mem-error-det {
+  max-width: 60ch; margin-top: 2px; padding: 4px 8px; border-radius: 6px;
+  font: 500 11px var(--font-mono); color: var(--ob-fg-3); background: var(--ob-bg-2);
+  overflow-wrap: anywhere; text-align: center;
+}
+/* Viene de Configuración: sin fade ni entrada del modal (el cambio es un solo frame). */
+.mem-overlay.sin-entrada, .mem-overlay.sin-entrada .mem-modal { animation: none; }
