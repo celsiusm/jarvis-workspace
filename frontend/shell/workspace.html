@@ -45,6 +45,11 @@
   <link rel="stylesheet" href="/static/shared/fondo.css?v=5">
 </head>
 <body>
+  <!-- Estado de la franja ANTES del primer pintado: este script corre síncrono apenas se
+       abre <body>, así que la franja ya nace colapsada (riel) si así estaba. Si esperara a
+       workspace.js (al final de la página) se pintaba un frame ancho y recién después se
+       achicaba. Misma clave que workspace.js (_STRIP_KEY). -->
+  <script>try { if (localStorage.getItem('jarvis.strip.hidden') === '1') document.body.classList.add('jw-rail'); } catch (e) {}</script>
   <script src="/static/shared/themes.js?v=9"></script>
   <script src="/static/shared/glass.js?v=2"></script>
   <script src="/static/shared/fondo.js?v=3"></script>
@@ -569,6 +574,32 @@
 
   <!-- xterm VENDOREADO local (frontend/vendor/xterm): xterm@5.3.0 + addons fit@0.8.0 /
        webgl@0.16.0 / canvas@0.5.0 — mismas versiones que se usaban del CDN. -->
+  <!-- Panel derecho ANTES del primer pintado: si estaba abierto en este proyecto, nace abierto, con
+       su ancho y su pestaña. Sin esto el panel "aparecía" recién cuando cargaban los scripts de
+       abajo (el workspace se pintaba sin panel y después se achicaba para hacerle lugar). Mismas
+       claves y defaults que panel.js (DEFAULT_W 320 / DEFAULT_TAB preview); panel.js después
+       confirma o corrige (clamp, pestañas ocultas) con el estado real. -->
+  <script>
+    (function () {
+      try {
+        var pid = new URLSearchParams(location.search).get('id');
+        var L = window.localStorage;
+        if (!pid || L.getItem('jarvis.dock.open.' + pid) !== '1') return;
+        var tab = L.getItem('jarvis.dock.tab.' + pid) || 'preview';
+        var dock = document.getElementById('jw-dock');
+        var btn = document.querySelector('.jw-tab[data-tab="' + tab + '"]');
+        var pane = document.querySelector('.jw-pane[data-pane="' + tab + '"]');
+        if (!dock || !btn || btn.hidden || !pane) return;       // pestaña no válida/oculta: lo resuelve panel.js
+        var w = parseInt(L.getItem('jarvis.dock.width.' + pid), 10);
+        if (isNaN(w)) w = parseInt(L.getItem('jarvis.dock.width'), 10);
+        dock.hidden = false;
+        dock.style.width = (isNaN(w) ? 320 : Math.max(300, w)) + 'px';
+        var sp = document.getElementById('jw-dock-splitter'); if (sp) sp.hidden = false;
+        btn.classList.add('activa'); btn.setAttribute('aria-selected', 'true');
+        document.querySelectorAll('.jw-pane').forEach(function (p) { p.hidden = p.dataset.pane !== tab; });
+      } catch (e) { /* localStorage bloqueado: panel.js lo resuelve */ }
+    })();
+  </script>
   <script src="/static/vendor/xterm/xterm.js?v=530"></script>
   <script src="/static/vendor/xterm/xterm-addon-fit.js?v=080"></script>
   <!-- Renderers acelerados por GPU: con 9 agentes en vivo el renderer DOM
