@@ -65,9 +65,9 @@
   --sx-well:    color-mix(in oklch, var(--ob-fg-0) 4.5%, transparent);  /* módulo interno */
   --sx-input:   color-mix(in oklch, var(--ob-bg-0) 55%, transparent);   /* campo hundido */
 
-  background: color-mix(in oklch, var(--ob-bg-void) 58%, transparent);
-  backdrop-filter: blur(26px) saturate(120%);
-  -webkit-backdrop-filter: blur(26px) saturate(120%);
+  /* SIN backdrop-filter: desenfocar todo el workspace (con las terminales vivas debajo)
+     era lo que hacía caer los FPS al abrir Configuración. Un velo liso cuesta cero. */
+  background: color-mix(in oklch, var(--ob-bg-void) 72%, transparent);
   animation: sx-veil-in 260ms var(--ease-out);
 }
 .jw-settings[hidden] { display: none; }
@@ -1292,3 +1292,6 @@
 .fd-sl { display: grid; grid-template-columns: 138px minmax(0, 1fr); align-items: center; gap: 12px; }
 .fd-sl-l { font: 500 11.5px var(--font-mono); color: var(--ob-fg-3); letter-spacing: .02em; }
 .fd-nota { margin: 0; font: 400 11.5px/1.55 var(--font-ui); color: var(--ob-fg-3); max-width: 70ch; }
+
+/* Listas largas: lo que está fuera de pantalla no se pinta ni se mide. */
+.ex-card, .sx-set { content-visibility: auto; contain-intrinsic-size: auto 120px; }

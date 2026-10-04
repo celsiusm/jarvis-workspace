@@ -94,7 +94,6 @@
    Son transitorios → pueden usar blur real del fondo. */
 :root[data-glass="on"] #modal-new-terminal .tl2-modal,
 :root[data-glass="on"] .qp-panel,
-:root[data-glass="on"] .sx-slab,
 :root[data-glass="on"] .gq-card,
 :root[data-glass="on"] .ob-confirm,
 :root[data-glass="on"] .orch-more-menu,
@@ -107,6 +106,8 @@
           backdrop-filter: var(--lg-blur);
   box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop-lg);
 }
+/* Configuración: losa SIN blur (el desenfoque sobre terminales vivas costaba FPS). */
+:root[data-glass="on"] .sx-slab { background: var(--ob-bg-1); box-shadow: 0 0 0 1px var(--sx-hair, var(--ob-line-2)), var(--lg-drop-lg); }
 /* El toast conserva su borde izquierdo de color (es la señal de tipo). */
 :root[data-glass="on"] .ob-toast {
   background: var(--lg-gloss), var(--lg-body-float);
