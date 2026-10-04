@@ -107,6 +107,7 @@
     // Lo que falta instalar se ve en su lugar, atenuado, con la opción de instalarlo
     // al pasar el mouse (cli-instalar.js); no se puede sumar a la tanda hasta que esté.
     let _clisEstado = null;
+    let _tiposOrden = OPCIONES.map(o => o.tipo);   // orden mostrado (usables primero)
     const _I = () => global.JarvisCliInstalar;
     const _ICO_BAJAR = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 2.5v7.5M4.8 7.2 8 10.4l3.2-3.2M3 13h10"/></svg>';
     const _ICO_SITIO = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 3.5H4A1.5 1.5 0 0 0 2.5 5v7A1.5 1.5 0 0 0 4 13.5h7a1.5 1.5 0 0 0 1.5-1.5V9.5M9.5 2.5h4v4M13.5 2.5 7.5 8.5"/></svg>';
@@ -281,11 +282,29 @@
           : (e.comando ? `${_L('Abre una terminal y corre:', 'Opens a terminal and runs:')} ${e.comando}`
               + (e.conNode ? `\n${_L('Incluye instalar Node.js.', 'Includes installing Node.js.')}` : '') : '');
       });
+      _ordenar();
       const pend = _el.querySelector('.qp-pend');
       if (pend) {
         pend.hidden = pendientes === 0;
         pend.textContent = pendientes ? _L(`${pendientes} por instalar`, `${pendientes} to install`) : '';
       }
+    }
+
+    // Usables primero (en su orden de siempre) y los que faltan instalar después; al
+    // instalarse uno, SUBE a su lugar entre los usables con un deslizamiento. La tecla de
+    // cada fila es su posición (1-9): lo que ves es lo que apretás. La 1.ª pasada de cada
+    // apertura acomoda sin animar (si no, las filas "viajarían" al abrir).
+    function _ordenar() {
+      const I = _I();
+      const grid = _el && _el.querySelector('.qp-grid');
+      if (!grid) return;
+      _tiposOrden = I ? I.ordenarClis(OPCIONES.map(o => o.tipo), _clisEstado) : OPCIONES.map(o => o.tipo);
+      if (I && I.reordenar) I.reordenar(grid, _tiposOrden, grid.dataset.ord === '1');
+      grid.dataset.ord = '1';
+      _tiposOrden.forEach((tipo, i) => {
+        const k = grid.querySelector(`.qp-row[data-tipo="${tipo}"] .qp-tecla`);
+        if (k) k.textContent = String(i + 1);
+      });
     }
 
     // El clic de «Instalar»: abre la terminal con el comando (el picker se cierra para
@@ -369,9 +388,9 @@
         if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); cerrar(); return; }
         if (e.key === 'Enter')  { e.preventDefault(); e.stopPropagation(); _lanzar(); return; }
         const di = indicePorDigito(e.code);        // 1-9 suma · Shift resta
-        if (di != null && di >= 0 && di < OPCIONES.length) {
+        if (di != null && di >= 0 && di < _tiposOrden.length) {
           e.preventDefault(); e.stopPropagation();
-          _sumar(OPCIONES[di].tipo, e.shiftKey ? -1 : +1);
+          _sumar(_tiposOrden[di], e.shiftKey ? -1 : +1);
           return;
         }
         const dc = deltaCantidadPorTecla(e.key);              // ←/→ recorren disposiciones

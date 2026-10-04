@@ -58,7 +58,16 @@
   /** Cuánto esperar antes de volver a mirar: rápido al principio, después más espaciado. */
   function esperaPoll(intento) { return intento < 12 ? 3000 : 6000; }
 
-  const pure = { planInstalacion, estadoFila, nombreTerminal, recienInstalados, esperaPoll, POLL_MAX_MS };
+  /** Orden para mostrar: los CLIs USABLES (instalados + el shell) primero y los que faltan
+   *  después; dentro de cada grupo se respeta el orden canónico. Al instalarse uno, pasa al
+   *  grupo de arriba en SU lugar relativo. Sin estado conocido (aún no se detectó) → canónico. */
+  function ordenarClis(orden, clis) {
+    if (!Array.isArray(clis) || !clis.length) return orden.slice();
+    const falta = (id) => { const c = clis.find(x => x.id === id); return !!c && !c.instalado; };
+    return [...orden.filter(id => !falta(id)), ...orden.filter(id => falta(id))];
+  }
+
+  const pure = { planInstalacion, estadoFila, nombreTerminal, recienInstalados, esperaPoll, ordenarClis, POLL_MAX_MS };
   global.JarvisCliInstalar = Object.assign(global.JarvisCliInstalar || {}, { _pure: pure, ...pure });
   if (typeof module !== 'undefined' && module.exports) { module.exports = pure; return; }
   if (typeof document === 'undefined') return;
@@ -178,6 +187,25 @@
     return { ok: false, via: 'ninguna' };
   }
 
+  /** Reordena las filas de `cont` (hijos con data-tipo) según `ids`. Con `animar`, las que
+   *  cambian de lugar se deslizan (FLIP por transform: nada de animar width/layout). */
+  function reordenar(cont, ids, animar) {
+    if (!cont) return;
+    const filas = [...cont.children].filter(el => el.dataset && el.dataset.tipo);
+    const actual = filas.map(el => el.dataset.tipo).join();
+    if (actual === ids.filter(id => filas.some(f => f.dataset.tipo === id)).join()) return;   // ya está en orden
+    const antes = new Map(filas.map(el => [el, el.getBoundingClientRect()]));
+    ids.forEach(id => { const el = filas.find(f => f.dataset.tipo === id); if (el) cont.appendChild(el); });
+    if (!animar || (global.matchMedia && global.matchMedia('(prefers-reduced-motion: reduce)').matches)) return;
+    filas.forEach(el => {
+      const a = antes.get(el), b = el.getBoundingClientRect();
+      const dx = a.left - b.left, dy = a.top - b.top;
+      if (Math.abs(dx) < 2 && Math.abs(dy) < 2 || !el.animate) return;
+      el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
+        { duration: 300, easing: 'cubic-bezier(.22,1,.36,1)' });
+    });
+  }
+
   const hayProyecto = () => !!_proyectoId();
-  Object.assign(global.JarvisCliInstalar, { init, instalar, enCurso, refrescar, aplicarEstado, cliPorId, hayProyecto });
+  Object.assign(global.JarvisCliInstalar, { init, instalar, enCurso, refrescar, aplicarEstado, cliPorId, hayProyecto, reordenar });
 })(typeof window !== 'undefined' ? window : globalThis);
