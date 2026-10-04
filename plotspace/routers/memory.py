@@ -139,7 +139,11 @@ def _listar(project_path: str) -> list:
     if not os.path.isdir(d):
         return []
     memorias = []
-    for nombre in sorted(os.listdir(d)):
+    try:
+        nombres = sorted(os.listdir(d))
+    except OSError:
+        return []
+    for nombre in nombres:
         if not nombre.endswith('.md') or nombre == 'INDEX.md':
             continue
         slug = nombre[:-3]
@@ -294,13 +298,33 @@ class MemoriaUpdate(BaseModel):
     contenido: str
 
 
+def _listar_tolerante(path: str) -> list:
+    """Lee la memoria del proyecto AUNQUE no se pueda escribir en su carpeta (disco de
+    solo lectura, sin permisos, ruta que ya no existe, montaje caído…). Sembrar/inyectar/
+    regenerar el INDEX son «de paso» (self-healing): si fallan se avisa por log y se sigue —
+    antes un OSError ahí daba 500 y la UI mostraba «No pude leer la memoria» con la memoria
+    perfectamente legible (Lista y Grafo, que comparten este endpoint, quedaban vacías)."""
+    try:
+        asegurar_memoria_proyecto(path)
+    except Exception as e:
+        print(f'[memoria] No pude preparar la memoria de {path}: {e}')
+    try:
+        memorias = _listar(path)
+    except Exception as e:
+        print(f'[memoria] No pude listar la memoria de {path}: {e}')
+        memorias = []
+    try:
+        _regenerar_index(path, memorias)
+    except Exception as e:
+        print(f'[memoria] No pude regenerar el INDEX de {path}: {e}')
+    return memorias
+
+
 @router.get("/projects/{project_id}/memory")
 async def listar_memorias(project_id: int):
     """Lista + grafo. Regenera INDEX.md de paso (self-healing)."""
     path = _ruta_proyecto(project_id)
-    asegurar_memoria_proyecto(path)
-    memorias = _listar(path)
-    _regenerar_index(path, memorias)
+    memorias = await asyncio.to_thread(_listar_tolerante, path)
     slugs = {m['slug'] for m in memorias}
     edges = []
     for m in memorias:
