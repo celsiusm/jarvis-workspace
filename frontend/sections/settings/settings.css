@@ -1,4 +1,10 @@
 /* ═══════════════════════════════════════════════════════════════════════════
+   MINIMAL (2026-10): la losa pasó de "vidrio con rim, especular y glow" a una
+   superficie CALMA — fondo liso, un solo canto de pelo, rótulos en frase normal (sin
+   mono-mayúsculas con guía), controles planos. El acento queda SOLO para lo activo.
+   No reintroducir rim/especular/glow en esta pantalla.
+   ═══════════════════════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════════
    JARVIS — Configuración · rediseño "Liquid Glass · Datasheet" (2026-07-19)
    Reemplaza al rediseño "Observatorio": aquel cambió el TEMA sobre la misma
    estructura genérica (nav + filas idénticas con toggle); esto cambia la
@@ -59,9 +65,7 @@
   --sx-well:    color-mix(in oklch, var(--ob-fg-0) 4.5%, transparent);  /* módulo interno */
   --sx-input:   color-mix(in oklch, var(--ob-bg-0) 55%, transparent);   /* campo hundido */
 
-  background:
-    radial-gradient(120% 90% at 50% 0%, color-mix(in oklch, var(--ob-accent) 9%, transparent), transparent 62%),
-    color-mix(in oklch, var(--ob-bg-void) 58%, transparent);
+  background: color-mix(in oklch, var(--ob-bg-void) 58%, transparent);
   backdrop-filter: blur(26px) saturate(120%);
   -webkit-backdrop-filter: blur(26px) saturate(120%);
   animation: sx-veil-in 260ms var(--ease-out);
@@ -83,55 +87,16 @@
   border-radius: var(--radius-xl);
   overflow: hidden;
   isolation: isolate;
-  background:
-    linear-gradient(180deg, color-mix(in oklch, white 5%, transparent), color-mix(in oklch, white 1.5%, transparent)),
-    linear-gradient(180deg, var(--sx-slab-hi) 0%, var(--sx-slab-lo) 100%);
-  backdrop-filter: blur(30px) saturate(180%);
-  -webkit-backdrop-filter: blur(30px) saturate(180%);
-  box-shadow:
-    var(--shadow-3);
+  background: var(--ob-bg-1);
+  box-shadow: 0 0 0 1px var(--sx-hair), var(--shadow-3);
   animation: sx-slab-in 320ms var(--ease-out) both;
 }
 @keyframes sx-slab-in {
   from { opacity: 0; transform: translateY(14px) scale(.985); }
 }
 
-/* Rim refractivo: la luz entra por arriba y se apoya abajo.
-   Va en ::after con máscara para no comerse el contenido. */
-.sx-slab::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  padding: 1px;
-  background: linear-gradient(168deg,
-    color-mix(in oklch, white 24%, transparent) 0%,
-    var(--sx-rim-hi) 12%,
-    color-mix(in oklch, white 3%, transparent) 34%,
-    transparent 58%,
-    var(--sx-rim-lo) 100%);
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-  mask-composite: exclude;
-  pointer-events: none;
-  z-index: 3;
-}
-
-/* Especular: sigue al puntero. --sx-mx/--sx-my los escribe console.js. */
-.sx-slab::before {
-  content: '';
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: radial-gradient(420px 300px at var(--sx-mx, 30%) var(--sx-my, 0%),
-    color-mix(in oklch, white 7%, transparent), transparent 70%);
-  opacity: 0;
-  transition: opacity 400ms var(--ease-out);
-  pointer-events: none;
-  z-index: 1;
-}
-.sx-slab.sx-lit::before { opacity: 1; }
+/* (sin rim ni especular: ver nota MINIMAL arriba) */
+.sx-slab::before, .sx-slab::after { content: none; }
 
 /* ═══ RAIL LATERAL ══════════════════════════════════════════ */
 .sx-rail {
@@ -140,9 +105,8 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
-  padding: 22px 14px 14px;
+  padding: 22px 12px 14px;
   background: var(--sx-rail-bg);
-  border-right: 1px solid var(--sx-hair);
 }
 
 .sx-brand {
@@ -167,14 +131,11 @@
   height: 34px;
   margin: 0 4px 14px;
   padding: 0 10px;
-  border-radius: var(--radius);
-  background: var(--sx-input);
-  box-shadow: inset 0 0 0 1px var(--sx-hair), inset 0 1px 0 color-mix(in oklch, white 5%, transparent);
+  border-radius: 9px;
+  background: var(--ob-bg-2);
   transition: box-shadow var(--dur-1) var(--ease-out);
 }
-.sx-find:focus-within {
-  box-shadow: inset 0 0 0 1px var(--ob-accent-24), 0 0 0 3px var(--ob-accent-08);
-}
+.sx-find:focus-within { box-shadow: inset 0 0 0 1px var(--ob-accent-24); }
 .sx-find svg { color: var(--ob-fg-3); flex: none; }
 .sx-find input {
   flex: 1;
@@ -186,13 +147,7 @@
   outline: none;
 }
 .sx-find input::placeholder { color: var(--ob-fg-3); }
-.sx-find kbd {
-  font: var(--sx-mono);
-  color: var(--ob-fg-3);
-  padding: 3px 5px;
-  border-radius: 5px;
-  background: color-mix(in oklch, var(--ob-fg-4) 12%, transparent);
-}
+.sx-find kbd { font: 500 11px var(--font-mono); color: var(--ob-fg-3); padding: 2px 5px; }
 .sx-find:focus-within kbd { display: none; }
 
 /* Lista de secciones */
@@ -209,9 +164,9 @@
 
 .sx-nav-lbl {
   display: block;
-  padding: 14px 10px 6px;
-  font: var(--sx-mono);
-  letter-spacing: .06em;
+  padding: 16px 10px 6px;
+  font: 500 11.5px var(--font-ui);
+  text-transform: capitalize;
   color: var(--ob-fg-3);
 }
 .sx-nav-lbl:first-child { padding-top: 2px; }
@@ -223,14 +178,8 @@
   right: 4px;
   top: 0;
   height: 40px;
-  border-radius: 10px;
-  background: linear-gradient(180deg,
-    color-mix(in oklch, var(--ob-accent) 22%, transparent),
-    color-mix(in oklch, var(--ob-accent) 11%, transparent));
-  box-shadow:
-    inset 0 1px 0 color-mix(in oklch, white 18%, transparent),
-    inset 0 -1px 0 color-mix(in oklch, black 30%, transparent),
-    0 4px 14px -6px var(--ob-accent-glow);
+  border-radius: 9px;
+  background: var(--ob-bg-3);
   opacity: 0;
   transform-origin: center;
   transition:
@@ -246,11 +195,11 @@
   align-items: center;
   gap: 10px;
   width: 100%;
-  height: 40px;
+  height: 36px;
   padding: 0 10px;
   border: 0;
   background: none;
-  border-radius: 10px;
+  border-radius: 9px;
   color: var(--ob-fg-2);
   font: 500 13px var(--font-ui);
   text-align: left;
@@ -322,14 +271,13 @@
   align-items: center;
   gap: 14px;
   flex: none;
-  height: 58px;
+  height: 60px;
   padding: 0 18px 0 var(--sx-pad);
-  border-bottom: 1px solid var(--sx-hair);
 }
 .sx-sill h1 {
   margin: 0;
-  font: 600 16.5px/1 var(--font-ui);
-  letter-spacing: -.018em;
+  font: 600 16px/1 var(--font-ui);
+  letter-spacing: -.015em;
   color: var(--ob-fg-0);
 }
 .sx-sill-sub {
@@ -391,7 +339,7 @@
    hay contenido pasando por atrás. */
 .sx-sheet { padding: 12px var(--sx-pad) 44px; }
 
-.sx-blk { padding: 0 0 26px; scroll-margin-top: 52px; }
+.sx-blk { padding: 0 0 30px; scroll-margin-top: 52px; }
 
 /* ═══ BANDA DE BLOQUE ═══════════════════════════════════════
    Full-bleed (márgenes negativos): la repisa llega a los cantos del
@@ -403,8 +351,8 @@
   display: flex;
   align-items: center;
   gap: 12px;
-  margin: 0 calc(var(--sx-pad) * -1) 15px;
-  padding: 14px var(--sx-pad) 12px;
+  margin: 0 calc(var(--sx-pad) * -1) 8px;
+  padding: 10px var(--sx-pad) 8px;
   isolation: isolate;
 }
 /* Repisa: SOLO cuando la banda queda pegada arriba. Suelta, el bloque
@@ -428,14 +376,11 @@
 
 .sx-blk-l b {
   flex: none;
-  font: var(--sx-mono);
-  font-size: 11.5px;
-  font-weight: 600;
-  letter-spacing: .11em;
-  color: var(--ob-fg-2);
-  transition: color var(--dur-1) var(--ease-out);
+  font: 600 13.5px var(--font-ui);
+  text-transform: capitalize;
+  letter-spacing: -.005em;
+  color: var(--ob-fg-0);
 }
-.sx-blk-l.fija b { color: var(--ob-fg-0); }
 .sx-blk-l span {
   min-width: 0;
   font: 400 11.5px/1.4 var(--font-ui);
@@ -444,18 +389,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-/* Regla guía: arranca donde termina el texto y muere contra el canto. */
-.sx-blk-l::after {
-  content: '';
-  flex: 1 1 auto;
-  min-width: 20px;
-  height: 1px;
-  background: linear-gradient(90deg,
-    var(--sx-hair) 0%,
-    var(--sx-hair) 78%,
-    color-mix(in oklch, var(--sx-hair) 0%, transparent) 100%);
-}
-
 .sx-blk-c { min-width: 0; display: flex; flex-direction: column; gap: 14px; }
 
 /* Fila de ajuste: texto + control. Sin caja, sin ícono decorativo. */
@@ -479,7 +412,7 @@
   font: 400 11.5px/1.5 var(--font-ui);
   color: var(--ob-fg-3);
 }
-.sx-set + .sx-set { padding-top: 14px; border-top: 1px dashed color-mix(in oklch, var(--ob-line-1) 55%, transparent); }
+.sx-set + .sx-set { padding-top: 14px; border-top: 1px solid color-mix(in oklch, var(--ob-line-1) 70%, transparent); }
 
 /* Pulso al saltar desde la búsqueda */
 @keyframes sx-hit {
@@ -503,8 +436,7 @@
   position: absolute;
   inset: 0;
   border-radius: 99px;
-  background: color-mix(in oklch, var(--ob-fg-4) 26%, transparent);
-  box-shadow: inset 0 1px 2px oklch(0% 0 0 / .4);
+  background: color-mix(in oklch, var(--ob-fg-4) 30%, transparent);
   transition: background var(--dur-2) var(--ease-out);
   pointer-events: none;
 }
@@ -514,13 +446,12 @@
   top: 3px; left: 3px;
   width: 17px; height: 17px;
   border-radius: 99px;
-  background: linear-gradient(180deg, color-mix(in oklch, white 96%, transparent), color-mix(in oklch, white 74%, transparent));
-  box-shadow: 0 1px 3px oklch(0% 0 0 / .5);
+  background: color-mix(in oklch, white 94%, transparent);
+  box-shadow: 0 1px 2px oklch(0% 0 0 / .35);
   transition: transform var(--dur-2) var(--ease-snap), width var(--dur-1) var(--ease-out);
 }
 .sx-sw input:checked + i {
   background: var(--ob-accent);
-  box-shadow: inset 0 1px 2px oklch(0% 0 0 / .25), 0 0 12px -3px var(--ob-accent-glow);
 }
 .sx-sw input:checked + i::after { transform: translateX(17px); }
 .sx-sw input:active + i::after { width: 21px; }
@@ -532,9 +463,8 @@
   display: inline-flex;
   gap: 2px;
   padding: 3px;
-  border-radius: var(--radius);
-  background: var(--sx-input);
-  box-shadow: inset 0 0 0 1px var(--sx-hair);
+  border-radius: 9px;
+  background: var(--ob-bg-2);
 }
 .sx-seg button {
   padding: 5px 12px;
@@ -549,8 +479,7 @@
 .sx-seg button:hover { color: var(--ob-fg-1); }
 .sx-seg button.on {
   color: var(--ob-fg-0);
-  background: color-mix(in oklch, var(--ob-fg-0) 12%, transparent);
-  box-shadow: inset 0 1px 0 color-mix(in oklch, white 14%, transparent);
+  background: var(--ob-bg-4);
 }
 .sx-seg button:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: -1px; }
 .sx-seg .n { margin-left: 6px; font: var(--sx-mono); color: var(--ob-fg-3); }
@@ -565,15 +494,14 @@
   padding: 0 13px;
   border: 0;
   border-radius: 8px;
-  background: color-mix(in oklch, var(--ob-fg-0) 9%, transparent);
-  box-shadow: inset 0 0 0 1px var(--sx-hair), inset 0 1px 0 color-mix(in oklch, white 8%, transparent);
+  background: var(--ob-bg-3);
   color: var(--ob-fg-1);
   font: 500 12px var(--font-ui);
   cursor: pointer;
   white-space: nowrap;
   transition: background var(--dur-1) var(--ease-out), color var(--dur-1) var(--ease-out);
 }
-.sx-btn:hover { background: color-mix(in oklch, var(--ob-fg-0) 15%, transparent); color: var(--ob-fg-0); }
+.sx-btn:hover { background: var(--ob-bg-4); color: var(--ob-fg-0); }
 .sx-btn:focus-visible { outline: 2px solid var(--ob-accent); outline-offset: 2px; }
 .sx-btn[disabled] { opacity: .45; cursor: not-allowed; }
 /* `display: inline-flex` de autor le gana al [hidden]{display:none} del UA: sin
@@ -583,10 +511,10 @@
 .sx-btn.pri {
   background: var(--ob-accent);
   color: var(--ob-on-accent);
-  box-shadow: inset 0 1px 0 var(--ob-bevel-accent), 0 4px 14px -6px var(--ob-accent-glow);
 }
 .sx-btn.pri:hover { background: color-mix(in oklch, var(--ob-accent) 88%, white); color: var(--ob-on-accent); }
-.sx-btn.gho { background: none; box-shadow: inset 0 0 0 1px var(--sx-hair); }
+.sx-btn.gho { background: none; color: var(--ob-fg-2); }
+.sx-btn.gho:hover { background: var(--ob-bg-3); }
 .sx-btn.sm { height: 26px; padding: 0 10px; font-size: 11.5px; }
 
 /* Valor mono (teclas, rutas, números) */
@@ -598,11 +526,8 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px;
-  border-radius: 99px;
-  font: 500 10.5px var(--font-mono);
-  letter-spacing: .04em;
-  background: color-mix(in oklch, var(--ob-fg-4) 14%, transparent);
+  padding: 0;
+  font: 500 12px var(--font-ui);
   color: var(--ob-fg-2);
 }
 .sx-pill::before {
@@ -611,10 +536,10 @@
   border-radius: 99px;
   background: currentColor;
 }
-.sx-pill.ok  { background: var(--ob-run-08);  color: var(--ob-run); }
-.sx-pill.wk  { background: var(--ob-work-08); color: var(--ob-work); }
-.sx-pill.er  { background: var(--ob-err-08);  color: var(--ob-err); }
-.sx-pill.ac  { background: var(--ob-accent-14); color: var(--ob-accent-fg); }
+.sx-pill.ok  { color: var(--ob-run); }
+.sx-pill.wk  { color: var(--ob-work); }
+.sx-pill.er  { color: var(--ob-err); }
+.sx-pill.ac  { color: var(--ob-accent-fg); }
 .sx-pill.mute::before { opacity: .5; }
 
 /* Deslizador de precisión */
@@ -631,7 +556,6 @@
   height: 4px;
   border-radius: 99px;
   background: color-mix(in oklch, var(--ob-fg-4) 30%, transparent);
-  box-shadow: inset 0 1px 2px oklch(0% 0 0 / .35);
 }
 .sx-slider input[type=range]::-moz-range-track {
   height: 4px; border-radius: 99px;
@@ -642,8 +566,8 @@
   width: 15px; height: 15px;
   margin-top: -5.5px;
   border-radius: 99px;
-  background: linear-gradient(180deg, color-mix(in oklch, white 95%, transparent), color-mix(in oklch, white 72%, transparent));
-  box-shadow: 0 1px 4px oklch(0% 0 0 / .55), 0 0 0 1px oklch(0% 0 0 / .25);
+  background: color-mix(in oklch, white 94%, transparent);
+  box-shadow: 0 1px 3px oklch(0% 0 0 / .4);
   transition: transform var(--dur-1) var(--ease-out);
 }
 .sx-slider input[type=range]::-moz-range-thumb {
@@ -670,8 +594,7 @@
   gap: 10px;
   padding: 26px;
   border-radius: 12px;
-  background: var(--sx-well);
-  box-shadow: inset 0 0 0 1px var(--sx-hair);
+  background: var(--ob-bg-2);
 }
 .sx-empty b { font: 600 13px var(--font-ui); color: var(--ob-fg-1); }
 .sx-empty p { margin: 0; max-width: 58ch; font: 400 12px/1.55 var(--font-ui); color: var(--ob-fg-3); }

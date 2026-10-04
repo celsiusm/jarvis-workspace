@@ -211,52 +211,16 @@
   box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-glow);
 }
 
-/* ── 9 · Tareas (kanban) ────────────────────────────────────── */
-:root[data-glass="on"] .tk-topbar,
-:root[data-glass="on"] .rv-top {
-  background: var(--lg-gloss), linear-gradient(var(--lg-body-lo), var(--lg-body-lo)), var(--ob-bg-1);
-}
-:root[data-glass="on"] .tk-col {
-  background: var(--lg-gloss), linear-gradient(var(--lg-body-lo), var(--lg-body-lo));
-  border-color: transparent;
-  box-shadow: var(--lg-ring), var(--lg-inset);
-}
-:root[data-glass="on"] .tk-col.drag-over {
-  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset), var(--lg-glow);
-}
-:root[data-glass="on"] .tk-card {
-  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
-  border-color: transparent;
-  box-shadow: var(--lg-ring), var(--lg-inset), var(--lg-drop);
-}
-
-/* ── 10 · Review ────────────────────────────────────────────── */
-:root[data-glass="on"] .rv-fila:hover { background: var(--lg-body); box-shadow: var(--lg-ring); }
-:root[data-glass="on"] .rv-fila.activo {
-  background: var(--lg-gloss), linear-gradient(180deg, var(--ob-accent-14), var(--ob-accent-08));
-  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset);
-}
-
-/* ── 11 · Navegador ─────────────────────────────────────────── */
-:root[data-glass="on"] .br-omni {
-  background: var(--lg-body);
-  border-color: transparent;
-  border-radius: var(--radius-pill);
-  box-shadow: var(--lg-ring), inset 0 1px 3px oklch(0% 0 0 / 0.20);
-}
-:root[data-glass="on"] .br-omni:focus-within {
-  box-shadow: inset 0 0 0 1px var(--ob-accent-24), inset 0 1px 3px oklch(0% 0 0 / 0.20), 0 0 0 3px var(--ob-accent-08);
-}
-:root[data-glass="on"] .br-tab.activa {
-  background: var(--lg-gloss), var(--lg-spec), var(--lg-body);
-  box-shadow: var(--lg-ring), var(--lg-inset);
-}
-
-/* ── 12 · Configuración ─────────────────────────────────────── */
-:root[data-glass="on"] .sx-item.on {
-  background: var(--lg-gloss), linear-gradient(180deg, var(--ob-accent-14), var(--ob-accent-08));
-  box-shadow: inset 0 0 0 1px var(--ob-accent-24), var(--lg-inset);
-}
+/* ── 9 · Tareas · 10 · Review · 11 · Navegador · 12 · Configuración ───────
+   Estas pantallas son MINIMALISTAS a propósito (listas planas, sin tarjetas ni
+   anillos): el vidrio queda en el marco (dock, modal) y acá solo se tiñe lo
+   activo con el acento. Nada de gloss/ring por fila. */
+:root[data-glass="on"] .rv-fila:hover { background: color-mix(in oklch, var(--ob-fg-0) 5%, transparent); }
+:root[data-glass="on"] .rv-fila.activo { background: color-mix(in oklch, var(--ob-fg-0) 8%, transparent); }
+:root[data-glass="on"] .br-omni { background: var(--lg-body); }
+:root[data-glass="on"] .br-omni:focus-within { box-shadow: inset 0 0 0 1px var(--ob-accent-24); }
+:root[data-glass="on"] .br-tab.activa { background: color-mix(in oklch, var(--ob-fg-0) 9%, transparent); }
+:root[data-glass="on"] .sx-item.on { background: var(--ob-accent-08); box-shadow: none; }
 
 /* ── 13 · Terminales en temas CLAROS: bisel de vidrio ──────────
    La pantalla de la terminal es SIEMPRE oscura (la paleta ANSI de los CLIs
