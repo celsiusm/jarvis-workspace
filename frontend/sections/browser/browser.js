@@ -78,7 +78,57 @@
     try { return `https://icons.duckduckgo.com/ip3/${new URL(url).host}.ico`; }
     catch { return null; }
   }
-  const _pure = { normalizarUrl, interpretarEntrada, urlBusqueda, linkAlPreview, faviconSrc };
+  // ── Paneles divididos (puro) ─────────────────────────────────────
+  // El server no baja de 240×160 por sesión: una celda menor se vería estirada. Por
+  // eso la disposición se ELIGE según el espacio real: 2 paneles van lado a lado si
+  // entran, y si no, uno sobre otro; 3 = tres columnas, o uno grande + dos; 4 = 2×2.
+  // Si ni así entran, ese layout se deshabilita en vez de mostrarse deformado.
+  const CELDA_MIN = { w: 260, h: 200 };   // celda entera (cabecera de 26px incluida)
+  const _cabe = (cols, rows, w, h, min) => (w / cols) >= min.w && (h / rows) >= min.h;
+  function disposicion(n, w, h, min) {
+    min = min || CELDA_MIN;
+    if (!(n >= 1 && n <= 4)) return null;
+    if (n === 1) return { cols: 1, rows: 1, grande: false };
+    if (!(w > 0 && h > 0)) {                       // sin medida (pestaña oculta): la clásica
+      return n === 2 ? { cols: 2, rows: 1, grande: false }
+        : n === 3 ? { cols: 2, rows: 2, grande: true } : { cols: 2, rows: 2, grande: false };
+    }
+    const opciones = n === 2
+      ? [[2, 1, false], [1, 2, false]]
+      : n === 3
+        ? [[3, 1, false], [2, 2, true], [1, 3, false]]
+        : [[2, 2, false], [4, 1, false], [1, 4, false]];
+    for (const [cols, rows, grande] of opciones) {
+      if (_cabe(cols, rows, w, h, min)) return { cols, rows, grande };
+    }
+    return null;
+  }
+  /** El layout pedido, o el mayor menor que entra (siempre ≥ 1). */
+  function mayorQueEntra(pedido, w, h, min) {
+    for (let n = Math.min(4, Math.max(1, pedido | 0)); n > 1; n--) if (disposicion(n, w, h, min)) return n;
+    return 1;
+  }
+  /** Qué pestaña ocupa cada panel. Conserva lo que ya estaba, completa con las
+   *  pestañas libres y garantiza que la ACTIVA esté a la vista. */
+  function asignarSlots(slots, ids, n, activa) {
+    const vivos = new Set(ids);
+    const out = [];
+    for (const id of (slots || [])) if (vivos.has(id) && !out.includes(id) && out.length < n) out.push(id);
+    for (const id of ids) if (out.length < n && !out.includes(id)) out.push(id);
+    if (activa != null && vivos.has(activa) && !out.includes(activa) && out.length) out[out.length - 1] = activa;
+    return out;
+  }
+  /** Elegir una pestaña: si ya se ve, se enfoca; si no, ocupa el panel de la activa. */
+  function elegirTab(slots, activa, id) {
+    if (slots.includes(id)) return slots.slice();
+    if (!slots.length) return [id];
+    const i = slots.indexOf(activa);
+    const out = slots.slice();
+    out[i >= 0 ? i : out.length - 1] = id;
+    return out;
+  }
+  const _pure = { normalizarUrl, interpretarEntrada, urlBusqueda, linkAlPreview, faviconSrc,
+    disposicion, mayorQueEntra, asignarSlots, elegirTab, CELDA_MIN };
 
   // Bilingüe para strings COMPUESTAS (números/valores adentro → el observer de
   // i18n no las matchea por clave). Las estáticas van en español y las traduce
@@ -86,18 +136,22 @@
   const _L = (es, en) => (root.JarvisI18n?.lang?.() === 'en' ? en : es);
 
   // ── Estado ──────────────────────────────────────────────────────
+  // UN solo concepto de foco: la pestaña ACTIVA es la del panel enfocado, la que
+  // muestra la barra de direcciones y la que recibe Atrás/Adelante/Recargar.
+  // (Antes había "activa" y "foco" por separado: hacer click en el panel 2 y
+  // escribir una URL la cargaba en el panel 1.)
   let _cont = null, _montado = false;
   let _grid = null, _tabsEl = null, _input = null, _status = null, _dd = null, _spin = null;
   let _btnBack = null, _btnFwd = null;
-  let _tabs = [], _activaId = null, _focoId = null, _nextId = 1;
-  let _layout = '1', _pid = null, _resizeTimer = null, _ddSel = -1;
-  let _pendienteUrl = null;
+  let _tabs = [], _activaId = null, _nextId = 1;
+  let _layoutPref = '1', _n = 1, _slots = [], _pid = null, _resizeTimer = null, _ddSel = -1;
+  let _pendienteUrl = null, _layoutRaf = 0;
   const MAX_TABS = 4;
+  const LS_LAYOUT = 'jarvis.browser.layout';
 
   const $ = (sel) => _cont ? _cont.querySelector(sel) : null;
   const _tabDe = (id) => _tabs.find((t) => t.id === id) || null;
   const _activa = () => _tabDe(_activaId) || _tabs[0] || null;
-  const _foco = () => _tabDe(_focoId) || _activa();
 
   const SVG = {
     back: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 3.5 5.5 8l4.5 4.5"/></svg>',
@@ -109,13 +163,15 @@
     plus: '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M8 3.5v9M3.5 8h9"/></svg>',
     x: '<svg viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="m2 2 8 8M10 2l-8 8"/></svg>',
     monitor: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8m-4-4v4"/></svg>',
+    // Iconos del selector de paneles: DIBUJAN la disposición (2 = lado a lado,
+    // 3 = uno grande + dos, 4 = cuadrícula) para entenderse sin leer.
     layout: (n) => {
       const celdas = n === 1
         ? '<rect x="4" y="5" width="16" height="14" rx="2"/>'
         : n === 2
           ? '<rect x="4" y="5" width="7" height="14" rx="1.5"/><rect x="13" y="5" width="7" height="14" rx="1.5"/>'
           : n === 3
-            ? '<rect x="3.5" y="5" width="5" height="14" rx="1.3"/><rect x="9.5" y="5" width="5" height="14" rx="1.3"/><rect x="15.5" y="5" width="5" height="14" rx="1.3"/>'
+            ? '<rect x="4" y="5" width="9" height="14" rx="1.5"/><rect x="15" y="5" width="5" height="6" rx="1.3"/><rect x="15" y="13" width="5" height="6" rx="1.3"/>'
             : '<rect x="4" y="5" width="7" height="6.5" rx="1.5"/><rect x="13" y="5" width="7" height="6.5" rx="1.5"/><rect x="4" y="12.5" width="7" height="6.5" rx="1.5"/><rect x="13" y="12.5" width="7" height="6.5" rx="1.5"/>';
       return `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">${celdas}</svg>`;
     },
@@ -126,8 +182,9 @@
     _cont = containerEl || document.getElementById('jw-pane-preview');
     if (!_cont) return;
     _montado = true;
+    try { const g = localStorage.getItem(LS_LAYOUT); if (g && /^[1-4]$/.test(g)) _layoutPref = g; } catch { /* noop */ }
     _montar();
-    window.addEventListener('jarvis:lang', () => { if (_montado) { _renderTabs(); } });
+    window.addEventListener('jarvis:lang', () => { if (_montado) { _renderTabs(); _renderLayoutBtns(); } });
     if (_pendienteUrl) { const u = _pendienteUrl; _pendienteUrl = null; setUrl(u); }
   }
 
@@ -140,7 +197,7 @@
       'Buscá en la web': 'Search the web',
       'Nueva pestaña': 'New tab',
       'Cerrar pestaña': 'Close tab',
-      'Disposición de paneles': 'Panel layout',
+      'Dividir pantalla': 'Split view',
       'Atrás': 'Back', 'Adelante': 'Forward', 'Recargar': 'Reload',
       'Pestañas abiertas': 'Open tabs', 'Pestañas': 'Tabs', 'Buscá o pegá una URL': 'Search or paste a URL', 'Reciente': 'Recent', 'Ir a': 'Go to',
     });
@@ -149,8 +206,8 @@
         <div class="br-chrome">
           <div class="br-tabs" id="br-tabs" role="tablist" aria-label="Pestañas"></div>
           <button class="br-tab-new" id="br-new" title="Nueva pestaña" aria-label="Nueva pestaña">${SVG.plus}</button>
-          <div class="br-layouts" role="group" aria-label="Disposición de paneles" id="br-layouts">
-            ${[1, 2, 3, 4].map((n) => `<button class="br-ls" data-layout="${n}" aria-pressed="${n === 1}" title="${_L(n + ' panel' + (n > 1 ? 'es' : ''), n + (n > 1 ? ' panels' : ' panel'))}" aria-label="${_L(n + ' paneles', n + ' panels')}">${SVG.layout(n)}</button>`).join('')}
+          <div class="br-layouts" role="group" aria-label="Dividir pantalla" id="br-layouts">
+            ${[1, 2, 3, 4].map((n) => `<button class="br-ls" data-layout="${n}" aria-pressed="${n === 1}">${SVG.layout(n)}</button>`).join('')}
           </div>
         </div>
         <div class="br-bar">
@@ -168,7 +225,7 @@
           <button class="br-nav wp-localhosts" id="jw-localhosts-btn" type="button" hidden
                   title="Localhost activos" aria-label="Localhost activos" aria-haspopup="menu" aria-expanded="false"></button>
         </div>
-        <div class="br-grid" id="br-grid" data-layout="1"></div>
+        <div class="br-grid" id="br-grid" data-n="1"></div>
         <span class="br-status" id="br-status" hidden></span>
         <span class="br-spin" id="br-spin" hidden></span>
       </div>`;
@@ -187,10 +244,11 @@
     $('#br-new').addEventListener('click', () => { _nuevaTab(null, true); });
     $('#br-layouts').addEventListener('click', (e) => {
       const b = e.target.closest('.br-ls');
-      if (b) _setLayout(b.dataset.layout);
+      if (b && !b.disabled) _setLayout(b.dataset.layout);
     });
-    if (root.ResizeObserver) new ResizeObserver(_programarResize).observe(_grid);
-    else window.addEventListener('resize', _programarResize);
+    // El espacio disponible decide qué disposiciones entran (ver `disposicion`).
+    if (root.ResizeObserver) new ResizeObserver(_pedirLayout).observe(_grid);
+    else window.addEventListener('resize', _pedirLayout);
 
     _nuevaTab();  // arranca con una pestaña vacía (start page; sin robar foco)
     _render();
@@ -200,13 +258,20 @@
   }
 
   // ── Tabs ────────────────────────────────────────────────────────
-  function _nuevaTab(url, enfocar) {
-    if (_tabs.length >= MAX_TABS) { _estado(_L('Máximo de pestañas alcanzado', 'Too many tabs'), true); return null; }
+  function _crearTab() {
     const id = _nextId++;
-    const tab = { id, url: null, titulo: null, favicon: null, ws: null, img: null, cell: null, start: null, listo: false, cargando: false };
+    const tab = { id, url: null, titulo: null, favicon: null, ws: null, img: null, cell: null, start: null, head: null, listo: false, cargando: false };
     _tabs.push(tab);
     _crearCelda(tab);
-    _activaId = id; _focoId = id;
+    return tab;
+  }
+
+  function _nuevaTab(url, enfocar) {
+    if (_tabs.length >= MAX_TABS) { _estado(_L('Máximo de pestañas alcanzado', 'Too many tabs'), true); return null; }
+    const tab = _crearTab();
+    // Una pestaña nueva se ve YA: ocupa el panel de la que estaba activa.
+    _slots = elegirTab(_slots.length ? _slots : [], _activaId, tab.id);
+    _activaId = tab.id;
     _aplicarLayout();
     if (url) setUrl(url, tab);
     _render();
@@ -219,27 +284,38 @@
     cell.className = 'br-cell';
     cell.dataset.id = tab.id;
     cell.innerHTML = `
-      <img class="br-frame" alt="" hidden>
-      <div class="br-start">
-        <div class="logo">${SVG.monitor}</div>
-        <h2>${_L('Un browser de verdad', 'A real browser')}</h2>
-        <p>${_L('Escribí una URL o una búsqueda arriba. Entra cualquier sitio: X, YouTube, Google…',
-                'Type a URL or a search above. Loads any site: X, YouTube, Google…')} <code>localhost:5173</code> ${_L('también.', 'too.')}</p>
-        <div class="br-chips">
-          <button class="br-chip" type="button" data-chip="youtube">${SVG.play} YouTube</button>
-          <button class="br-chip" type="button" data-chip="busqueda">${SVG.lupa} ${_L('Buscá en la web', 'Search the web')}</button>
+      <div class="br-pane-h">
+        <span class="fav fallback">${SVG.globo}</span>
+        <span class="t"></span>
+        <button class="x" type="button" title="Cerrar pestaña" aria-label="Cerrar pestaña">${SVG.x}</button>
+      </div>
+      <div class="br-body">
+        <img class="br-frame" alt="" hidden>
+        <div class="br-start">
+          <div class="logo">${SVG.monitor}</div>
+          <h2>${_L('Un browser de verdad', 'A real browser')}</h2>
+          <p>${_L('Escribí una URL o una búsqueda arriba. Entra cualquier sitio: X, YouTube, Google…',
+                  'Type a URL or a search above. Loads any site: X, YouTube, Google…')} <code>localhost:5173</code> ${_L('también.', 'too.')}</p>
+          <div class="br-chips">
+            <button class="br-chip" type="button" data-chip="youtube">${SVG.play} YouTube</button>
+            <button class="br-chip" type="button" data-chip="busqueda">${SVG.lupa} ${_L('Buscá en la web', 'Search the web')}</button>
+          </div>
         </div>
       </div>`;
     tab.cell = cell;
+    tab.head = cell.querySelector('.br-pane-h');
+    tab.body = cell.querySelector('.br-body');
     tab.img = cell.querySelector('.br-frame');
     tab.start = cell.querySelector('.br-start');
 
-    cell.addEventListener('mousedown', () => { _focoId = tab.id; cell.focus(); _marcarFoco(); });
+    // Tocar un panel lo ENFOCA de verdad (barra, Atrás/Recargar y pestañas lo siguen).
+    cell.addEventListener('mousedown', () => { if (_activaId !== tab.id) _activarTab(tab.id, false); cell.focus({ preventScroll: true }); });
+    tab.head.querySelector('.x').addEventListener('click', (e) => { e.stopPropagation(); _cerrarTab(tab.id); });
     tab.img.addEventListener('mousemove', (e) => _mouse(tab, 'move', e));
-    tab.img.addEventListener('mousedown', (e) => { cell.focus(); _mouse(tab, 'down', e); });
+    tab.img.addEventListener('mousedown', (e) => { cell.focus({ preventScroll: true }); _mouse(tab, 'down', e); });
     tab.img.addEventListener('mouseup', (e) => _mouse(tab, 'up', e));
     tab.img.addEventListener('contextmenu', (e) => e.preventDefault());
-    cell.addEventListener('wheel', (e) => {
+    tab.body.addEventListener('wheel', (e) => {
       e.preventDefault();
       const r = tab.img.getBoundingClientRect();
       _enviar(tab, { t: 'wheel', x: e.clientX - r.left, y: e.clientY - r.top, dx: e.deltaX, dy: e.deltaY });
@@ -261,56 +337,88 @@
     _cerrarWsDe(tab);
     tab.cell?.remove();
     _tabs.splice(i, 1);
-    if (_activaId === id) _activaId = _tabs[Math.min(i, _tabs.length - 1)]?.id || null;
-    if (_focoId === id) _focoId = _activaId;
-    if (!_tabs.length) _nuevaTab();
+    _slots = _slots.filter((x) => x !== id);
+    if (_activaId === id) _activaId = (_slots[Math.min(i, _slots.length - 1)] ?? _tabs[Math.min(i, _tabs.length - 1)]?.id) ?? null;
+    // Cerrar un panel de una vista dividida la ACHICA (antes se re-creaba vacío en el
+    // acto y el ✕ parecía no hacer nada).
+    if (_tabs.length && _tabs.length < parseInt(_layoutPref, 10)) _guardarLayout(String(_tabs.length));
+    if (!_tabs.length) { _nuevaTab(); return; }
     _aplicarLayout(); _render();
   }
 
+  function _guardarLayout(l) {
+    _layoutPref = String(l);
+    try { localStorage.setItem(LS_LAYOUT, _layoutPref); } catch { /* noop */ }
+  }
+
+  function _medidaGrid() {
+    const r = _grid ? _grid.getBoundingClientRect() : { width: 0, height: 0 };
+    return { w: r.width, h: r.height };
+  }
+
+  function _pedirLayout() {
+    if (_layoutRaf) return;
+    _layoutRaf = requestAnimationFrame(() => { _layoutRaf = 0; if (_montado) { _aplicarLayout(); _programarResize(); } });
+  }
+
+  // Decide cuántos paneles hay y cómo se reparten, crea las pestañas que falten
+  // y asigna una pestaña a cada panel.
   function _aplicarLayout() {
     if (!_grid) return;
-    _grid.dataset.layout = _layout;
-    const n = parseInt(_layout, 10);
-    // Si el layout pide más paneles que pestañas, crear vacías (sin sesión).
-    while (_tabs.length < n && _tabs.length < MAX_TABS) {
-      const id = _nextId++;
-      const tab = { id, url: null, titulo: null, favicon: null, ws: null, img: null, cell: null, start: null, listo: false, cargando: false };
-      _tabs.push(tab); _crearCelda(tab);
-    }
-    _aplicarVisibilidad();
+    const { w, h } = _medidaGrid();
+    const pedido = parseInt(_layoutPref, 10) || 1;
+    _n = w > 0 ? mayorQueEntra(pedido, w, h) : pedido;
+    while (_tabs.length < _n && _tabs.length < MAX_TABS) _crearTab();
+    if (!_activaId && _tabs.length) _activaId = _tabs[0].id;
+    _slots = asignarSlots(_slots, _tabs.map((t) => t.id), _n, _activaId);
+    const d = disposicion(_n, w, h) || disposicion(_n, 0, 0);
+    _grid.dataset.n = String(_n);
+    _grid.style.gridTemplateColumns = `repeat(${d.cols}, minmax(0, 1fr))`;
+    _grid.style.gridTemplateRows = `repeat(${d.rows}, minmax(0, 1fr))`;
+    _tabs.forEach((t) => {
+      const i = _slots.indexOf(t.id);
+      if (!t.cell) return;
+      t.cell.hidden = i === -1;
+      t.cell.style.order = String(i);
+      t.cell.style.gridRow = d.grande && i === 0 ? 'span 2' : '';
+      t.cell.dataset.slot = String(i);
+    });
+    _renderLayoutBtns();
     _renderTabs();
   }
 
-  // Qué celdas se ven: con N paneles, las N primeras — pero la pestaña ACTIVA
-  // siempre entra (ocupa el último panel). Antes se ocultaba por posición: en
-  // el layout 1 (default) solo se veía la pestaña 0, y una pestaña nueva o un
-  // click en otra de la barra no cambiaban nada en pantalla.
-  function _aplicarVisibilidad() {
-    const n = parseInt(_layout, 10) || 1;
-    const visibles = new Set(_tabs.slice(0, n).map((t) => t.id));
-    const act = _activa();
-    if (act && !visibles.has(act.id)) {
-      visibles.delete(_tabs[n - 1]?.id);
-      visibles.add(act.id);
-    }
-    _tabs.forEach((t) => { if (t.cell) t.cell.hidden = !visibles.has(t.id); });
-    _programarResize();
+  function _renderLayoutBtns() {
+    if (!_cont) return;
+    const { w, h } = _medidaGrid();
+    _cont.querySelectorAll('.br-ls').forEach((b) => {
+      const n = parseInt(b.dataset.layout, 10);
+      const cabe = w <= 0 || n === 1 || !!disposicion(n, w, h);
+      b.setAttribute('aria-pressed', String(n === _n));
+      b.disabled = !cabe;
+      const nombre = n === 1 ? _L('1 panel', '1 pane') : _L(`${n} paneles`, `${n} panes`);
+      b.setAttribute('aria-label', nombre);
+      b.title = cabe ? nombre : `${nombre} — ${_L('no entra en este ancho: agrandá el panel', 'doesn\'t fit this width: make the panel bigger')}`;
+    });
   }
 
   function _setLayout(l) {
-    _layout = String(l);
-    _cont.querySelectorAll('.br-ls').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.layout === _layout)));
+    _guardarLayout(l);
     _aplicarLayout();
+    _render();
   }
 
   function _renderTabs() {
     if (!_tabsEl) return;
+    // Con vista dividida y TODAS las pestañas a la vista, la barra de pestañas sobra:
+    // cada panel ya lleva su cabecera con título y ✕.
+    _tabsEl.hidden = _n > 1 && _tabs.every((t) => _slots.includes(t.id));
     _tabsEl.innerHTML = _tabs.map((t) => {
       const lbl = t.titulo || _hostDe(t.url) || _L('Nueva pestaña', 'New tab');
       const fav = t.favicon
-        ? `<img class="fav" src="${t.favicon}" alt="">`
+        ? `<img class="fav" src="${_esc(t.favicon)}" alt="">`
         : `<span class="fav fallback">${SVG.globo}</span>`;
-      return `<div class="br-tab${t.id === _activaId ? ' activa' : ''}" data-id="${t.id}" role="tab" title="${_esc(lbl)}">
+      const visible = _slots.includes(t.id);
+      return `<div class="br-tab${t.id === _activaId ? ' activa' : ''}${visible ? ' visible' : ''}" data-id="${t.id}" role="tab" aria-selected="${t.id === _activaId}" title="${_esc(lbl)}">
         ${fav}<span class="lbl">${_esc(lbl)}</span>
         <button class="x" data-cerrar="${t.id}" title="Cerrar pestaña" aria-label="Cerrar pestaña">${SVG.x}</button>
       </div>`;
@@ -319,42 +427,59 @@
       el.addEventListener('click', (e) => {
         const cerrar = e.target.closest('[data-cerrar]');
         if (cerrar) { e.stopPropagation(); _cerrarTab(+cerrar.dataset.cerrar); return; }
-        _activarTab(+el.dataset.id);
+        _activarTab(+el.dataset.id, true);
       });
+    });
+    // Cabecera de cada panel (solo se muestra con vista dividida).
+    _tabs.forEach((t) => {
+      if (!t.head) return;
+      const lbl = t.titulo || _hostDe(t.url) || _L('Nueva pestaña', 'New tab');
+      t.head.querySelector('.t').textContent = lbl;
+      const fav = t.head.querySelector('.fav');
+      if (t.favicon) {
+        if (fav.tagName !== 'IMG') { const im = document.createElement('img'); im.className = 'fav'; im.alt = ''; fav.replaceWith(im); }
+        const im = t.head.querySelector('.fav'); if (im.getAttribute('src') !== t.favicon) im.src = t.favicon;
+      }
     });
   }
 
-  function _activarTab(id) {
-    _activaId = id; _focoId = id;
+  function _activarTab(id, enfocarBarra) {
+    if (!_tabDe(id)) return;
+    _slots = elegirTab(_slots, _activaId, id);
+    _activaId = id;
+    _aplicarLayout();
     _render();
-    setTimeout(() => _input?.focus(), 20);
+    if (enfocarBarra) setTimeout(() => _input?.focus(), 20);
   }
 
   function _render() {
     const t = _activa();
-    _input.value = (t && t.url) || '';
-    _aplicarVisibilidad();
-    _renderTabs();
+    if (_input && document.activeElement !== _input) _input.value = (t && t.url) || '';
+    else if (_input && t) _input.value = t.url || _input.value;
     _marcarFoco();
+    _renderTabs();
   }
 
   function _marcarFoco() {
-    _tabs.forEach((t) => t.cell?.classList.toggle('foco', t.id === _focoId));
-    _setSpin(_foco()?.cargando);
-    _setNav(_foco());
+    _tabs.forEach((t) => t.cell?.classList.toggle('foco', t.id === _activaId));
+    _setSpin(_activa()?.cargando);
+    _setNav(_activa());
   }
 
   function _setSpin(v) { if (_spin) _spin.hidden = !v; }
+  // Atrás/Adelante: el server no informa del historial, así que se habilitan en
+  // cuanto el panel enfocado tiene una página (antes quedaban SIEMPRE deshabilitados).
   function _setNav(t) {
-    if (_btnBack) _btnBack.disabled = true;
-    if (_btnFwd) _btnFwd.disabled = true;
+    const hay = !!(t && t.url && t.ws);
+    if (_btnBack) _btnBack.disabled = !hay;
+    if (_btnFwd) _btnFwd.disabled = !hay;
   }
   function _hostDe(url) { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; } }
 
   // ── Sesión por tab ──────────────────────────────────────────────
   function _medir(cell) {
-    const r = (cell || _grid).getBoundingClientRect();
-    return { w: Math.max(320, Math.round(r.width)), h: Math.max(240, Math.round(r.height)) };
+    const r = (cell?.querySelector?.('.br-body') || cell || _grid).getBoundingClientRect();
+    return { w: Math.max(240, Math.round(r.width)), h: Math.max(160, Math.round(r.height)) };
   }
   function _programarResize() {
     clearTimeout(_resizeTimer);
@@ -378,7 +503,7 @@
     tab.ws = ws;
     tab.cargando = true; _setSpin(true); _estado(_L('Conectando…', 'Connecting…'), false);
     ws.addEventListener('open', () => {
-      _estado('', false);
+      _estado('', false); _setNav(_activa());
       if (tab._pendiente) { _enviar(tab, { t: 'nav', url: tab._pendiente }); tab._pendiente = null; }
     });
     ws.addEventListener('message', (ev) => _onMensaje(tab, ev));
@@ -404,7 +529,7 @@
       tab.favicon = faviconSrc(m.url);
       if (tab.id === _activaId && document.activeElement !== _input) _input.value = m.url || '';
       _recordar(m.url);
-      _renderTabs();
+      _renderTabs(); _setNav(_activa());
     } else if (m.t === 'err') {
       _estado(m.msg || _L('Error', 'Error'), true);
       tab.cargando = false; _setSpin(false);
@@ -414,7 +539,7 @@
   function _enviar(tab, obj) {
     if (tab && tab.ws && tab.ws.readyState === 1) tab.ws.send(JSON.stringify(obj));
   }
-  function _accionFoco(obj) { const t = _foco(); if (t) _enviar(t, obj); }
+  function _accionFoco(obj) { const t = _activa(); if (t) _enviar(t, obj); }
 
   // ── API pública ─────────────────────────────────────────────────
   function setUrl(url, tab) {
@@ -444,7 +569,7 @@
     if (!t) return false;
     // Activar SIN robar el foco: esto lo dispara un evento de fondo (un agente
     // reinició su dev server) mientras el usuario puede estar tipeando.
-    _activaId = t.id; _focoId = t.id; _render();
+    _activarTab(t.id, false);
     refresh(); return true;
   }
   function onProjectChanged(pid) {
@@ -452,7 +577,7 @@
     if (!_montado) { root.JarvisDevServers?.cargar?.(pid); return; }
     _cerrarWs();
     _tabs.forEach((t) => t.cell?.remove());
-    _tabs = []; _activaId = null; _focoId = null; _nextId = 1;
+    _tabs = []; _slots = []; _activaId = null; _nextId = 1;
     _nuevaTab();
     root.JarvisDevServers?.cargar?.(pid);
   }
