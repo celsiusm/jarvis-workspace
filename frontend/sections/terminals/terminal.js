@@ -581,6 +581,53 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
   const _esTui = (tipoIa !== 'manual');
   const _eco = (ES_ECO && !_esTui && window.TerminalEcoLocal)
     ? window.TerminalEcoLocal.crearEcoLocal({ maxPendientes: 16 }) : null;
+  // Bracketed paste: ¿xterm ya VIO a la app prender/apagar el modo 2004? Solo
+  // entonces su estado es fiable (tras un re-attach el seed no lo re-enuncia →
+  // desconocido → se envuelve como siempre). Ver TerminalPaste.debeEnvolverPaste.
+  let _bpVisto = false;
+  try {
+    const _marcarBp = (params) => {
+      for (const p of params) { if ((Array.isArray(p) ? p[0] : p) === 2004) _bpVisto = true; }
+      return false;   // sin consumir: el handler por defecto de xterm sigue y fija el modo
+    };
+    term.parser.registerCsiHandler({ prefix: '?', final: 'h' }, _marcarBp);
+    term.parser.registerCsiHandler({ prefix: '?', final: 'l' }, _marcarBp);
+  } catch (_) { /* sin parser hooks: se envuelve siempre (comportamiento previo) */ }
+  term._jvEnvolverPaste = () => (window.TerminalPaste?.debeEnvolverPaste
+    ? window.TerminalPaste.debeEnvolverPaste({ visto: _bpVisto, activo: term.modes.bracketedPasteMode })
+    : true);
+  // ¿Es seguro pintar la tecla YA? (decisión pura en terminal-eco-local.js). Un
+  // shell también corre apps a pantalla completa (vim/less/htop), pide contraseñas
+  // sin eco y a veces tiene output sin volcar: ahí predecir pisa la pantalla o deja
+  // la contraseña a la vista. term.write es ASÍNCRONO (el cursor del buffer no
+  // avanza hasta que xterm parsea): se suma lo ya pintado sin confirmar, de más
+  // — error por el lado seguro (cede el eco antes del borde).
+  const _ecoPuede = () => {
+    try {
+      const buf = term.buffer.active;
+      const linea = buf.getLine(buf.baseY + buf.cursorY);
+      return window.TerminalEcoLocal.puedePredecir({
+        alt: buf.type === 'alternate',
+        mouse: term.modes.mouseTrackingMode !== 'none',
+        inbufN: instancia._pendienteServidor ? instancia._pendienteServidor() : 0,
+        cursorX: buf.cursorX + _eco.pintadosN(),
+        cols: term.cols,
+        textoLinea: linea ? linea.translateToString(true) : '',
+      });
+    } catch (_) { return false; }   // ante la duda, NO predecir: el eco real llega igual
+  };
+  // Plazo del eco: si una tecla predicha no vuelve (contraseña sin eco), se despinta
+  // y el predictor se suspende hasta el próximo eco real (ver terminal-eco-local.js).
+  let _ecoTimer = 0;
+  const _armarVencimientoEco = () => {
+    clearTimeout(_ecoTimer);
+    _ecoTimer = setTimeout(() => {
+      if (!_eco) return;
+      const n = _eco.vencer(performance.now());
+      if (n > 0) { try { term.write(`\x1b[${n}D\x1b[K`); } catch (_) {} }
+      else if (_eco.pendientesN() > 0) _armarVencimientoEco();   // quedan teclas jóvenes por confirmar
+    }, _eco.esperaMs + 20);
+  };
   let _latBadge = null;
   function _pintarLatBadge() {
     if (!ES_LAT || !_medidor) return;
@@ -783,7 +830,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
         return false;
       }
       if (e.code === 'KeyV' || e.key === 'V' || e.key === 'v') {
-        _pasteDesdeClipboard(ws);
+        _pasteDesdeClipboard(ws, term);
         e.preventDefault();
         return false;
       }
@@ -1118,7 +1165,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
     //    interpretes como comandos". Sin markers, Claude Code queda en
     //    "Pasting..." esperando un final que nunca llega.
     if (plan.accion === 'texto') {
-      _enviarTextoConBracketedPaste(texto, ws);
+      _enviarTextoConBracketedPaste(texto, ws, term);
       term.scrollToBottom();
       return;
     }
@@ -1132,7 +1179,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
       if (!file) throw new Error('clipboard sin archivo');
       const filename = TP.nombreImagenPegada({ nombre: file.name, mime: file.type, ts: Date.now() });
       const path = await _subirImagenTerminal(file, terminalId, filename);
-      _enviarTextoConBracketedPaste(path, ws);
+      _enviarTextoConBracketedPaste(path, ws, term);
       term.scrollToBottom();
     } catch (err) {
       // Red de seguridad: en agentes la imagen sigue en el clipboard del OS
@@ -1391,6 +1438,9 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
     // closure de _flush y desde ahí `_rzHold = ...` creaba un GLOBAL implícito
     // (la cortina nunca enganchaba; probado en QA con window._rzHold apareciendo).
     instancia.cortinaResize = (ms) => { _rzHold = performance.now() + ms; };
+    // Bytes del server aún sin volcar a xterm: el eco local NO predice mientras haya
+    // (su char se pintaría ANTES de ese output → orden invertido, ver puedePredecir).
+    instancia._pendienteServidor = () => _inbufN;
     // Post-resize de TUI sparse en primary (Grok): xterm ya refloweó el viewport
     // y los diffs 2026 no tapan los fragmentos. Tiramos el buffer local + el
     // inbuf de diffs y pedimos el seed de tmux (verdad del pane post-SIGWINCH).
@@ -1438,7 +1488,7 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
         // va PREPENDIDO a `datos` (no un term.write suelto) para no adelantarse a lo
         // que ya esté encolado en _inbuf sin drenar.
         const plan = _eco.conciliar(datos);
-        if (plan.saltear > 0) datos = datos.slice(plan.saltear);
+        datos = plan.salida;   // sin los chars que el eco local ya pintó (las sondas se conservan)
         if (plan.undo > 0) datos = `\x1b[${plan.undo}D\x1b[K` + datos;
       }
       _inbuf += datos;
@@ -1571,7 +1621,13 @@ function crearTerminal(containerId, terminalId, tipoIa = 'manual', intentoAuto =
       // (bug del historial). Antes de mandarla, despintamos lo pendiente.
       if (_eco) {
         if (window.TerminalEcoLocal.esCharImprimible(data)) {
-          if (_eco.predecir(data)) { try { term.write(data); } catch (_) {} }
+          // Solo se predice con el estado seguro; si no, la tecla espera su eco real
+          // (el round-trip normal). `predecir` devuelve false para una SONDA (predictor
+          // suspendido): se anota sin pintar para detectar el eco y reactivarse.
+          if (_ecoPuede()) {
+            if (_eco.predecir(data, performance.now())) { try { term.write(data); } catch (_) {} }
+            _armarVencimientoEco();
+          }
         } else {
           const n = _eco.flush();
           if (n > 0) { try { term.write(`\x1b[${n}D\x1b[K`); } catch (_) {} }
@@ -2188,21 +2244,23 @@ async function _subirImagenTerminal(file, terminalId, filename) {
   return (await resp.json()).path;
 }
 
-function _enviarTextoConBracketedPaste(texto, ws) {
+function _enviarTextoConBracketedPaste(texto, ws, term) {
   if (!texto || !ws || ws.readyState !== WebSocket.OPEN) return;
-  // Sanear marcadores de bracketed paste embebidos en el texto: un \x1b[201~
-  // adentro (típico al copiar logs/dumps con escapes ANSI) cerraría el paste
-  // prematuramente y el resto se interpretaría como teclado → inyección de
-  // comandos en el shell/TUI.
-  const limpio = texto.replace(/\r?\n/g, '\r').replace(/\x1b\[20[01]~/g, '');
-  const data = '\x1b[200~' + limpio + '\x1b[201~';
+  // Los marcadores solo si la app del pane los pidió (term._jvEnvolverPaste,
+  // ver crearTerminal): sin eso, una contraseña pegada en sudo/ssh llegaba
+  // como "^[[200~clave^[[201~". Saneo de marcadores embebidos y normalización
+  // de saltos: prepararPaste (terminal-paste.js).
+  const envolver = term && term._jvEnvolverPaste ? term._jvEnvolverPaste() : true;
+  const data = window.TerminalPaste?.prepararPaste
+    ? window.TerminalPaste.prepararPaste(texto, envolver)
+    : '\x1b[200~' + texto.replace(/\r?\n/g, '\r').replace(/\x1b\[20[01]~/g, '') + '\x1b[201~';
   ws.send(JSON.stringify({ type: 'input', data }));
 }
 
-async function _pasteDesdeClipboard(ws) {
+async function _pasteDesdeClipboard(ws, term) {
   try {
     const texto = await navigator.clipboard.readText();
-    _enviarTextoConBracketedPaste(texto, ws);
+    _enviarTextoConBracketedPaste(texto, ws, term);
   } catch (_) {
     // El browser puede negar readText() si la pestaña no tiene foco;
     // silencioso, el usuario puede usar Ctrl+V tradicional como fallback.
@@ -2245,7 +2303,7 @@ function _mostrarMenuContextual(x, y, term, ws, copiar) {
     if (!btn || btn.disabled) return;
     const action = btn.dataset.action;
     if (action === 'copy')       (copiar ? copiar() : _copiarSeleccion(term));
-    if (action === 'paste')      await _pasteDesdeClipboard(ws);
+    if (action === 'paste')      await _pasteDesdeClipboard(ws, term);
     if (action === 'select-all') term.selectAll();
     if (action === 'clear')      term.clear();
     _cerrarMenuContextual();

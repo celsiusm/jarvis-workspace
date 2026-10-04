@@ -129,14 +129,21 @@ class ParserControlMode:
 # (FIFO por el mismo stdin → el orden queda garantizado).
 SEND_KEYS_CHUNK = 256
 
+# Por encima de este tamaño un payload al stdin de tmux sale por un thread (el
+# pipe tiene 64KB: un paste grande puede bloquear el write). Ver
+# ClienteControl._escribir.
+LIMITE_ESCRITURA_INLINE = 16384
 
-def comandos_send_keys(session: str, data: bytes, chunk: int = SEND_KEYS_CHUNK):
+
+def comandos_send_keys(target: str, data: bytes, chunk: int = SEND_KEYS_CHUNK):
     """Input crudo → lista de comandos `send-keys -H` (hex, sin ambigüedad de
-    quoting: CUALQUIER byte viaja igual — Enter, ESC, UTF-8, bracketed paste)."""
+    quoting: CUALQUIER byte viaja igual — Enter, ESC, UTF-8, bracketed paste).
+    `target` = el pane destino; pasale el EXACTO (`=jarvis_1:`), no el nombre
+    pelado (que resuelve por prefijo si la sesión ya no existe)."""
     cmds = []
     for i in range(0, len(data), chunk):
         hx = ' '.join(f'{b:02x}' for b in data[i:i + chunk])
-        cmds.append(f'send-keys -t {session} -H {hx}')
+        cmds.append(f'send-keys -t {target} -H {hx}')
     return cmds
 
 
@@ -328,6 +335,12 @@ class ClienteControl:
 
     def __init__(self, session: str):
         self.session = session
+        # Targets EXACTOS (`=nombre`): sin el '=' tmux resuelve por PREFIJO cuando
+        # no hay match exacto, así que con `jarvis_1` muerta y `jarvis_12` viva el
+        # tipeo/captura de la 1 caía en la 12 (mismo gotcha que terminal_backend
+        # `_pane_exacto`). Un pane exige `=nombre:`; attach-session, `=nombre`.
+        self.target_sesion = f'={session}'
+        self.pane = f'={session}:'
         self._proc = None
         self._fd = None
         self._loop = None
@@ -336,13 +349,25 @@ class ClienteControl:
         self._on_exit = None        # callback() — corre en el loop, una vez
         self._leyendo = False
         self._cerrado = False
-        # comando_con_respuesta: futures FIFO esperando su bloque %begin/%end.
-        # tmux responde en el ORDEN de los comandos (un stream, sin tags).
+        # TODO comando que escribimos al stdin de tmux produce UN bloque
+        # %begin/%end en el stream de lectura (también `send-keys` y
+        # `refresh-client`, aunque vengan vacíos). `_esperas` lleva UNA entrada
+        # por comando en el ORDEN de escritura: un Future si alguien espera la
+        # respuesta (comando_con_respuesta) o None si es fire-and-forget
+        # (tipeo, resize). Sin los None, el bloque vacío de un send-keys recién
+        # escrito se le atribuía al siguiente comando_con_respuesta: el seed
+        # recibía la respuesta del tipeo en vez de la captura (seed degradado
+        # → reintento de 0.3s, o display-message/capture-pane cruzados).
         self._esperas = collections.deque()
         # El attach -C emite UN %begin/%end propio (vacío) antes de cualquier
         # comando nuestro (verificado tmux 3.6): se descarta por contador para
         # que no se atribuya al primer comando en vuelo.
         self._bloques_espurios = 0
+        # Escritura ORDENADA al stdin de tmux (ver _escribir): los payloads
+        # grandes salen por un thread y, mientras uno está en vuelo, TODO lo
+        # demás hace cola detrás en vez de intercalarse a mitad de línea.
+        self._cola_w = collections.deque()
+        self._drenando = None
 
     def iniciar(self, on_output, on_exit):
         """Lanza el attach -C y arranca la lectura. Corre en el event loop."""
@@ -351,7 +376,7 @@ class ClienteControl:
         self._on_exit = on_exit
         self._bloques_espurios = 1
         self._proc = subprocess.Popen(
-            ['tmux', '-C', 'attach-session', '-t', self.session],
+            ['tmux', '-C', 'attach-session', '-t', self.target_sesion],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE,
             stderr=subprocess.DEVNULL, bufsize=0,
         )
@@ -388,12 +413,22 @@ class ClienteControl:
         if self._bloques_espurios > 0:
             self._bloques_espurios -= 1
             return
-        while self._esperas:
-            fut = self._esperas.popleft()
-            if not fut.done():
-                fut.set_result(ev)
-                return
-        # Bloque sin espera (comando fire-and-forget de comando()): descartar.
+        if not self._esperas:
+            return          # bloque sin dueño: descartar
+        # UN bloque ↔ UNA entrada, siempre. Un None (fire-and-forget: tipeo,
+        # resize) y un Future ya cancelado (comando_con_respuesta que venció su
+        # timeout) también CONSUMEN su bloque cuando llega: saltearlos sin
+        # consumir corría la cuenta y el próximo comando_con_respuesta recibía
+        # la respuesta TARDÍA del anterior.
+        fut = self._esperas.popleft()
+        if fut is not None and not fut.done():
+            fut.set_result(ev)
+
+    def espera_real(self) -> bool:
+        """¿Hay algún comando_con_respuesta en vuelo? (los fire-and-forget del
+        tipeo no cuentan: el poller de modos solo debe cederle el paso a un
+        seed/probe real, no a cada tecla.)"""
+        return any(f is not None and not f.done() for f in self._esperas)
 
     async def comando_con_respuesta(self, cmd: str, timeout: float = 5.0):
         """Comando por el stdin del cliente -C esperando SU bloque %begin/%end.
@@ -408,7 +443,7 @@ class ClienteControl:
             raise RuntimeError(f'cliente de control cerrado ({self.session})')
         fut = self._loop.create_future()
         self._esperas.append(fut)
-        self._escribir_stdin((cmd + '\n').encode())
+        self._escribir((cmd + '\n').encode())
         ev = await asyncio.wait_for(fut, timeout)
         return ev[0] == 'respuesta', ev[1]
 
@@ -420,8 +455,9 @@ class ClienteControl:
         # Esperas en vuelo: cancelarlas ya (que no cuelguen hasta su timeout).
         while self._esperas:
             fut = self._esperas.popleft()
-            if not fut.done():
+            if fut is not None and not fut.done():
                 fut.cancel()
+        self._cola_w.clear()
         cb, self._on_exit = self._on_exit, None
         if cb:
             cb()
@@ -448,21 +484,59 @@ class ClienteControl:
         except Exception:
             pass   # el %exit / EOF del lado de lectura reporta la muerte real
 
+    def _escribir(self, payload: bytes):
+        """Punto ÚNICO de escritura al stdin de tmux (solo desde el event loop).
+
+        Un payload chico (≤ LIMITE_ESCRITURA_INLINE) entra de una al pipe. Uno
+        grande (un paste de decenas de KB, x3 por el hex) puede llenar el pipe
+        y bloquear el write → sale por un thread. MIENTRAS ese thread escribe, el
+        loop sigue vivo y otros emisores (el poller de modos cada 1s, un resize,
+        una tecla) escribían POR ENCIMA: el kernel no garantiza atomicidad para
+        writes de más de un pipe-buffer, así que su línea se colaba a MITAD de
+        un `send-keys -H …` → tmux rechazaba la línea partida y el paste perdía
+        un tramo (y el comando intruso volvía como %error). Ahora, con una
+        escritura grande en vuelo, todo lo que llega hace cola y sale DESPUÉS,
+        en orden."""
+        if self._cola_w or self._drenando is not None:
+            self._cola_w.append(payload)
+            return
+        if len(payload) <= LIMITE_ESCRITURA_INLINE:
+            self._escribir_stdin(payload)
+            return
+        self._cola_w.append(payload)
+        self._drenando = asyncio.ensure_future(self._drenar_cola_w())
+
+    async def _drenar_cola_w(self):
+        try:
+            while self._cola_w and not self._cerrado:
+                await asyncio.to_thread(self._escribir_stdin, self._cola_w.popleft())
+        finally:
+            self._drenando = None
+
     def comando(self, cmd: str):
         if self._cerrado:
             return
-        self._escribir_stdin((cmd + '\n').encode())
+        self._esperas.append(None)      # su bloque %begin/%end llega y se descarta
+        self._escribir((cmd + '\n').encode())
 
     async def enviar_bytes(self, data: bytes):
         """Input del usuario → send-keys -H. Los pastes grandes se escriben en
-        un thread (el pipe de stdin puede llenarse y bloquear el write)."""
+        un thread (el pipe de stdin puede llenarse y bloquear el write); el
+        await vuelve cuando TODO lo encolado hasta acá ya salió, así el loop de
+        recepción del WS procesa los mensajes siguientes en orden."""
         if self._cerrado or not data:
             return
-        payload = ('\n'.join(comandos_send_keys(self.session, data)) + '\n').encode()
-        if len(payload) > 16384:
-            await asyncio.to_thread(self._escribir_stdin, payload)
-        else:
-            self._escribir_stdin(payload)
+        cmds = comandos_send_keys(self.pane, data)
+        self._esperas.extend([None] * len(cmds))     # un bloque por send-keys
+        self._escribir(('\n'.join(cmds) + '\n').encode())
+        tarea = self._drenando
+        if tarea is not None:
+            try:
+                await asyncio.shield(tarea)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
 
     def resize(self, cols: int, rows: int):
         """El resize del browser: UNA orden; tmux hace SIGWINCH a la app.

@@ -2385,12 +2385,12 @@ async def _sesion_control(websocket: WebSocket, terminal_id: int, log_file: str,
         descarta sin race (era la fuente del contenido duplicado al reconectar
         con un agente floodeando; auditoría 2026-07-02)."""
         ok1, cuerpo1 = await cliente.comando_con_respuesta(
-            f"display-message -p -t {session} "
+            f"display-message -p -t {cliente.pane} "
             "'#{alternate_on}|#{cursor_x}|#{cursor_y}|#{pane_height}|"
             "#{mouse_any_flag}|#{mouse_button_flag}|#{mouse_all_flag}|"
             "#{keypad_cursor_flag}'")
         ok2, cuerpo2 = await cliente.comando_con_respuesta(
-            f'capture-pane -p -e -t {session} -S -{_SEED_LINEAS}')
+            f'capture-pane -p -e -t {cliente.pane} -S -{_SEED_LINEAS}')
         if not ok1 or not ok2:
             raise RuntimeError(f'capture por control falló: {(cuerpo1 or cuerpo2)[:1]}')
         info = (cuerpo1[0] if cuerpo1 else '').split('|')
@@ -2462,6 +2462,11 @@ async def _sesion_control(websocket: WebSocket, terminal_id: int, log_file: str,
             # TODO lo anterior al %end ya está en la captura; re-aplicarlo
             # encima del seed duplicaba el contenido.
             _drenar_cola()
+            # El decoder UTF-8 es INCREMENTAL: si el último chunk enviado dejó un
+            # carácter multibyte a medias, su continuación estaba en lo que
+            # acabamos de tirar — sin resetearlo, el primer byte POST-seed se
+            # le pegaba y salía un '�' (o un glifo equivocado) pegado al seed.
+            decoder.reset()
         finally:
             seed_en_curso = False
         # El drenaje pudo dejar la lectura pausada con la cola vacía: sin esto,
@@ -2514,7 +2519,7 @@ async def _sesion_control(websocket: WebSocket, terminal_id: int, log_file: str,
             if cerrando or salida_n != marca:
                 return                      # llegó output: la app repintó sola
             ok, cuerpo = await cliente.comando_con_respuesta(
-                f"display-message -p -t {session} '#{{alternate_on}}'")
+                f"display-message -p -t {cliente.pane} '#{{alternate_on}}'")
             alt_on = bool(ok and cuerpo and cuerpo[0].strip() == '1')
             if not debe_resembrar(salida_n - marca, alt_on):
                 return
@@ -2552,11 +2557,11 @@ async def _sesion_control(websocket: WebSocket, terminal_id: int, log_file: str,
             # Saltar mientras hay un seed/probe en vuelo: comparten el stream de
             # control (comando_con_respuesta es FIFO) — no competir por los
             # futures; el próximo tick sincroniza igual.
-            if seed_en_curso or cliente._esperas:
+            if seed_en_curso or cliente.espera_real():
                 continue
             try:
                 ok, cuerpo = await cliente.comando_con_respuesta(
-                    f"display-message -p -t {session} "
+                    f"display-message -p -t {cliente.pane} "
                     "'#{alternate_on}|#{cursor_x}|#{cursor_y}|#{pane_height}|"
                     "#{mouse_any_flag}|#{mouse_button_flag}|#{mouse_all_flag}|"
                     "#{keypad_cursor_flag}'", timeout=3.0)
