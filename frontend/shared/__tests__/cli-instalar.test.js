@@ -58,3 +58,19 @@ assert.strictEqual(I.esperaPoll(12), 6000);
 assert.ok(I.POLL_MAX_MS >= 5 * 60 * 1000, 'una instalación con Node incluido tarda minutos');
 
 console.log('cli-instalar: ok');
+
+// ── ordenarClis: usables primero, orden canónico dentro de cada grupo ──────
+{
+  const O = ['claude', 'codex', 'opencode', 'qwen', 'antigravity', 'grok', 'cursor', 'pi', 'manual'];
+  const mk = (faltan) => O.filter(i => i !== 'manual').map(id => ({ id, instalado: !faltan.includes(id) }));
+  const I = require('../cli-instalar.js');
+  assert.deepStrictEqual(I.ordenarClis(O, null), O);                    // sin detección: canónico
+  assert.deepStrictEqual(I.ordenarClis(O, mk([])), O);                  // todo instalado: igual
+  assert.deepStrictEqual(I.ordenarClis(O, mk(['claude', 'qwen', 'antigravity', 'cursor', 'pi'])),
+    ['codex', 'opencode', 'grok', 'manual', 'claude', 'qwen', 'antigravity', 'cursor', 'pi']);
+  // al instalarse Qwen sube a su lugar relativo (después de OpenCode, antes de Grok)
+  assert.deepStrictEqual(I.ordenarClis(O, mk(['claude', 'antigravity', 'cursor', 'pi'])),
+    ['codex', 'opencode', 'qwen', 'grok', 'manual', 'claude', 'antigravity', 'cursor', 'pi']);
+  assert.deepStrictEqual(O.slice(), ['claude', 'codex', 'opencode', 'qwen', 'antigravity', 'grok', 'cursor', 'pi', 'manual']);  // no muta
+}
+console.log('ordenarClis OK');

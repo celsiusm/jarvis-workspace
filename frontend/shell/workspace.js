@@ -3982,6 +3982,13 @@ function _tlPintarFalta() {
     btn.title = sitio ? _sbT('Se instala desde su sitio oficial')
       : (e.comando ? `${_sbT('Abre una terminal y corre:')} ${e.comando}` + (e.conNode ? `\n${_sbT('Incluye instalar Node.js.')}` : '') : '');
   });
+  // Usables primero (orden de siempre) y los que faltan después; al instalarse, sube a su lugar
+  // deslizándose. La 1.ª pasada tras (re)dibujar el grid acomoda sin animar.
+  const grid = document.getElementById('tl-grid');
+  if (grid && I && I.reordenar) {
+    I.reordenar(grid, I.ordenarClis(window.JarvisLauncherState.CLI_ORDEN, _tlEstadoClis?.clis), grid.dataset.ord === '1');
+    grid.dataset.ord = '1';
+  }
   const pend = document.getElementById('tl-pend');
   if (pend) {
     pend.hidden = pendientes === 0;
@@ -4024,6 +4031,7 @@ function _tlRenderGrid() {
   const L = window.JarvisLauncherState;
   const cont = document.getElementById('tl-grid');
   if (!cont || !L) return;
+  delete cont.dataset.ord;
   cont.innerHTML = L.CLI_ORDEN.map(tipo => `
     <div class="tl2-cli-card cli-fila" data-tipo="${tipo}">
       <span class="tl2-cli-badge">${window.cliLogo ? cliLogo(tipo, 18) : tipo}</span>
