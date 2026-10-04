@@ -1175,13 +1175,17 @@
       if (etiqueta) etiqueta.textContent = `${total} ${total === 1 ? _t('cuenta') : _t('cuentas')} · ${conCuentas.length}/${_clis.length} CLIs`;
 
       cuerpo.innerHTML = `<div class="ct-wrap">${conCuentas.map(_filaCli).join('')}${dormidos}</div>
-        <p class="ct-pie">${esc(_t('Tocá una cuenta para pasarte a ella al instante — no hay que volver a loguearse. La que está en uso abre su detalle.'))}</p>`;
+        <p class="ct-pie">${esc(_t('Tocá una cuenta para pasarte a ella al instante — no hay que volver a loguearse. La que está en uso abre su detalle.'))}</p>
+        <div class="ct-diag-w">
+          <button class="sx-btn gho sm" type="button" data-act="diag">${esc(_t('¿No aparece tu cuenta? Diagnosticar'))}</button>
+          <pre class="ct-diag sx-mono" id="ct-diag" hidden></pre>
+        </div>`;
       cuerpo.querySelectorAll('[data-act]').forEach(el =>
         el.addEventListener('click', () => accion(el.dataset)));
     }
 
     async function recargar() {
-      try { const data = await _ctaFetch('/api/cuentas'); _clis = data.clis || []; }
+      try { const data = await _ctaFetch('/api/cuentas'); _clis = data.clis || []; _ultimo = JSON.stringify(_clis); }
       catch { cuerpo.innerHTML = `<p class="cta-err">${esc(_t('No se pudieron cargar las cuentas.'))}</p>`; return; }
       _res.cuentas = _clis.reduce((a, c) => a + (c.cuentas || []).length, 0);
       _pintarValores();
@@ -1189,7 +1193,43 @@
       _cargarUso();
     }
 
+    // Re-lee las cuentas SIN parpadeo: se repinta solo si algo cambió. Así, loguearte en una
+    // terminal y volver acá muestra la cuenta sola (antes solo se leía al abrir la pantalla).
+    let _ultimo = '';
+    async function refrescarSilencioso() {
+      if (!b.isConnected || !_abierta || _seccion !== 'cuentas' || document.hidden) return;
+      let data; try { data = await _ctaFetch('/api/cuentas'); } catch { return; }
+      const firma = JSON.stringify(data.clis || []);
+      if (firma === _ultimo) return;
+      _ultimo = firma;
+      _clis = data.clis || [];
+      _res.cuentas = _clis.reduce((a, c) => a + (c.cuentas || []).length, 0);
+      _pintarValores(); pintar();
+    }
+    const _tick = setInterval(() => { if (!b.isConnected) { clearInterval(_tick); window.removeEventListener('focus', refrescarSilencioso); return; } refrescarSilencioso(); }, 4000);
+    window.addEventListener('focus', refrescarSilencioso);
+
+    async function _diagnosticar() {
+      const pre = b.querySelector('#ct-diag');
+      if (!pre) return;
+      pre.hidden = false; pre.textContent = _t('Revisando…');
+      const tipos = _clis.filter(c => !(c.cuentas || []).length).map(c => c.tipo);
+      const partes = [];
+      for (const t of tipos) {
+        try {
+          const d = await _ctaFetch(`/api/cuentas/diagnostico/${encodeURIComponent(t)}`);
+          const l = [`${_tipoLabel(t)} — ${d.logueado ? _t('sesión encontrada') : _t('sin sesión')}${d.email ? ' · ' + d.email : ''}`];
+          if (d.claude_config_dir) l.push(`  CLAUDE_CONFIG_DIR = ${d.claude_config_dir}`);
+          (d.archivos || []).forEach(a => l.push(`  ${a.existe ? '✓' : '✗'} ${a.ruta}${a.claves ? '  [' + a.claves.slice(0, 6).join(', ') + ']' : ''}`));
+          (d.pistas || []).forEach(x => l.push(`  → ${x}`));
+          partes.push(l.join('\n'));
+        } catch { /* un tipo que falla no tapa a los demás */ }
+      }
+      pre.textContent = partes.join('\n\n') || _t('No hay nada para diagnosticar.');
+    }
+
     async function accion(ds) {
+      if (ds.act === 'diag') { _diagnosticar(); return; }
       const id = ds.id;
       if (ds.act === 'detalle') {
         const clave = `${ds.tipo}:${id}`;

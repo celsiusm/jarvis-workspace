@@ -981,3 +981,41 @@ def test_en_windows_se_usa_junction_y_no_symlink(monkeypatch, tmp_path):
                             AssertionError('no debe usar symlink en Windows')))
     ca._crear_enlace_dir(str(tmp_path / 'x'), str(tmp_path / 'y'))
     assert llamadas and 'mklink' in llamadas[0] and '/J' in llamadas[0], llamadas
+
+
+# ── CLAUDE_CONFIG_DIR + diagnóstico ──────────────────────────────────────────
+def test_claude_config_dir_se_respeta(tmp_path, monkeypatch):
+    from plotspace.core import cli_accounts as ca
+    import json as _j
+    cfg = tmp_path / "otro"
+    cfg.mkdir()
+    (cfg / ".credentials.json").write_text(_j.dumps({"claudeAiOauth": {"accessToken": "x"}}))
+    (cfg / ".claude.json").write_text(_j.dumps({"oauthAccount": {"emailAddress": "a@b.c"}}))
+    monkeypatch.setattr(ca, "HOME_DIR", str(tmp_path / "home_vacio"))
+    monkeypatch.setenv("CLAUDE_CONFIG_DIR", str(cfg))
+    assert ca.esta_logueado("claude") is True
+    assert ca.email_actual("claude") == "a@b.c"
+    d = ca.diagnostico("claude")
+    assert d["logueado"] is True and d["claude_config_dir"] == str(cfg)
+    assert d["archivos"][0]["existe"] and "claudeAiOauth" in d["archivos"][0]["claves"]
+    assert "accessToken" not in str(d)           # nunca valores de tokens
+
+
+def test_diagnostico_sin_credencial_da_pistas(tmp_path, monkeypatch):
+    from plotspace.core import cli_accounts as ca
+    monkeypatch.setattr(ca, "HOME_DIR", str(tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    d = ca.diagnostico("claude")
+    assert d["logueado"] is False and d["pistas"]
+
+
+def test_diagnostico_login_por_api_key_explica(tmp_path, monkeypatch):
+    from plotspace.core import cli_accounts as ca
+    import json as _j
+    (tmp_path / ".claude").mkdir()
+    (tmp_path / ".claude" / ".credentials.json").write_text(_j.dumps({"otraCosa": 1}))
+    monkeypatch.setattr(ca, "HOME_DIR", str(tmp_path))
+    monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
+    d = ca.diagnostico("claude")
+    assert d["logueado"] is False
+    assert any("API key" in p for p in d["pistas"])

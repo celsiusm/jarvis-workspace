@@ -34,7 +34,9 @@
   inset: calc(var(--gw-blur, 0px) * -2);
   background: var(--gw-img, none);
   filter: blur(var(--gw-blur, 0px)) saturate(var(--gw-sat, 100%));
-  transform: translateZ(0);          /* capa propia: se desenfoca una vez */
+  /* SIN `transform: translateZ(0)`: `filter` ya promueve la capa, y forzarla además hacía que el
+     compositor re-mezclara esta capa enorme (viewport + 2× blur) en cada repintado de una
+     terminal. Medido (eco de tecla): ~40 ms → ~16 ms con este fondo activo. */
 }
 /* Velo de la imagen: neutro (no tiñe con el tema); oscurece en oscuros, aclara en claros. */
 .jw-fondo-vel {

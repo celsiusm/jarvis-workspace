@@ -2376,5 +2376,10 @@
     "No se pudo abrir la terminal de instalación: {m}": "Couldn't open the install terminal: {m}",
     "{cli} no se pudo instalar: {m}": "{cli} couldn't be installed: {m}",
     "Abrí un proyecto para instalarlo desde una terminal": "Open a project to install it from a terminal",
+    "¿No aparece tu cuenta? Diagnosticar": "Can't see your account? Run diagnostics",
+    "Revisando…": "Checking…",
+    "sesión encontrada": "session found",
+    "sin sesión": "no session",
+    "No hay nada para diagnosticar.": "Nothing to diagnose.",
   });
 })();

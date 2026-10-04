@@ -59,6 +59,16 @@ def estado():
     return ca.estado()
 
 
+@router.get("/diagnostico/{tipo}")
+def diagnostico(tipo: str):
+    """Por qué Jarvis ve o no la sesión de un CLI: rutas que mira, si existen, claves (nunca
+    valores) y pistas. Solo lectura."""
+    try:
+        return ca.diagnostico(tipo)
+    except ca.TipoDesconocido:
+        raise HTTPException(status_code=400, detail="Tipo de CLI desconocido")
+
+
 @router.get("/uso")
 async def uso(refrescar: bool = False):
     """Cuánto le queda a la suscripción de cada cuenta (claude/codex).

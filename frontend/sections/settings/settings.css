@@ -1295,3 +1295,8 @@
 
 /* Listas largas: lo que está fuera de pantalla no se pinta ni se mide. */
 .ex-card, .sx-set { content-visibility: auto; contain-intrinsic-size: auto 120px; }
+
+/* Diagnóstico de cuentas: texto plano, sin caja pesada */
+.ct-diag-w { margin-top: 14px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.ct-diag { margin: 0; max-width: 100%; padding: 10px 12px; border-radius: 10px; background: var(--ob-bg-2); color: var(--ob-fg-2); font: 400 11.5px/1.6 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; }
+.ct-diag[hidden] { display: none; }

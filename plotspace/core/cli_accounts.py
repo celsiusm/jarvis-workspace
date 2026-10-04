@@ -31,6 +31,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import time
 from datetime import datetime
 
 from plotspace.core.database import get_db
@@ -323,6 +325,15 @@ def _specs():
             if clave in c:
                 spec[clave] = expandir(c[clave])
         salida[c['id']] = spec
+    # Claude Code respeta CLAUDE_CONFIG_DIR: con esa variable la credencial y su config
+    # viven ahí, NO en ~/.claude (antes Jarvis miraba siempre el HOME y no veía el login).
+    cfg_dir = os.environ.get("CLAUDE_CONFIG_DIR", "").strip()
+    if cfg_dir and "claude" in salida and salida["claude"].get("modo") == "claude":
+        cfg_dir = os.path.expanduser(cfg_dir)
+        salida["claude"]["cred_file"] = os.path.join(cfg_dir, ".credentials.json")
+        en_dir = os.path.join(cfg_dir, ".claude.json")
+        if os.path.isfile(en_dir):
+            salida["claude"]["config_file"] = en_dir
     return salida
 
 
@@ -898,6 +909,74 @@ def adoptar_sesiones_nativas():
         except (NoLogueado, TipoDesconocido, PerfilNoEncontrado):
             continue
     return adoptadas
+
+
+def _info_archivo(path, claves=False):
+    """Qué hay en `path` SIN exponer secretos: existe, tamaño, antigüedad y (si se pide)
+    los NOMBRES de las claves de primer nivel del JSON — nunca valores."""
+    info = {"ruta": path, "existe": os.path.isfile(path)}
+    if not info["existe"]:
+        return info
+    try:
+        st = os.stat(path)
+        info["bytes"] = st.st_size
+        info["modificado_hace_s"] = max(0, int(time.time() - st.st_mtime))
+    except OSError:
+        pass
+    if claves:
+        data = _read_json(path)
+        info["json_valido"] = data is not None
+        if isinstance(data, dict):
+            info["claves"] = sorted(str(k) for k in data.keys())[:30]
+    return info
+
+
+def diagnostico(tipo):
+    """Por qué Jarvis ve (o no) la sesión de `tipo`: qué rutas mira, cuáles existen y qué
+    pistas hay (sesión hecha en Windows en vez de WSL, CLAUDE_CONFIG_DIR, API key en vez
+    de suscripción…). Solo metadatos; nunca valores de tokens."""
+    spec = _specs().get(tipo)
+    if not spec:
+        raise TipoDesconocido(tipo)
+    out = {
+        "tipo": tipo, "home": HOME_DIR,
+        "logueado": bool(esta_logueado(tipo)), "email": email_actual(tipo),
+        "archivos": [], "pistas": [],
+    }
+    if spec["modo"] == "claude":
+        out["claude_config_dir"] = os.environ.get("CLAUDE_CONFIG_DIR") or None
+        cred = _info_archivo(spec["cred_file"], claves=True)
+        cfg = _info_archivo(spec["config_file"], claves=True)
+        out["archivos"] = [cred, cfg]
+        if not cred["existe"]:
+            out["pistas"].append(
+                "No existe el archivo de credenciales de Claude Code. Iniciá sesión con "
+                "`claude` → /login en una terminal de Jarvis (la que corre en este mismo "
+                "entorno que el servidor).")
+            # ¿Se logueó del lado de Windows pero Jarvis corre en WSL?
+            try:
+                import glob
+                for p in glob.glob("/mnt/c/Users/*/.claude/.credentials.json"):
+                    out["pistas"].append(
+                        f"Hay una sesión en Windows ({p}), pero Jarvis corre en WSL y usa "
+                        "otra carpeta: logueate desde una terminal DE JARVIS.")
+                    break
+            except Exception:
+                pass
+            if sys.platform == "darwin":
+                out["pistas"].append(
+                    "En macOS Claude Code guarda la sesión en el Llavero, no en un archivo: "
+                    "Jarvis todavía no la lee de ahí.")
+        elif cred.get("json_valido") and "claudeAiOauth" not in (cred.get("claves") or []):
+            out["pistas"].append(
+                "El archivo existe pero NO trae `claudeAiOauth`: es un login por API key/Console, "
+                "no por suscripción (Claude.ai). Hacé /login → «Claude account with subscription».")
+    else:
+        out["archivos"] = [_info_archivo(p) for p in spec.get("principales", spec.get("files", []))]
+        if not out["logueado"]:
+            out["pistas"].append(f"No se encontró sesión de {spec['label']}. Cómo loguear: "
+                                 f"{spec.get('como_loguear', '')}")
+    return out
 
 
 def estado():
