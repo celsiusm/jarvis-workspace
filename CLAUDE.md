@@ -77,6 +77,7 @@ No build step, no linter. Tests: pure Node suites (native assert, UMD `_pure` pa
 - `frontend/` — `index.html` (home, at `/`), `shell/` (workspace.html + workspace.js, the frame), `shared/` (tokens.css + base.css + ui.js with `icon()/toast()/confirmar()` + i18n), `sections/<x>/` (each section with its .js + .css), `vendor/`. See `frontend/AGENTS.md` and each section's `AGENTS.md`.
 - Sections: `home`, `terminals`, `panel` (dock + strip), `preview` (dev-servers menu), `browser` (Web Preview), `radio`, `editor-slide`, `settings`, `orchestrator`, `editor`, `tasks`, `review`, `mobile-preview`, `memory`.
 - `data/` — local state (gitignored). `.workspace/` is a per-project artifact (gitignored): `STATE.md` (written by Jarvis every 10s, read by agents) + per-terminal logs in `.workspace/logs/terminal_{id}_{name}.log` (useful for debugging terminals).
+- `brand/` — the logo kit (a bow tie: Jarvis the butler; the knot is a terminal cursor): SVG masters, app icons for web/iOS/macOS/Windows/Linux/Android, brand sheet, and the generator `build_brand.py`. **Not wired into the app yet** (a visible product change: ask first); see `brand/README.md`. Don't hand-edit the PNG/ICO/ICNS — change `GEOM`/the palette in the generator and rebuild.
 - **Serving:** all `frontend/` mounts at `/static`; the HTML references `/static/sections/<x>/...`.
 
 ### Workspace UI ("Single Panel")
