@@ -1,0 +1,5 @@
+# Solo para regenerar el kit con brand/build_brand.py (la app no usa nada de esto en runtime).
+skia-pathops>=0.8      # contornos exactos: unión / diferencia / trazo -> relleno
+fonttools>=4.50        # glifos del wordmark (Manrope) a curvas
+uharfbuzz>=0.40        # kerning real del wordmark
+playwright>=1.40       # Chromium headless para rasterizar los PNG
