@@ -9,7 +9,14 @@ mensajes de mentira en `data/jarvis.db` — y esos mensajes le aparecen DESPUÉS
 un agente de verdad en su `jv inbox`. Pasó (2026-07-25: cinco filas 'hola' de
 Frontend a Backend en la DB del workspace vivo). Por eso la DB también se aísla
 para TODA la suite."""
+import os
+
 import pytest
+
+# El cazador de stalls de main.py (faulthandler.dump_traceback_later) vuelca los
+# stacks de todos los threads sin el GIL: con tests lentos provocaba segfaults
+# intermitentes (exit 139) en la suite. En tests no hace falta.
+os.environ.setdefault('JARVIS_DIAG_STALL', 'off')
 
 
 @pytest.fixture(scope='session')
