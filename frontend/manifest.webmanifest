@@ -7,10 +7,13 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "display_override": ["window-controls-overlay", "standalone"],
+  "display_override": [
+    "window-controls-overlay",
+    "standalone"
+  ],
   "orientation": "landscape",
-  "background_color": "#0d0d12",
-  "theme_color": "#0d0d12",
+  "background_color": "#090D18",
+  "theme_color": "#090D18",
   "icons": [
     {
       "src": "/static/shared/favicon.svg",
@@ -22,13 +25,25 @@
       "src": "/static/shared/icons/jarvis-192.png",
       "type": "image/png",
       "sizes": "192x192",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
       "src": "/static/shared/icons/jarvis-512.png",
       "type": "image/png",
       "sizes": "512x512",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/shared/icons/jarvis-maskable-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/static/shared/icons/jarvis-monochrome-512.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "monochrome"
     }
   ]
 }

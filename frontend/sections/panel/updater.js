@@ -297,15 +297,9 @@
         b.innerHTML =
           `<span class="jw-up-in">` +
             `<span class="jw-up-face jw-up-idle">` +
-              `<svg class="jw-up-mark" viewBox="0 0 64 64" fill="none" aria-hidden="true">` +
-                `<path class="jw-up-trazo" d="M12 46 L24 35 L32 41 L50 15" pathLength="100" stroke="currentColor" stroke-width="7" stroke-linecap="round" stroke-linejoin="miter" stroke-miterlimit="5"/>` +
-                `<g class="jw-up-chispa">` +
-                  `<circle cx="50" cy="15" r="7.5" fill="currentColor" opacity=".35"/>` +
-                  `<circle cx="50" cy="15" r="3.4" fill="#fff"/>` +
-                  `<g stroke="#fff" stroke-width="1.6" stroke-linecap="round">` +
-                    `<path d="M50 5.5 V9.5"/><path d="M50 20.5 V24.5"/><path d="M40.5 15 H44.5"/><path d="M55.5 15 H59.5"/>` +
-                  `</g>` +
-                `</g>` +
+              `<svg class="jw-up-mark" viewBox="75 131 362 250" fill="none" aria-hidden="true">` +
+                `<path d="M108.88 140.51Q161.99 190.18 215 226.68L215 285.32Q161.99 321.82 108.88 371.49Q104.95 375.17 99.57 374.99Q94.18 374.81 90.51 370.88Q87.57 367.74 87.08 363.46Q74.92 256 87.08 148.54Q87.69 143.19 91.9 139.83Q96.11 136.48 101.46 137.08Q105.74 137.57 108.88 140.51ZM403.12 140.51Q406.26 137.57 410.54 137.08Q415.89 136.48 420.1 139.83Q424.31 143.19 424.92 148.54Q437.08 256 424.92 363.46Q424.43 367.74 421.49 370.88Q417.82 374.81 412.43 374.99Q407.05 375.17 403.12 371.49Q350.01 321.82 297 285.32L297 226.68Q350.01 190.18 403.12 140.51Z" fill="currentColor"/>` +
+                `<path class="jw-up-chispa" d="M249 194L263 194C275.15 194 285 203.85 285 216L285 296C285 308.15 275.15 318 263 318L249 318C236.85 318 227 308.15 227 296L227 216C227 203.85 236.85 194 249 194Z" fill="#fff"/>` +
               `</svg>` +
               `<b>${_esc(_t('Actualizar ahora', 'Update now'))}</b>` +
             `</span>` +

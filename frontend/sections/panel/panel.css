@@ -384,17 +384,9 @@ body.jw-rail .gh-crumb-center { left: calc(50% - 29px); }
    lenguaje que el halo del composer del Web Builder). El chip ES el anillo
    (padding = grosor del aro); el contenido vive en .jw-vc-inner. Informativo
    (cursor default) — la acción de actualizar vive en la franja. */
-/* ── Marca Jarvis en el header (colores de marca fijos, no tema) ── */
-.jw-brand-mark { display: inline-flex; width: 21px; height: 21px; flex: none; }
+/* ── Marca Jarvis en el header: alas con el tema, nudo en latón de marca ── */
+.jw-brand-mark { display: inline-flex; width: 28px; height: 19px; flex: none; color: var(--ob-fg-0); }
 .jw-brand-mark svg { width: 100%; height: 100%; display: block; overflow: visible; }
-.jw-brand-chispa { transform-box: fill-box; transform-origin: center; }
-.jw-bar-cluster:hover .jw-brand-chispa { animation: jw-brand-twinkle .55s var(--ease-out, cubic-bezier(.22,1,.36,1)); }
-@keyframes jw-brand-twinkle {
-  0%   { transform: scale(1); }
-  38%  { transform: scale(1.45); }
-  100% { transform: scale(1); }
-}
-@media (prefers-reduced-motion: reduce) { .jw-bar-cluster:hover .jw-brand-chispa { animation: none; } }
 
 /* Chip de versión — HALO SEMÁNTICO: quieto al día (borde fino), gira SOLO con
    update disponible (el movimiento comunica estado, no adorno). */
@@ -732,8 +724,7 @@ body.jw-resizing { cursor: col-resize; user-select: none; }
 #jw-update-banner:hover .jw-up-idle, #jw-update-banner:focus-visible .jw-up-idle { transform: translateY(-110%); opacity: 0; }
 #jw-update-banner:hover .jw-up-hover, #jw-update-banner:focus-visible .jw-up-hover { transform: none; opacity: 1; }
 /* La marca Jarvis SE PLOTEA: la cinta se dibuja y la chispa estalla en la cúspide. */
-.jw-up-mark { width: 16px; height: 16px; display: block; color: var(--ob-accent-fg); }
-.jw-up-trazo { stroke-dasharray: 100 100; stroke-dashoffset: 100; animation: jw-up-draw 3.4s cubic-bezier(.65,0,.35,1) infinite; }
+.jw-up-mark { width: 24px; height: 16px; display: block; color: var(--ob-accent-fg); }
 @keyframes jw-up-draw {
   0%, 8%    { stroke-dashoffset: 100; opacity: 1; }
   46%       { stroke-dashoffset: 0;   opacity: 1; }
@@ -766,8 +757,7 @@ body.jw-rail .jw-up-hover { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   #jw-update-banner { animation: none; background: conic-gradient(from 120deg, transparent, var(--ob-accent) 90deg, transparent 210deg); }
-  .jw-up-trazo, .jw-up-chispa { animation: none; }
-  .jw-up-trazo { stroke-dashoffset: 0; }
+  .jw-up-chispa { animation: none; }
   .jw-up-chispa { opacity: 1; }
 }
 
