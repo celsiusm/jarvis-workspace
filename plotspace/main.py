@@ -491,6 +491,12 @@ async def _startup():
         import faulthandler
         import time
         from plotspace.core.datadir import ruta_data
+        # JARVIS_DIAG_STALL=off lo apaga. La suite de tests lo apaga: el watchdog
+        # de faulthandler vuelca los stacks de TODOS los threads SIN el GIL, y con
+        # un test lento (loop quieto ≥2s) se pisa con threads que mutan frames →
+        # segfault nativo intermitente (exit 139) a mitad del pytest, en el CI.
+        if os.environ.get('JARVIS_DIAG_STALL', 'on').lower() == 'off':
+            return
         try:
             f = open(ruta_data('diag_stall.log'), 'a')
         except OSError as e:
