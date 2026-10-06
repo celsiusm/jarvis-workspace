@@ -58,11 +58,11 @@ The empty workspace. One project, nothing running yet. New terminal, talk to Jar
 Pick agents, how many, and a layout. Up to 12 panes: several Claude Codes, a mix with OpenCode, or one shell. CLIs you haven't installed show up dimmed with the exact install command and an **Install** button — they slide into place once they are ready. Everything lands in a live grid.
 
 <p align="center">
-  <img src="docs/images/launcher-batch.png" alt="New terminal — pick Claude Code, Codex, OpenCode, Grok Build or a shell; Qwen, Antigravity, Cursor and Pi marked not installed with their install command; layout and launch" width="920">
+  <img src="docs/images/launcher-batch.png?v=2" alt="New terminal — pick Claude Code, Codex, OpenCode, Grok Build or a shell; Qwen, Antigravity, Cursor and Pi marked not installed with their install command; layout and launch" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/images/swarm-live.png" alt="Jarvis Workspace — a live grid of four Claude Code and three OpenCode agents on the same project" width="920">
+  <img src="docs/images/swarm-live.png?v=2" alt="Jarvis Workspace — a live grid of seven Claude Code agents on the same project" width="920">
 </p>
 
 ### Editor and radio by your side
@@ -70,11 +70,11 @@ Pick agents, how many, and a layout. Up to 12 panes: several Claude Codes, a mix
 Edit your project while the agent works in its own pane — file tree, Monaco editor and a live terminal together. Or open the Radio: search YouTube music, your local files or Spotify while the swarm builds.
 
 <p align="center">
-  <img src="docs/images/editor.png" alt="Editor — file tree, the LICENSE file open in the editor, and a Claude Code terminal in the same workspace" width="920">
+  <img src="docs/images/editor.png?v=2" alt="Editor — file tree, the LICENSE file open in the editor, and a Claude Code terminal in the same workspace" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/images/radio.png" alt="Radio — Claude FM playing, with YouTube, Local and Spotify tabs and related tracks, open over the agent grid" width="920">
+  <img src="docs/images/radio.png?v=2" alt="Radio — Claude FM playing, with YouTube, Local and Spotify tabs and related tracks, open over the agent grid" width="920">
 </p>
 
 ### Review, tasks and a real browser — in the dock
@@ -82,15 +82,15 @@ Edit your project while the agent works in its own pane — file tree, Monaco ed
 The right-hand dock keeps the rest of the loop next to the terminals. **Review** lists what every agent changed — grouped by who wrote it, with per-file diffs — and commits only what you tick. **Tasks** is the live monitor of your agents (running, waiting, finished). The **Browser** is a real server-side Chromium with split view, so it loads any site and your `localhost` dev servers.
 
 <p align="center">
-  <img src="docs/images/review.png" alt="Review — files changed on main grouped as Unattributed, with a commit message box, next to a Claude Code terminal" width="920">
+  <img src="docs/images/review.png?v=2" alt="Review — files changed on main grouped as Unattributed, with a commit message box, next to a Claude Code terminal" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/images/tasks.png" alt="Tasks — live agent monitor showing one finished Claude Code terminal" width="920">
+  <img src="docs/images/tasks.png?v=2" alt="Tasks — live agent monitor showing one idle Claude Code terminal" width="920">
 </p>
 
 <p align="center">
-  <img src="docs/images/browser.png" alt="Browser — a real browser in the dock with tabs, split-view layouts and an address bar" width="920">
+  <img src="docs/images/browser.png?v=2" alt="Browser — a real browser in the dock with tabs, split-view layouts and an address bar" width="920">
 </p>
 
 ### Mobile Studio
@@ -110,7 +110,7 @@ Preview your app in a live phone frame — add phone frames, web browsers or pro
 The shared memory of the swarm. Each memory is a node, grouped into constellations by topic (here: *Environment · WSL & Git*); links between memories draw the lines. Switch between List, Graph, Live and Summary, zoom, pan and click a node to open it.
 
 <p align="center">
-  <img src="docs/images/memory-graph.png" alt="Memory graph — four memories grouped in an Environment · WSL & Git constellation, with List, Graph, Live and Summary tabs" width="800">
+  <img src="docs/images/memory-graph.png?v=2" alt="Memory graph — four memories grouped in an Environment · WSL & Git constellation, with List, Graph, Live and Summary tabs" width="800">
 </p>
 
 ### Live on Discord
@@ -126,7 +126,7 @@ Windows only: the launcher (`Jarvis.exe`) pushes your fleet to Discord — live 
 ⚙ → **Accounts**. Several logins per CLI — Claude Code, Codex, Grok Build, Antigravity, OpenCode, Qwen Code, Pi, Cursor — and you switch without logging in again. Native sessions show up even if you never clicked Connect. Rate-limit? It rotates. Can't see yours? **Run diagnostics** tells you where Jarvis looked.
 
 <p align="center">
-  <img src="docs/images/accounts-switchboard.png" alt="Settings → Accounts — the switchboard with the eight supported CLIs and a Run diagnostics button" width="920">
+  <img src="docs/images/accounts-switchboard.png?v=2" alt="Settings → Accounts — the switchboard with the eight supported CLIs and a Run diagnostics button" width="920">
 </p>
 
 ### Make it yours
@@ -134,13 +134,13 @@ Windows only: the launcher (`Jarvis.exe`) pushes your fleet to Discord — live 
 ⚙ → **Appearance**. 24 themes (two of them light), fine tint, language (English / Spanish) and scale. The bench at the top is the live workspace.
 
 <p align="center">
-  <img src="docs/images/appearance-themes.png" alt="Settings → Appearance — the live bench, 24 themes ordered by color wheel, tint sliders and scale" width="920">
+  <img src="docs/images/appearance-themes.png?v=2" alt="Settings → Appearance — the live bench, 24 themes ordered by color wheel, tint sliders and scale" width="920">
 </p>
 
 **Liquid Glass** gives bars, panels and dialogs a translucent material, and an optional custom background (gradients or your own image) sits behind it, with blur, saturation, veil and opacity controls.
 
 <p align="center">
-  <img src="docs/images/appearance-glass.png" alt="Settings → Appearance — language, Liquid Glass and mobile preview toggles, and the custom background with Aurora, Dusk, Ocean, Ember and Forest presets" width="920">
+  <img src="docs/images/appearance-glass.png?v=2" alt="Settings → Appearance — language, Liquid Glass and mobile preview toggles, and the custom background with Aurora, Dusk, Ocean, Ember and Forest presets" width="920">
 </p>
 
 ### Extensions
@@ -148,7 +148,7 @@ Windows only: the launcher (`Jarvis.exe`) pushes your fleet to Discord — live 
 ⚙ → **Extensions** shows what each AI reads in your project — skills, commands, agents and rules for Claude Code, Codex, Gemini, Cursor, Copilot and more — detected in the repo and in your user folder, plus Claude Code plugins and the marketplace.
 
 <p align="center">
-  <img src="docs/images/extensions.png" alt="Settings → Extensions — a Claude Code skill and CLAUDE.md, and the AGENTS.md instruction files that Codex reads" width="920">
+  <img src="docs/images/extensions.png?v=2" alt="Settings → Extensions — a Claude Code skill and CLAUDE.md, and the AGENTS.md instruction files that Codex reads" width="920">
 </p>
 
 Hold your voice key to dictate (Groq's free Whisper API).
