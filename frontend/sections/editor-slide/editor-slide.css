@@ -22,24 +22,26 @@
 .jw-ed{
   flex: none; display: flex; flex-direction: column; min-width: 0; min-height: 0;
   background: linear-gradient(180deg, var(--ob-bg-0), var(--ob-bg-void));
-  border-right: 1px solid var(--ob-line-1);
+  /* marco de tarjeta (mismo lenguaje que las cards de terminal): radio, borde completo y sombra suave */
+  margin: 8px 0 8px 8px; border: 1px solid var(--ob-line-2); border-radius: 14px;
+  box-shadow: 0 18px 44px -22px oklch(3% 0 0 / 0.75), inset 0 1px 0 var(--ob-glass-hi);
   overflow: hidden; position: relative; z-index: 2;
-  transition: width .26s var(--ez), opacity .2s var(--ez);
+  transition: width .26s var(--ez), opacity .2s var(--ez), margin .26s var(--ez);
   /* width SÍ anima (abrir/cerrar smooth, sin el salto/parpadeo): las terminales
      crecen/encogen gradual con el flex. El refit de xterm se gatea con setInteract
      durante la animación y sale UNA vez al terminar (JS). El viejo comentario:
      lo da la animación .jw-ed-slidein (transform), no el layout. */
 }
 /* cerrado → ancho 0 (las terminales ocupan todo) */
-.jw-content:not([data-editor-open]) #jw-editor{ width: 0 !important; opacity: 0; border: none; }
+.jw-content:not([data-editor-open]) #jw-editor{ width: 0 !important; opacity: 0; border: none; margin: 0; box-shadow: none; }
 /* dockeado a la derecha: invierte el orden en el flex row de .jw-content */
-.jw-content[data-editor-dock="right"] #jw-editor{ order: 3; border-right: none; border-left: 1px solid var(--ob-line-1); }
+.jw-content[data-editor-dock="right"] #jw-editor{ order: 3; margin: 8px 8px 8px 0; }
 .jw-content[data-editor-dock="right"] #jw-editor-split{ order: 2; }
 .jw-content[data-editor-dock="right"] .panel-terminales{ order: 1; }
 .jw-content[data-editor-dock="right"] .jw-dock-splitter{ order: 4; }
 .jw-content[data-editor-dock="right"] .jw-dock{ order: 5; }
 /* maximizado: el editor ocupa todo, las terminales se ocultan */
-.jw-content.jw-ed-max #jw-editor{ flex: 1; width: auto !important; }
+.jw-content.jw-ed-max #jw-editor{ flex: 1; width: auto !important; margin: 8px; }
 .jw-content.jw-ed-max .panel-terminales{ display: none; }
 .jw-content.jw-ed-max #jw-editor-split{ display: none; }
 
@@ -50,64 +52,55 @@
 @keyframes jwEdSlideR{ from{ transform: translateX(24px); opacity: 0; } to{ transform: none; opacity: 1; } }
 
 /* ── barra de pestañas ── */
-.jw-ed .ed-tabs{ display: flex; align-items: stretch; gap: 6px; padding: 8px 8px 0; border-bottom: 1px solid var(--ob-line-1); flex: none; }
-.jw-ed .ed-tablist{ flex: 0 1 auto; min-width: 0; display: flex; align-items: stretch; gap: 2px; overflow-x: auto; overflow-y: hidden; }
-.jw-ed .ed-drag-fill{ flex: 1; min-width: 24px; align-self: stretch; cursor: grab; }
+.jw-ed .ed-tabs{ display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; flex: none;
+  background: color-mix(in oklch, var(--ob-bg-1) 70%, var(--ob-bg-0)); border-bottom: 1px solid var(--ob-line-1); }
+.jw-ed .ed-tablist{ flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; overflow-x: auto; overflow-y: hidden; }
+.jw-ed .ed-drag-fill{ flex: 1; align-self: stretch; min-width: 24px; cursor: grab; }
 .jw-content.jw-ed-dragging .ed-drag-fill{ cursor: grabbing; }
-.jw-ed .ed-tab{ position: relative; display: inline-flex; align-items: center; gap: 7px; padding: 8px 8px 9px 11px; border-radius: 9px 9px 0 0; color: var(--ob-fg-3);
-  font: 500 12px var(--ed-mono); white-space: nowrap; border: 1px solid transparent; border-bottom: none; top: 1px;
+.jw-ed .ed-tab{ position: relative; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 11px; border-radius: 8px; color: var(--ob-fg-3);
+  font: 500 12.5px var(--ed-ui); letter-spacing: -.005em; white-space: nowrap; border: 1px solid transparent;
   background: transparent;   /* CLAVE: sin esto el <button> muestra el fondo blanco default del navegador al quedar inactivo */
-  transition: background .12s, color .12s, transform .19s var(--ez); touch-action: none;
+  transition: background .14s, color .14s, border-color .14s, transform .19s var(--ez); touch-action: none;
   flex: none; max-width: none; min-width: 0; }
-.jw-ed .ed-tab > svg{ width: 13px; height: 13px; color: var(--ob-fg-4); flex: none; }
+.jw-ed .ed-tab > svg{ width: 14px; height: 14px; color: var(--ob-fg-4); flex: none; transition: color .14s; }
 .jw-ed .ed-tab .tn{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
-.jw-ed .ed-tab:hover{ background: var(--ob-bg-1); color: var(--ob-fg-1); }
-.jw-ed .ed-tab.reordering{ z-index: 6; transition: none; cursor: grabbing; background: var(--ob-bg-0); color: var(--ob-fg-0);
-  border-color: var(--ob-accent); box-shadow: 0 4px 12px rgba(0,0,0,.38); opacity: .99; }
+.jw-ed .ed-tab:hover{ background: color-mix(in oklch, var(--ob-fg-0) 6%, transparent); color: var(--ob-fg-1); }
+.jw-ed .ed-tab.reordering{ z-index: 6; transition: none; cursor: grabbing; background: var(--ob-bg-2); color: var(--ob-fg-0);
+  border-color: var(--ob-accent); box-shadow: 0 6px 16px -4px oklch(3% 0 0 / 0.55); opacity: .99; }
 .jw-ed .ed-tablist.reordering-active{ cursor: grabbing; overflow: hidden; }
 .jw-ed .ed-tablist.reordering-active .ed-tab:not(.reordering){ cursor: grabbing; }
-.jw-ed .ed-tab.active{ background: var(--ob-bg-0); color: var(--ob-fg-0); border-color: var(--ob-line-1); }
-.jw-ed .ed-tab.active::after{ content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--ob-accent); box-shadow: 0 0 8px var(--ob-accent-glow); }
-.jw-ed .ed-tab .x{ flex: none; width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; color: var(--ob-fg-4); margin-left: 2px; }
-.jw-ed .ed-tab .x:hover{ background: var(--ob-bg-3); color: var(--ob-fg-0); } .jw-ed .ed-tab .x svg{ width: 10px; height: 10px; }
+/* pestaña activa: píldora tintada con el acento */
+.jw-ed .ed-tab.active{ background: var(--ob-accent-14); color: var(--ob-fg-0); font-weight: 600; border-color: var(--ob-accent-14); }
+.jw-ed .ed-tab.active > svg{ color: var(--ob-accent-fg); }
+.jw-ed .ed-tab .x{ flex: none; width: 18px; height: 18px; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; color: var(--ob-fg-4); margin-left: 1px; transition: background .12s, color .12s, opacity .12s; }
+.jw-ed .ed-tab .x:hover{ background: color-mix(in oklch, var(--ob-fg-0) 12%, transparent); color: var(--ob-fg-0); } .jw-ed .ed-tab .x svg{ width: 10px; height: 10px; }
 /* la ✕ de las pestañas inactivas aparece al pasar el mouse (el activo y los sin guardar la muestran siempre) */
-.jw-ed .ed-tab:not(.active):not(.dirty) .x{ opacity: 0; transition: opacity .12s; }
+.jw-ed .ed-tab:not(.active):not(.dirty) .x{ opacity: 0; }
 .jw-ed .ed-tab:not(.active):hover .x{ opacity: 1; }
 .jw-ed .ed-tablist::-webkit-scrollbar{ height: 6px; } .jw-ed .ed-tablist::-webkit-scrollbar-thumb{ background: var(--ob-line-2); border-radius: 6px; }
-.jw-ed .ed-tools{ flex: none; align-self: center; display: flex; align-items: center; gap: 2px; }
-/* botones de la esquina (maximizar / cerrar): LIQUID GLASS tintado con el acento
-   del tema (sigue los 7 temas vía color-mix con --ob-accent). Vidrio real con
-   backdrop-filter (acá NO hay canvas xterm detrás) + bevel + brillo diagonal. */
-.jw-ed .ed-btn{ width: 29px; height: 29px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center;
-  position: relative; overflow: hidden; color: var(--ob-accent-fg);
-  background: linear-gradient(150deg, color-mix(in oklch, var(--ob-accent) 20%, var(--ob-glass)), color-mix(in oklch, var(--ob-accent) 7%, var(--ob-glass)));
-  border: 1px solid color-mix(in oklch, var(--ob-accent) 26%, var(--ob-line-2));
-  box-shadow: inset 0 1px 0 var(--ob-glass-hi), inset 0 -1px 2px var(--ob-glass-lo), 0 2px 9px -2px color-mix(in oklch, var(--ob-accent) 22%, transparent);
-  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
-  transition: background .16s var(--ez), box-shadow .16s var(--ez), color .16s, transform .1s var(--ez); }
-.jw-ed .ed-btn::before{ content: ''; position: absolute; inset: 0; pointer-events: none;
-  background: linear-gradient(118deg, transparent 42%, var(--ob-glass-hi) 50%, transparent 58%); opacity: .8; }
-.jw-ed .ed-btn svg{ width: 15px; height: 15px; position: relative; z-index: 1; }
-.jw-ed .ed-btn:hover{ color: var(--ob-fg-0);
-  background: linear-gradient(150deg, color-mix(in oklch, var(--ob-accent) 34%, var(--ob-glass)), color-mix(in oklch, var(--ob-accent) 14%, var(--ob-glass)));
-  border-color: color-mix(in oklch, var(--ob-accent) 42%, var(--ob-line-2));
-  box-shadow: inset 0 1px 0 var(--ob-glass-hi), 0 4px 14px -3px color-mix(in oklch, var(--ob-accent) 40%, transparent); }
-.jw-ed .ed-btn:active{ transform: translateY(1px) scale(.97); }
-.jw-ed .ed-btn.on{ color: var(--ob-on-accent);
-  background: linear-gradient(150deg, color-mix(in oklch, var(--ob-accent) 62%, var(--ob-glass)), color-mix(in oklch, var(--ob-accent) 42%, var(--ob-glass)));
-  border-color: color-mix(in oklch, var(--ob-accent) 55%, transparent); }
+.jw-ed .ed-tools{ flex: none; align-self: center; display: flex; align-items: center; gap: 2px; padding-left: 8px; border-left: 1px solid var(--ob-line-1); }
+/* botones de la esquina (maximizar / cerrar): fantasma — el color aparece solo al interactuar */
+.jw-ed .ed-btn{ width: 28px; height: 28px; border-radius: 8px; display: inline-flex; align-items: center; justify-content: center;
+  color: var(--ob-fg-3); background: transparent; border: 1px solid transparent; cursor: pointer;
+  transition: background .14s var(--ez), color .14s, border-color .14s, transform .1s var(--ez); }
+.jw-ed .ed-btn svg{ width: 15px; height: 15px; }
+.jw-ed .ed-btn:hover{ color: var(--ob-fg-0); background: color-mix(in oklch, var(--ob-fg-0) 8%, transparent); border-color: var(--ob-line-1); }
+.jw-ed .ed-btn:focus-visible{ outline: none; border-color: var(--ob-accent); box-shadow: 0 0 0 3px var(--ob-accent-14); }
+.jw-ed .ed-btn:active{ transform: scale(.94); }
+.jw-ed .ed-btn.on{ color: var(--ob-accent-fg); background: var(--ob-accent-14); border-color: var(--ob-accent-14); }
+#jw-ed-closebtn:hover{ color: var(--ob-err); background: color-mix(in oklch, var(--ob-err) 14%, transparent); border-color: color-mix(in oklch, var(--ob-err) 28%, transparent); }
 /* pestaña con cambios sin guardar: dot tipo VSCode que se vuelve ✕ al hover */
 .jw-ed .ed-tab.dirty .x svg{ display: none; }
 .jw-ed .ed-tab.dirty .x::after{ content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--ob-accent-fg); }
 .jw-ed .ed-tab.dirty:hover .x svg{ display: block; }
 .jw-ed .ed-tab.dirty:hover .x::after{ display: none; }
 /* botón guardar en la status bar */
-.jw-ed .ed-save{ margin-left: 8px; display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 6px;
-  font: 600 10px var(--ed-mono); color: var(--ob-accent-fg); background: var(--ob-accent-08); border: 1px solid var(--ob-accent-14); cursor: pointer; }
-.jw-ed .ed-save:hover{ background: var(--ob-accent-14); }
+.jw-ed .ed-save{ margin-left: 6px; display: inline-flex; align-items: center; gap: 5px; height: 22px; padding: 0 10px; border-radius: 6px;
+  font: 600 11px var(--ed-ui); color: var(--ob-on-accent); background: var(--ob-accent); border: 1px solid transparent; cursor: pointer;
+  transition: filter .12s, transform .1s var(--ez); }
+.jw-ed .ed-save:hover{ filter: brightness(1.1); } .jw-ed .ed-save:active{ transform: scale(.96); }
 .jw-ed .ed-status .dirty{ color: var(--ob-work); }
 .jw-ed .ed-status .dirty::before{ content: '●'; margin-right: 5px; }   /* el ● va por CSS → el texto "sin guardar" es traducible por i18n */
-.jw-ed .ed-btn.on{ color: var(--ob-accent-fg); background: var(--ob-accent-08); }
 
 /* ── header del archivo: una sola línea (nombre · carpeta ··· lenguaje · líneas) ── */
 .jw-ed .ed-head{ padding: 0 16px; height: 38px; border-bottom: 1px solid var(--ob-line-1); flex: none; cursor: grab;
@@ -184,8 +177,11 @@
 .jw-ed .ed-empty-txt span{ font: 400 12.5px/1.5 var(--ed-ui); color: var(--ob-fg-3); }
 
 /* ── status bar ── */
-.jw-ed .ed-status{ height: 28px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 16px; border-top: 1px solid var(--ob-line-1); background: var(--ob-bg-1); font: 600 10px var(--ed-mono); color: var(--ob-fg-3); }
-.jw-ed .ed-status .g{ color: var(--ob-run); display: inline-flex; align-items: center; gap: 5px; } .jw-ed .ed-status .g .d{ width: 6px; height: 6px; border-radius: 50%; background: var(--ob-run); }
+.jw-ed .ed-status{ height: 30px; flex: none; display: flex; align-items: center; gap: 0; padding: 0 6px 0 14px; border-top: 1px solid var(--ob-line-1);
+  background: color-mix(in oklch, var(--ob-bg-1) 70%, var(--ob-bg-0)); font: 500 11px var(--ed-mono); color: var(--ob-fg-3); }
+.jw-ed .ed-status > span:not(.sp):not(.g){ padding: 0 10px; position: relative; }
+.jw-ed .ed-status > span:not(.sp):not(.g) + span:not(.sp)::before{ content: ''; position: absolute; left: 0; top: 50%; width: 1px; height: 12px; transform: translateY(-50%); background: var(--ob-line-2); }
+.jw-ed .ed-status .g{ color: var(--ob-run); display: inline-flex; align-items: center; gap: 6px; font-weight: 600; } .jw-ed .ed-status .g .d{ width: 6px; height: 6px; border-radius: 50%; background: var(--ob-run); box-shadow: 0 0 6px color-mix(in oklch, var(--ob-run) 60%, transparent); }
 .jw-ed .ed-status .sp{ flex: 1; }
 
 /* ── splitter del editor (dentro de .jw-content) ── */
@@ -199,7 +195,7 @@
 
 /* ── clon flotante del drag (vive en <body>) ── */
 .jw-content.jw-ed-dragging{ cursor: grabbing; user-select: none; }
-.jw-ed.floating{ position: fixed; z-index: 60; border: 1px solid var(--ob-line-2); border-radius: 0 16px 16px 0;
+.jw-ed.floating{ position: fixed; z-index: 60; margin: 0; border: 1px solid var(--ob-line-2); border-radius: 14px;
   box-shadow: 0 40px 110px -26px oklch(3% 0 0 / 0.9), 0 0 0 1px var(--ob-accent-24); pointer-events: none; }
 
 /* ── responsive: dock angosto → editor como overlay ── */
