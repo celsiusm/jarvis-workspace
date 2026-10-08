@@ -2180,7 +2180,7 @@ function _sbTreeChildrenHTML(nodes, depth, protegido, creados) {
     : '';
   return nodes.map(n => {
     if (n.type === 'dir') {
-      return `<div class="sb-fold" data-path="${esc(n.path)}">
+      return `<div class="sb-fold" data-path="${esc(n.path)}" style="--gx:${pad + 5}px">
         <div class="sb-fnode sb-fdir" style="padding-left:${pad}px" role="button" tabindex="0" data-path="${esc(n.path)}" data-name="${esc(n.name)}">
           <span class="sb-fchev">${_SB_CHEV}</span><span class="sb-fico">${_SB_FOLDER}</span><span class="sb-fnm">${esc(n.name)}</span>${del('dir', n.path)}
         </div>

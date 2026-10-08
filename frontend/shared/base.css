@@ -510,14 +510,23 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 .sb-files.open { grid-template-rows: 1fr; }
 .sb-files-clip { overflow: hidden; min-height: 0; }
 .sb-files-inner { padding: 2px 0 6px; }
-.sb-fnode { display: flex; align-items: center; gap: 6px; height: 24px; border-radius: 5px;
+/* ── Árbol de archivos (franja + pane Editor) ─────────────────────────────
+   Filas de 26px con radio, hover suave, selección con barra de acento y guías de
+   indentación por nivel (--gx la fija el JS en cada .sb-fold). Solo tokens --ob-*. */
+.sb-fnode { position: relative; display: flex; align-items: center; gap: 7px; height: 26px; border-radius: 6px;
   color: var(--ob-fg-2); cursor: pointer; white-space: nowrap;
   transition: background 120ms ease, color 120ms ease; }
-.sb-fnode:hover { background: color-mix(in oklch, var(--ob-fg-0) 4%, transparent); color: var(--ob-fg-1); }
-.sb-fchev { width: 11px; height: 11px; color: var(--ob-fg-4); flex: none; transition: transform 180ms var(--ease-out); }
-.sb-fold.open > .sb-fdir .sb-fchev { transform: rotate(90deg); }
-.sb-fico { width: 13px; height: 13px; flex: none; display: inline-flex; }
-.sb-fdir .sb-fico { color: var(--ob-accent-fg); }
+.sb-fnode:hover { background: color-mix(in oklch, var(--ob-fg-0) 6%, transparent); color: var(--ob-fg-0); }
+.sb-fnode:focus-visible { outline: none; box-shadow: inset 0 0 0 1px var(--ob-accent-dim); }
+.sb-fchev { width: 11px; height: 11px; color: var(--ob-fg-4); flex: none; transition: transform 180ms var(--ease-out), color 120ms ease; }
+.sb-fdir:hover .sb-fchev { color: var(--ob-fg-2); }
+.sb-fold.open > .sb-fdir .sb-fchev { transform: rotate(90deg); color: var(--ob-fg-3); }
+.sb-fico { width: 14px; height: 14px; flex: none; display: inline-flex; }
+.sb-fico svg { width: 100%; height: 100%; }
+/* carpeta cerrada: apagada; abierta: acento (se lee de un vistazo qué está desplegado) */
+.sb-fdir .sb-fico { color: var(--ob-fg-3); transition: color 140ms ease; }
+.sb-fdir:hover .sb-fico { color: var(--ob-fg-1); }
+.sb-fold.open > .sb-fdir .sb-fico { color: var(--ob-accent-fg); }
 .sb-fico-file { color: var(--ob-fg-3); }
 /* Color por tipo de archivo (extensión) — el ícono toma el tono del lenguaje */
 .sb-ffile.t-js  .sb-fico-file { color: oklch(80% .13 95); }
@@ -526,13 +535,22 @@ body.jw-rail .sb-snake { left: 50%; transform: translate(-50%, -50%); }   /* fig
 .sb-ffile.t-py  .sb-fico-file { color: oklch(75% .11 210); }
 .sb-ffile.t-json .sb-fico-file { color: oklch(76% .12 150); }
 .sb-ffile.t-md  .sb-fico-file { color: var(--ob-fg-2); }
-.sb-fnm { font: 500 11.5px var(--font-mono); overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.sb-fnm { font: 500 12px var(--font-mono); letter-spacing: -.005em; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .sb-ffile .sb-fnm { font-weight: 400; }
-.sb-ffile.sel { background: var(--ob-accent-08); color: var(--ob-fg-0);
-  box-shadow: inset 0 0 0 1px var(--ob-accent-14); }
+.sb-fdir .sb-fnm { color: var(--ob-fg-1); }
+.sb-fold.open > .sb-fdir .sb-fnm { color: var(--ob-fg-0); }
+/* archivo seleccionado: fondo tintado + barra de acento a la izquierda (sin anillo) */
+.sb-ffile.sel { background: var(--ob-accent-14); color: var(--ob-fg-0); }
+.sb-ffile.sel .sb-fnm { font-weight: 600; }
+.sb-ffile.sel::before { content: ''; position: absolute; left: 0; top: 5px; bottom: 5px; width: 2px; border-radius: 2px;
+  background: var(--ob-accent); box-shadow: 0 0 8px var(--ob-accent-glow); }
 .sb-fsub { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 240ms var(--ease-out); }
 .sb-fold.open > .sb-fsub { grid-template-rows: 1fr; }
-.sb-fsub-clip { overflow: hidden; min-height: 0; }
+.sb-fsub-clip { position: relative; overflow: hidden; min-height: 0; }
+/* guía de indentación: línea vertical bajo el chevron de la carpeta; se ilumina con el hover del grupo */
+.sb-fsub-clip::before { content: ''; position: absolute; top: 0; bottom: 0; left: var(--gx, 13px); width: 1px; pointer-events: none;
+  background: var(--ob-line-1); transition: background 140ms ease; }
+.sb-fold:hover > .sb-fsub > .sb-fsub-clip::before { background: var(--ob-line-3); }
 .sb-ftree-empty { padding: 8px 10px; font: 500 11px var(--font-ui); color: var(--ob-fg-3); }
 /* Drop de archivos del escritorio sobre el árbol (franja y pane Editor) */
 .sb-drop-over { border-radius: 8px;

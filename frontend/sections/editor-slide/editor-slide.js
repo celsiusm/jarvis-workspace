@@ -161,11 +161,12 @@
 
   // ════════════════ render del archivo activo ════════════════
   function _headHTML(path, name, meta) {
-    const segs = path.split('/');
-    const crumb = segs.map((s, i) => i === segs.length - 1 ? `<span class="cur">${esc(s)}</span>` : `<span>${esc(s)}</span>`).join(' <span style="color:var(--ob-fg-4)">/</span> ');
-    return `<div class="ed-head"><div style="min-width:0">
-      <div class="eh-name">${esc(name)}</div>
-      <div class="eh-path">${crumb}</div>
+    // Una sola línea: nombre + carpeta (›) a la izquierda, lenguaje/líneas a la derecha.
+    const dirs = path.split('/').slice(0, -1);
+    const crumb = dirs.map(s => `<span>${esc(s)}</span>`).join('<i class="eh-sep" aria-hidden="true">›</i>');
+    return `<div class="ed-head"><div class="eh-row">
+      <div class="eh-name" title="${esc(path)}">${esc(name)}</div>
+      ${dirs.length ? `<div class="eh-path">${crumb}</div>` : '<div class="eh-path"></div>'}
       ${meta ? `<div class="eh-meta">${meta}</div>` : ''}
     </div></div>`;
   }

@@ -70,6 +70,9 @@
 .jw-ed .ed-tab.active::after{ content: ''; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: var(--ob-accent); box-shadow: 0 0 8px var(--ob-accent-glow); }
 .jw-ed .ed-tab .x{ flex: none; width: 16px; height: 16px; border-radius: 4px; display: inline-flex; align-items: center; justify-content: center; color: var(--ob-fg-4); margin-left: 2px; }
 .jw-ed .ed-tab .x:hover{ background: var(--ob-bg-3); color: var(--ob-fg-0); } .jw-ed .ed-tab .x svg{ width: 10px; height: 10px; }
+/* la ✕ de las pestañas inactivas aparece al pasar el mouse (el activo y los sin guardar la muestran siempre) */
+.jw-ed .ed-tab:not(.active):not(.dirty) .x{ opacity: 0; transition: opacity .12s; }
+.jw-ed .ed-tab:not(.active):hover .x{ opacity: 1; }
 .jw-ed .ed-tablist::-webkit-scrollbar{ height: 6px; } .jw-ed .ed-tablist::-webkit-scrollbar-thumb{ background: var(--ob-line-2); border-radius: 6px; }
 .jw-ed .ed-tools{ flex: none; align-self: center; display: flex; align-items: center; gap: 2px; }
 /* botones de la esquina (maximizar / cerrar): LIQUID GLASS tintado con el acento
@@ -106,12 +109,17 @@
 .jw-ed .ed-status .dirty::before{ content: '●'; margin-right: 5px; }   /* el ● va por CSS → el texto "sin guardar" es traducible por i18n */
 .jw-ed .ed-btn.on{ color: var(--ob-accent-fg); background: var(--ob-accent-08); }
 
-/* ── header del archivo ── */
-.jw-ed .ed-head{ display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; padding: 14px 18px 12px; border-bottom: 1px solid var(--ob-line-1); flex: none; cursor: grab; }
-.jw-ed .eh-name{ font: 600 clamp(1.15rem,1.7vw,1.5rem) var(--ed-ui); letter-spacing: -.02em; color: var(--ob-fg-0); line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.jw-ed .eh-path{ display: flex; align-items: center; gap: 6px; font: 500 11px var(--ed-mono); color: var(--ob-fg-3); margin-top: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.jw-ed .eh-path .cur{ color: var(--ob-accent-fg); }
-.jw-ed .eh-meta{ display: flex; gap: 10px; margin-top: 8px; font: 600 10px var(--ed-mono); color: var(--ob-fg-3); }
+/* ── header del archivo: una sola línea (nombre · carpeta ··· lenguaje · líneas) ── */
+.jw-ed .ed-head{ padding: 0 16px; height: 38px; border-bottom: 1px solid var(--ob-line-1); flex: none; cursor: grab;
+  display: flex; align-items: center; background: var(--ob-bg-0); }
+.jw-ed .eh-row{ display: flex; align-items: center; gap: 12px; width: 100%; min-width: 0; }
+.jw-ed .eh-name{ flex: none; max-width: 55%; font: 600 13px var(--ed-ui); letter-spacing: -.005em; color: var(--ob-fg-0);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-ed .eh-path{ flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 5px; font: 500 11px var(--ed-mono); color: var(--ob-fg-3);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.jw-ed .eh-path > span{ overflow: hidden; text-overflow: ellipsis; }
+.jw-ed .eh-sep{ font-style: normal; color: var(--ob-fg-4); }
+.jw-ed .eh-meta{ flex: none; display: flex; align-items: center; gap: 8px; font: 600 10px var(--ed-mono); color: var(--ob-fg-3); letter-spacing: .02em; }
 .jw-ed .eh-meta .lang{ color: var(--ob-accent-fg); background: var(--ob-accent-08); border: 1px solid var(--ob-accent-14); border-radius: 5px; padding: 2px 7px; }
 
 /* ── cuerpo + código ── */
@@ -122,7 +130,7 @@
    (font/line-height/padding/tab-size) → caret y colores alineados; JetBrains Mono
    es monoespaciada → bold/italic no desalinean. */
 .jw-ed .code-wrap{ flex: 1; position: relative; overflow: hidden;
-  --ce-lh: 1.7em; --ce-pt: 14px; --ce-pr: 24px; --ce-gut: 60px; }
+  --ce-lh: 1.7em; --ce-pt: 14px; --ce-pr: 24px; --ce-gut: 56px; }
 .jw-ed .ce-input, .jw-ed .ce-hl{
   position: absolute; inset: 0; margin: 0; border: 0;
   padding: var(--ce-pt) var(--ce-pr) 40px var(--ce-gut);
@@ -144,10 +152,10 @@
 .jw-ed .ce-input::selection{ background: var(--ob-accent-24); -webkit-text-fill-color: transparent; }
 .jw-ed .ce-gutter{ position: absolute; left: 0; top: 0; bottom: 0; width: var(--ce-gut); z-index: 3;
   overflow: hidden; pointer-events: none; padding: var(--ce-pt) 0 40px;
-  font: 400 12.5px/1.7 var(--ed-mono); color: var(--ob-fg-3); text-align: right;
-  background: var(--ob-bg-0); border-right: 1px solid var(--ob-line-1); }
+  font: 400 12.5px/1.7 var(--ed-mono); color: var(--ob-fg-4); text-align: right;
+  background: var(--ob-bg-0); border-right: 1px solid color-mix(in oklch, var(--ob-line-1) 55%, transparent); }
 .jw-ed .ce-gutter i{ display: block; padding-right: 13px; font-style: normal; }
-.jw-ed .ce-gutter i.on{ color: var(--ob-accent-fg); }
+.jw-ed .ce-gutter i.on{ color: var(--ob-fg-1); font-weight: 600; }
 /* Buscar en el archivo (Ctrl+F): cajas de coincidencia (hijas de .ce-hl, detrás del código) + barra flotante */
 .jw-ed .ce-mark{ position: absolute; z-index: -1; background: color-mix(in oklch, var(--ob-work) 30%, transparent); border-radius: 2px; }
 .jw-ed .ce-mark.cur{ background: color-mix(in oklch, var(--ob-accent) 42%, transparent); box-shadow: 0 0 0 1px var(--ob-accent-fg); }

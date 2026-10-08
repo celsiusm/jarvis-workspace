@@ -184,8 +184,9 @@ body.jw-rail .jw-door .jw-door-fill { opacity: 0; }
 .fx-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 280ms var(--ease-out); }
 .fx-ws.on:not(.plegado) .fx-body { grid-template-rows: 1fr; }
 .fx-clip { overflow: hidden; min-height: 0; }
-.fx-tools { display: flex; align-items: center; gap: 2px; padding: 2px 10px 0; }
-.fx-act { width: 21px; height: 21px; border-radius: 6px; border: 0; background: none; cursor: pointer;
+.fx-tools { display: flex; align-items: center; justify-content: flex-end; gap: 2px; margin: 0 6px 4px; padding: 3px 4px 5px;
+  border-bottom: 1px solid var(--ob-line-1); }
+.fx-act { width: 24px; height: 24px; border-radius: 6px; border: 0; background: none; cursor: pointer;
   display: grid; place-items: center; color: var(--sb-fg-3);
   transition: color 120ms ease, background 120ms ease; }
 .fx-act:hover { color: var(--ob-accent-fg); background: var(--ob-accent-08); }
