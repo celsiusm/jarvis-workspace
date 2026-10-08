@@ -383,7 +383,12 @@
     });
     $('jw-ed-closebtn').addEventListener('click', cerrar);
     wireDrag(); wireTabReorder();
-    if (!skipScroll) $('jw-ed-tablist').querySelector('.ed-tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    if (!skipScroll) {
+      // La pestaña activa tiene que quedar COMPLETA a la vista: se repite tras el layout y tras la animación
+      // de ancho del panel (al medir antes, la lista todavía es angosta y la pestaña queda cortada).
+      const verActiva = () => $('jw-ed-tablist')?.querySelector('.ed-tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+      verActiva(); requestAnimationFrame(verActiva); setTimeout(verActiva, 340);
+    }
   }
   function cerrarTab(path) {
     state.open = state.open.filter(t => t.path !== path);

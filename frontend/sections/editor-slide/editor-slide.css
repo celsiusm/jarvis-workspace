@@ -54,7 +54,7 @@
 /* ── barra de pestañas ── */
 .jw-ed .ed-tabs{ display: flex; align-items: center; gap: 8px; padding: 7px 8px 7px 10px; flex: none;
   background: color-mix(in oklch, var(--ob-bg-1) 70%, var(--ob-bg-0)); border-bottom: 1px solid var(--ob-line-1); }
-.jw-ed .ed-tablist{ flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; overflow-x: auto; overflow-y: hidden; }
+.jw-ed .ed-tablist{ flex: 0 1 auto; min-width: 0; display: flex; align-items: center; gap: 4px; overflow-x: auto; overflow-y: hidden; scroll-padding-inline: 10px; scrollbar-width: none; }
 .jw-ed .ed-drag-fill{ flex: 1; align-self: stretch; min-width: 24px; cursor: grab; }
 .jw-content.jw-ed-dragging .ed-drag-fill{ cursor: grabbing; }
 .jw-ed .ed-tab{ position: relative; display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 8px 0 11px; border-radius: 8px; color: var(--ob-fg-3);
