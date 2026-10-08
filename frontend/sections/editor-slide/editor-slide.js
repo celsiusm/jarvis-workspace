@@ -161,11 +161,12 @@
 
   // ════════════════ render del archivo activo ════════════════
   function _headHTML(path, name, meta) {
-    const segs = path.split('/');
-    const crumb = segs.map((s, i) => i === segs.length - 1 ? `<span class="cur">${esc(s)}</span>` : `<span>${esc(s)}</span>`).join(' <span style="color:var(--ob-fg-4)">/</span> ');
-    return `<div class="ed-head"><div style="min-width:0">
-      <div class="eh-name">${esc(name)}</div>
-      <div class="eh-path">${crumb}</div>
+    // Una sola línea: nombre + carpeta (›) a la izquierda, lenguaje/líneas a la derecha.
+    const dirs = path.split('/').slice(0, -1);
+    const crumb = dirs.map(s => `<span>${esc(s)}</span>`).join('<i class="eh-sep" aria-hidden="true">›</i>');
+    return `<div class="ed-head"><div class="eh-row">
+      <div class="eh-name" title="${esc(path)}">${esc(name)}</div>
+      ${dirs.length ? `<div class="eh-path">${crumb}</div>` : '<div class="eh-path"></div>'}
       ${meta ? `<div class="eh-meta">${meta}</div>` : ''}
     </div></div>`;
   }
@@ -382,7 +383,12 @@
     });
     $('jw-ed-closebtn').addEventListener('click', cerrar);
     wireDrag(); wireTabReorder();
-    if (!skipScroll) $('jw-ed-tablist').querySelector('.ed-tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+    if (!skipScroll) {
+      // La pestaña activa tiene que quedar COMPLETA a la vista: se repite tras el layout y tras la animación
+      // de ancho del panel (al medir antes, la lista todavía es angosta y la pestaña queda cortada).
+      const verActiva = () => $('jw-ed-tablist')?.querySelector('.ed-tab.active')?.scrollIntoView({ inline: 'nearest', block: 'nearest' });
+      verActiva(); requestAnimationFrame(verActiva); setTimeout(verActiva, 340);
+    }
   }
   function cerrarTab(path) {
     state.open = state.open.filter(t => t.path !== path);
