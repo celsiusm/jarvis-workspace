@@ -2,7 +2,9 @@
 // Master-detail: lista de archivos AGRUPADA POR AGENTE (GET /review/by-agent) a la
 // izquierda + diff del archivo activo a la derecha (Monaco diff, fallback a texto).
 // Permite COMMITEAR una selección explícita de archivos (POST /review/commit —
-// nunca `git add -A`) y ABRIR el archivo en el Editor.
+// nunca `git add -A`), DESCARTAR sus cambios (POST /review/revert, con
+// confirmación), ABRIR un PR de la rama actual (POST /review/pr, solo fuera de
+// la rama base) y ABRIR el archivo en el Editor.
 // Expone window.JarvisReview = { init, onProjectChanged, mostrarEnPane }.
 
 (() => {
@@ -138,6 +140,17 @@
       s.textContent = `${t.n} ${_L('archivos', 'files')} · +${t.mas} −${t.menos}`;
     }
     _renderAgo();
+    _renderPrBtn();
+  }
+
+  // «Abrir PR» solo tiene sentido fuera de la rama base (un PR de main a main no existe).
+  function _renderPrBtn() {
+    const btn = $('#rv-pr');
+    if (!btn) return;
+    const rama = _data?.branch || '';
+    btn.hidden = !rama || !_data?.base || rama === _data.base;
+    btn.title = _L(`Subir ${rama} y abrir un PR contra ${_data?.base || ''}`,
+                   `Push ${rama} and open a PR against ${_data?.base || ''}`);
   }
 
   function _renderAgo() {
@@ -238,6 +251,12 @@
     if (!btn) return;
     btn.disabled = _selected.size === 0;
     btn.textContent = `${_L('Commit', 'Commit')} (${_selected.size})`;
+    const rev = $('#rv-revert');
+    if (rev) {
+      rev.disabled = _selected.size === 0;
+      const t = _L(`Descartar los cambios de ${_selected.size} archivo(s)`, `Discard changes in ${_selected.size} file(s)`);
+      rev.title = t; rev.setAttribute('aria-label', t);
+    }
   }
 
   // ── Diff ────────────────────────────────────────────────────────────
@@ -391,6 +410,72 @@
     }
   }
 
+  // ── Descartar (revert) ──────────────────────────────────────────────
+  async function _revertir() {
+    if (!_selected.size) return;
+    const paths = [..._selected];
+    // El <p> del confirm colapsa los saltos de línea: lista corrida con comas.
+    const lista = paths.slice(0, 6).join(', ') + (paths.length > 6 ? ` (+${paths.length - 6})` : '');
+    const ok = await confirmar(
+      _L(`Los cambios de estos archivos vuelven a como están en HEAD y los archivos nuevos se borran. No se puede deshacer. Archivos: ${lista}`,
+         `These files go back to how they are in HEAD and new files are deleted. This cannot be undone. Files: ${lista}`),
+      { titulo: _L('¿Descartar cambios?', 'Discard changes?'),
+        confirmText: _L('Descartar', 'Discard'), cancelText: _L('Cancelar', 'Cancel'), peligro: true });
+    if (!ok) return;
+    const btn = $('#rv-revert');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch(`/api/projects/${_projectId}/review/revert`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archivos: paths }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.ok === false) throw new Error(_errMsg(d.error ? d : Object.assign({ message: `HTTP ${r.status}` }, d)));
+      toast(_L(`Descartados ${paths.length} archivo(s)`, `Discarded ${paths.length} file(s)`), 'ok');
+      _selected.clear();
+      if (paths.includes(_activo)) _activo = null;
+      if (await _cargar()) _render();
+    } catch (e) {
+      toast(_errMsg(e), 'error');
+    } finally {
+      _renderCommitBtn();
+    }
+  }
+
+  // ── Abrir PR ────────────────────────────────────────────────────────
+  async function _abrirPr() {
+    const rama = _data?.branch, base = _data?.base;
+    if (!rama || !base || rama === base) return;
+    const pendientes = (_data?.archivos || []).length;
+    const ok = await confirmar(
+      _L(`Se sube la rama ${rama} a origin y se abre un PR contra ${base} con sus commits.` +
+           (pendientes ? ` Los ${pendientes} archivo(s) sin commitear NO entran.` : ''),
+         `Branch ${rama} is pushed to origin and a PR against ${base} is opened with its commits.` +
+           (pendientes ? ` The ${pendientes} uncommitted file(s) are NOT included.` : '')),
+      { titulo: _L('¿Abrir PR?', 'Open PR?'),
+        confirmText: _L('Abrir PR', 'Open PR'), cancelText: _L('Cancelar', 'Cancel') });
+    if (!ok) return;
+    const btn = $('#rv-pr');
+    if (btn) btn.disabled = true;
+    try {
+      const r = await fetch(`/api/projects/${_projectId}/review/pr`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base }),
+      });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok || d.ok === false) throw new Error(_errMsg(d.error ? d : Object.assign({ message: `HTTP ${r.status}` }, d)));
+      toast((d.existente ? _L('Ya había un PR', 'PR already open') : _L('PR abierto', 'PR opened')) +
+            (d.url ? ' ' + d.url : ''), 'ok');
+      if (d.url && /^https:\/\//.test(d.url)) window.open(d.url, '_blank', 'noopener');
+    } catch (e) {
+      toast(_errMsg(e), 'error');
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   // ── Render global ───────────────────────────────────────────────────
   function _render() {
     if (!_data) return;
@@ -420,6 +505,9 @@
     if (m) m.placeholder = _L('Mensaje de commit…', 'Commit message…');
     const r = pane.querySelector('.rv-refresh');
     if (r) { const t = _L('Refrescar', 'Refresh'); r.title = t; r.setAttribute('aria-label', t); }
+    const pr = pane.querySelector('#rv-pr');
+    if (pr) pr.textContent = _L('Abrir PR', 'Open PR');
+    _renderCommitBtn();
     const emp = pane.querySelector('.rv-emptystate div');
     if (emp) emp.innerHTML = _L('Working tree limpio.<br>No hay nada para revisar — todo está commiteado.',
                                 'Working tree clean.<br>Nothing to review — everything is committed.');
@@ -440,6 +528,7 @@
           <span class="rv-sum"></span>
           <span class="rv-spacer"></span>
           <span class="rv-ago"></span>
+          <button class="rv-prbtn" id="rv-pr" type="button" hidden>${_L('Abrir PR', 'Open PR')}</button>
           <button class="rv-refresh" type="button" title="${_L('Refrescar', 'Refresh')}" aria-label="${_L('Refrescar', 'Refresh')}">${icon('refresh', 13)}</button>
         </div>
         <div class="rv-body">
@@ -448,6 +537,7 @@
             <div class="rv-lista"></div>
             <div class="rv-commit">
               <input type="text" class="rv-msg" id="rv-msg" placeholder="${_L('Mensaje de commit…', 'Commit message…')}" autocomplete="off">
+              <button type="button" class="rv-revertbtn" id="rv-revert" disabled>${icon('undo', 13)}</button>
               <button type="button" class="rv-commitbtn" id="rv-commit" disabled>Commit (0)</button>
             </div>
           </div>
@@ -471,6 +561,8 @@
       _renderLista();
     });
     pane.querySelector('#rv-commit').addEventListener('click', _commit);
+    pane.querySelector('#rv-revert').addEventListener('click', _revertir);
+    pane.querySelector('#rv-pr').addEventListener('click', _abrirPr);
     pane.querySelector('#rv-msg').addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); _commit(); }
     });

@@ -227,6 +227,32 @@
 .rv-commitbtn:hover:not(:disabled) { filter: brightness(1.08); }
 .rv-commitbtn:disabled { opacity: .4; cursor: default; }
 
+/* Descartar: secundario y discreto (es destructivo; el confirm hace el resto). */
+.rv-revertbtn {
+  flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  color: var(--ob-fg-3);
+  background: none; border: none; border-radius: 8px; cursor: pointer;
+  transition: color var(--dur-1), background var(--dur-1), opacity var(--dur-1);
+}
+.rv-revertbtn:hover:not(:disabled) { color: var(--ob-err); background: var(--ob-bg-3); }
+.rv-revertbtn:disabled { opacity: .4; cursor: default; }
+
+/* Abrir PR: botón de texto en la barra, solo fuera de la rama base. */
+.rv-prbtn {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  font: 600 var(--text-2xs) var(--font-ui);
+  color: var(--ob-fg-1);
+  background: var(--ob-bg-2);
+  border: none; border-radius: var(--radius-btn); cursor: pointer;
+  transition: color var(--dur-1), background var(--dur-1), opacity var(--dur-1);
+}
+.rv-prbtn:hover:not(:disabled) { color: var(--ob-fg-0); background: var(--ob-bg-3); }
+.rv-prbtn:disabled { opacity: .5; cursor: default; }
+.rv-prbtn[hidden] { display: none; }
+
 /* ── Panel de diff ── */
 .rv-main {
   flex: 1; min-width: 0; min-height: 0;
