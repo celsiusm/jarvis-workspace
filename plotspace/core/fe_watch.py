@@ -19,7 +19,7 @@ Dos señales, un mismo destino (location.reload() en workspace.js):
      dashboard es local (HEAD) — el push mantiene el backup en origin sin que
      nadie se acuerde. Ese eslabón quedaba sin dueño: se juntaban commits
      (9 el día que se detectó). Ahora, al detectar HEAD nuevo (y una vez al boot,
-     para drenar backlog) se hace `git push origin master` en el executor.
+     para drenar backlog) se hace `git push origin main` en el executor.
      Nunca --force; el pre-push hook (scan de secretos) sigue de red; si falla
      (sin red, hook), backoff de PUSH_BACKOFF_S y reintento. AUTO_PUSH=off lo
      apaga.
@@ -106,9 +106,9 @@ def registrar_push(estado: dict, head: str, ok: bool, ahora: float,
 
 
 def _push_origen() -> bool:
-    """`git push origin master` síncrono — invocar vía run_in_executor (la red
+    """`git push origin main` síncrono — invocar vía run_in_executor (la red
     puede tardar y NO debe frenar el event loop). Jamás --force: en este flujo
-    el repo local es el único escritor de origin/master, así que siempre es
+    el repo local es el único escritor de origin/main, así que siempre es
     fast-forward; cualquier fallo (red, pre-push hook de secretos, divergencia
     exótica) se loguea y el backoff reintenta después."""
     import subprocess
@@ -117,7 +117,7 @@ def _push_origen() -> bool:
         # pregunta con una ventana. Un poller de fondo no puede plantarle un
         # diálogo de login al usuario, ni colgarse 120s esperando input.
         from plotspace.core.gitutil import entorno_no_interactivo
-        r = subprocess.run(['git', '-C', _FRONTEND, 'push', 'origin', 'master'],
+        r = subprocess.run(['git', '-C', _FRONTEND, 'push', 'origin', 'main'],
                            capture_output=True, text=True, timeout=120,
                            env=entorno_no_interactivo())
         if r.returncode == 0:
@@ -191,6 +191,6 @@ async def poller_frontend():
                     ok = await loop.run_in_executor(None, _push_origen)
                     registrar_push(estado_push, head, ok, time.monotonic())
                     if ok:
-                        print(f'[fe-watch] auto-push OK → origin/master en {head[:9]}')
+                        print(f'[fe-watch] auto-push OK → origin/main en {head[:9]}')
         except Exception as e:
             print(f'[fe-watch] Error en ciclo: {e}')

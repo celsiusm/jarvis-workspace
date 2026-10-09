@@ -5,7 +5,7 @@ QUÉ PASÓ (2026-07-27)
 Al abrir la app de Windows aparecía un diálogo «Connect to GitHub — Sign in».
 No lo abría la app: lo abría **git**, llamado por el motor.
 
-`fe_watch` hace `git push origin master` cada vez que detecta un commit
+`fe_watch` hace `git push origin main` cada vez que detecta un commit
 (AUTO_PUSH). El repo es privado por HTTPS, y en Windows el Git Credential
 Manager, ante la falta de credenciales, ABRE UNA GUI y se queda esperando. Un
 poller de fondo, sin ninguna interacción del usuario, plantando una ventana de
