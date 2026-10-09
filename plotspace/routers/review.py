@@ -254,7 +254,143 @@ def commit_por_agente(project_id: int, body: dict = Body(default=None)):
     return {"ok": True, "commit": hash_.strip()}
 
 
-# TODO v2: revert (git restore --source=HEAD -- <paths> / git checkout) + PR (gh pr create)
+GH_TIMEOUT = 60   # `gh pr create` habla con la API de GitHub
+
+
+def _rels_seguros(cwd: str, archivos) -> list:
+    """Valida la lista de paths del body: no vacía y todos DENTRO del proyecto.
+    Un rename del porcelain llega como 'viejo -> nuevo': se expande a los dos."""
+    if not isinstance(archivos, list) or not archivos:
+        raise HTTPException(status_code=400, detail="Faltan archivos")
+    rels = []
+    for raw in archivos:
+        for parte in str(raw).split(' -> '):
+            rel = _path_relativo_seguro(cwd, parte)
+            if rel is None:
+                raise HTTPException(status_code=400,
+                                    detail=f"Ruta fuera del proyecto: {raw}")
+            if rel not in rels:
+                rels.append(rel)
+    return rels
+
+
+def _untracked(cwd: str) -> set:
+    """Paths untracked tal cual los da `git status --porcelain` (carpetas con '/')."""
+    _, porcelain = _git(cwd, '-c', 'core.quotepath=false', 'status', '--porcelain')
+    return {l[3:].strip().rstrip('/') for l in porcelain.splitlines()
+            if l.startswith('??') and len(l) > 3}
+
+
+@router.post("/projects/{project_id}/review/revert")
+def revertir_archivos(project_id: int, body: dict = Body(default=None)):
+    """Descarta los cambios de SOLO los archivos indicados y los deja como en
+    HEAD. Tracked: `git restore --source=HEAD --staged --worktree` (un archivo
+    agregado al índice que no está en HEAD se borra). Untracked: `git clean -fd`
+    acotado a esos paths (nunca toca ignorados ni tracked). Es irreversible: la
+    UI pide confirmación antes de llamarlo."""
+    body = body or {}
+    cwd = _ruta_proyecto(project_id)
+
+    rc, _ = _git(cwd, 'rev-parse', '--git-dir')
+    if rc != 0:
+        raise HTTPException(status_code=400, detail="El proyecto no es un repo git")
+    rels = _rels_seguros(cwd, body.get('archivos'))
+
+    nuevos = _untracked(cwd)
+    limpiar = [r for r in rels if r.rstrip('/') in nuevos]
+    restaurar = [r for r in rels if r.rstrip('/') not in nuevos]
+
+    if restaurar:
+        rc, out, err = _git_full(cwd, 'restore', '--source=HEAD', '--staged',
+                                 '--worktree', '--', *restaurar)
+        if rc != 0:
+            return {"ok": False, "error": _error_git(out, err, "git restore falló")}
+    if limpiar:
+        rc, out, err = _git_full(cwd, 'clean', '-f', '-d', '-q', '--', *limpiar)
+        if rc != 0:
+            return {"ok": False, "error": _error_git(out, err, "git clean falló")}
+
+    return {"ok": True, "revertidos": restaurar, "borrados": limpiar}
+
+
+def _rama_base(cwd: str) -> str:
+    """Rama default del remoto (origin/HEAD); si no está seteado, main/master
+    según exista. '' si no hay nada que lo indique."""
+    rc, out = _git(cwd, 'symbolic-ref', '--quiet', '--short', 'refs/remotes/origin/HEAD')
+    if rc == 0 and out.strip():
+        return out.strip().split('/', 1)[-1]
+    for cand in ('main', 'master'):
+        for ref in (f'refs/remotes/origin/{cand}', f'refs/heads/{cand}'):
+            rc, _ = _git(cwd, 'rev-parse', '--verify', '--quiet', ref)
+            if rc == 0:
+                return cand
+    return ''
+
+
+_URL_RE = re.compile(r'https://\S+/pull/\d+')
+
+
+def _gh(cwd: str, *args: str) -> tuple[int, str, str]:
+    """`gh` síncrono, igual contrato que _git_full. Sin gh instalado → rc -1."""
+    try:
+        r = subprocess.run(['gh', *args], cwd=cwd, capture_output=True, text=True,
+                           timeout=GH_TIMEOUT)
+        return r.returncode, (r.stdout or ''), (r.stderr or '')
+    except FileNotFoundError:
+        return -1, '', 'gh no está instalado (https://cli.github.com)'
+    except subprocess.TimeoutExpired:
+        return -1, '', 'gh timeout'
+    except Exception as e:
+        return -1, '', str(e)
+
+
+@router.post("/projects/{project_id}/review/pr")
+def abrir_pr(project_id: int, body: dict = Body(default=None)):
+    """Sube la rama ACTUAL a origin y abre un PR contra la rama base con `gh`.
+    Nunca cambia de rama ni toca el working tree (el árbol es compartido): solo
+    entra lo ya commiteado. En la rama base se rechaza — un PR de master a
+    master no existe; primero hay que trabajar en una rama."""
+    body = body or {}
+    titulo = str(body.get('titulo') or '').strip()
+    cuerpo = str(body.get('cuerpo') or '').strip()
+    cwd = _ruta_proyecto(project_id)
+
+    rc, _ = _git(cwd, 'rev-parse', '--git-dir')
+    if rc != 0:
+        raise HTTPException(status_code=400, detail="El proyecto no es un repo git")
+    _, rama = _git(cwd, 'branch', '--show-current')
+    rama = rama.strip()
+    if not rama:
+        raise HTTPException(status_code=400, detail="HEAD desacoplado: no hay rama para el PR")
+    base = str(body.get('base') or '').strip() or _rama_base(cwd)
+    if not base:
+        raise HTTPException(status_code=400, detail="No se pudo determinar la rama base")
+    if rama == base:
+        raise HTTPException(status_code=400,
+                            detail=f"Estás en la rama base ({base}): creá una rama para abrir un PR")
+    rc, _ = _git(cwd, 'remote', 'get-url', 'origin')
+    if rc != 0:
+        raise HTTPException(status_code=400, detail="El proyecto no tiene remoto 'origin'")
+
+    # El pre-push corre (sin --no-verify): el scanner de secretos sigue activo.
+    rc, out, err = _git_full(cwd, 'push', '-u', 'origin', rama, timeout=GIT_COMMIT_TIMEOUT)
+    if rc != 0:
+        return {"ok": False, "error": _error_git(out, err, "git push falló")}
+
+    args = ['pr', 'create', '--base', base, '--head', rama]
+    if titulo:
+        args += ['--title', titulo, '--body', cuerpo]
+    else:
+        args += ['--fill']
+    rc, out, err = _gh(cwd, *args)
+    url = _URL_RE.search(out) or _URL_RE.search(err)
+    if rc != 0:
+        # Ya había un PR para esta rama: gh lo dice con la URL — es un éxito.
+        if url and 'already exists' in err:
+            return {"ok": True, "url": url.group(0), "existente": True, "rama": rama, "base": base}
+        return {"ok": False, "error": _error_git(out, err, "gh pr create falló")}
+    return {"ok": True, "url": url.group(0) if url else out.strip(),
+            "existente": False, "rama": rama, "base": base}
 
 
 @router.get("/projects/{project_id}/review")
@@ -327,6 +463,7 @@ def estado_review(project_id: int):
 
     return {
         'branch':   branch.strip(),
+        'base':     _rama_base(cwd),
         'ultimo':   ultimo.strip(),
         'archivos': archivos,
         'diff':     diff,
