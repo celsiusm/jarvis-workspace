@@ -19,7 +19,8 @@ router = APIRouter(tags=['browser'])
 async def ws_browser(websocket: WebSocket, sid: str):
     # El middleware http NO corre para websockets: Origin anti CSWSH.
     if not jarvis_auth.origen_permitido(websocket.headers.get('origin'),
-                                        jarvis_auth.hosts_extra()):
+                                        jarvis_auth.hosts_extra(),
+                                        host=websocket.headers.get('host', '')):
         await websocket.close(code=4403)
         return
     await websocket.accept()

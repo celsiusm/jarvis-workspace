@@ -76,6 +76,50 @@ def test_origin_extra_allowlist():
     assert origen_permitido('http://mi-jarvis.local:3000', extra=('mi-jarvis.local',))
 
 
+
+# ─── Origen: solo el MISMO origen que el server (o loopback/LAN sin Host) ────
+# Antes cualquier IP literal pasaba: una web servida desde una IP PÚBLICA
+# (http://203.0.113.5) podía abrir ws://127.0.0.1:3000/ws/terminal/N y escribir
+# comandos (CSWSH → ejecución remota). Ahora, con el Host de la request, el
+# Origin tiene que ser exactamente el mismo host:puerto (y ese Host, válido).
+
+def test_origin_ip_publica_rechazada():
+    assert not origen_permitido('http://203.0.113.5')
+    assert not origen_permitido('https://8.8.8.8:443')
+    assert not origen_permitido('http://[2001:4860::8888]')
+    assert not origen_permitido('http://203.0.113.5', host='127.0.0.1:3000')
+
+
+def test_origin_mismo_origen_ok():
+    assert origen_permitido('http://127.0.0.1:3000', host='127.0.0.1:3000')
+    assert origen_permitido('http://localhost:3000', host='localhost:3000')
+    assert origen_permitido('http://192.168.1.42:3000', host='192.168.1.42:3000')   # celular por LAN
+    assert origen_permitido('http://[::1]:3000', host='[::1]:3000')
+    assert origen_permitido('http://localhost', host='localhost:80')                 # puerto por defecto
+    assert origen_permitido('HTTP://LocalHost:3000', host='localhost:3000')          # sin distinguir mayúsculas
+
+
+def test_origin_otro_puerto_local_rechazado():
+    # Una página de un dev server (localhost:5173, código de los agentes/npm) no
+    # puede manejar las terminales de Jarvis.
+    assert not origen_permitido('http://localhost:5173', host='localhost:3000')
+    assert not origen_permitido('http://127.0.0.1:8080', host='127.0.0.1:3000')
+    assert not origen_permitido('http://localhost:3000', host='127.0.0.1:3000')     # otro host
+
+
+def test_origin_mismo_origen_con_host_de_dominio_rechazado():
+    # DNS-rebinding por WebSocket: evil.com resuelto a 127.0.0.1 es "same-origin"
+    # consigo mismo, pero su Host no es válido → afuera.
+    assert not origen_permitido('http://evil.com:3000', host='evil.com:3000')
+    assert origen_permitido('http://mi-jarvis.local:3000', host='mi-jarvis.local:3000',
+                            extra=('mi-jarvis.local',))
+
+
+def test_origin_extra_vale_aunque_el_host_difiera():
+    # Proxy inverso que reescribe el Host al upstream: el dominio público va en
+    # JARVIS_ALLOWED_HOSTS.
+    assert origen_permitido('https://jarvis.example', host='127.0.0.1:3000', extra=('jarvis.example',))
+
 if __name__ == '__main__':
     # Patrón del proyecto: correr como script además de pytest
     import traceback

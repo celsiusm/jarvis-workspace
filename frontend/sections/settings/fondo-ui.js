@@ -5,8 +5,7 @@
    qué estado) se exporta para los tests de Node. */
 (function (global) {
   const _t = (s) => (global.JarvisI18n?.t ? global.JarvisI18n.t(s) : s);
-  const _esc = (s) => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   // [clave de JarvisFondo, etiqueta, ayuda]
   const SLIDERS = [

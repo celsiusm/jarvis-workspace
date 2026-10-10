@@ -62,7 +62,12 @@ def main(argv=None) -> int:
 
     if args.datos:
         os.environ['JARVIS_DATA_DIR'] = os.path.abspath(os.path.expanduser(args.datos))
-    os.environ.setdefault('JARVIS_PORT', str(args.puerto))
+    # El re-exec de "Update now" lee estos dos para volver con el MISMO host y
+    # puerto (system._host_puerto_actuales): sin esto volvía en 0.0.0.0:3000.
+    # (JARVIS_BIND_HOST y no JARVIS_HOST: ese lo lee el hook de los agentes para
+    # saber a qué dirección CONECTARSE, y 0.0.0.0 no es una dirección de destino.)
+    os.environ['JARVIS_PORT'] = str(args.puerto)
+    os.environ['JARVIS_BIND_HOST'] = args.host
 
     raiz = _raiz()
     if raiz not in sys.path:

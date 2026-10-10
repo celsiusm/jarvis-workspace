@@ -670,7 +670,8 @@ async def _middleware_http(request: Request, call_next):
         if (path.startswith('/api/')
                 and request.method not in ('GET', 'HEAD', 'OPTIONS')
                 and not jarvis_auth.origen_permitido(request.headers.get('origin'),
-                                                     jarvis_auth.hosts_extra())):
+                                                     jarvis_auth.hosts_extra(),
+                                                     host=request.headers.get('host', ''))):
             resp = JSONResponse(status_code=403, content={'detail': 'Origin no permitido'})
         if resp is None:
             resp = await call_next(request)
@@ -745,7 +746,8 @@ async def ws_events(websocket: WebSocket, project_id: int):
     """Canal de eventos en tiempo real para el workspace.
     Broadcasts: task_event, agentes_update, orquestador_mensaje, …"""
     # El middleware http NO corre para websockets: Origin anti CSWSH.
-    if not jarvis_auth.origen_permitido(websocket.headers.get('origin'), jarvis_auth.hosts_extra()):
+    if not jarvis_auth.origen_permitido(websocket.headers.get('origin'), jarvis_auth.hosts_extra(),
+                                        host=websocket.headers.get('host', '')):
         await websocket.close(code=4403)
         return
     if not await broadcaster.connect(websocket, project_id):

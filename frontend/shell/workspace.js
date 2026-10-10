@@ -4736,10 +4736,11 @@ document.addEventListener('keydown', (e) => {
 
 // ─── Helpers ──────────────────────────────────────────────────────
 
+// Escapa & < > " ' — también COMILLAS: esc() se usa dentro de atributos
+// (data-path="…", title="…") y un nombre de archivo con `"` no debe poder
+// abrir un atributo nuevo (XSS). El truco textContent→innerHTML NO escapa comillas.
 function esc(str) {
-  const d = document.createElement('div');
-  d.textContent = str;
-  return d.innerHTML;
+  return String(str ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 // Exponer para editor.js (window.JarvisEditor lo reusa sin duplicar)
 window.esc = esc;

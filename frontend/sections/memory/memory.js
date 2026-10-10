@@ -56,7 +56,7 @@
   let _livePoll   = null;         // refresco del recall mientras Live está a la vista
   let _mapaPos    = {};           // id de nodo → {x,y} del Mapa del enjambre
 
-  const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // incluye comillas: se usa en atributos;
   const _t = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
   const Meta = () => window.JarvisMemoryMeta;
   const _reducido = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;

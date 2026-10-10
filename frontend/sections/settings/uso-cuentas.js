@@ -5,8 +5,7 @@
    exportada para los tests de Node; el DOM lo arma settings.js. */
 (function (global) {
   const _t = (s) => (global.JarvisI18n?.t ? global.JarvisI18n.t(s) : s);
-  const _esc = (s) => String(s == null ? '' : s)
-    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
   /* Nivel de la barra según cuánto queda: ok · medio · critico. */
   function nivel(usado) {

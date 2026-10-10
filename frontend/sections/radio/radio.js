@@ -68,7 +68,7 @@
 
   const ST_META = { lofi: 'estudiar', synth: 'nocturno', focus: 'flow', jazz: 'café', chill: 'relax', piano: 'calma' };
 
-  const _esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const _t = (s) => (root.JarvisI18n && root.JarvisI18n.t) ? root.JarvisI18n.t(s) : s;
   const _lang = () => (root.JarvisI18n && root.JarvisI18n.lang && root.JarvisI18n.lang()) || 'es';
   // Los contadores de YouTube llegan en el idioma del backend (es) — ver
