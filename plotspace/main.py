@@ -23,6 +23,11 @@ from fastapi.staticfiles import StaticFiles
 # Cargar variables de entorno desde plotspace/.env antes de cualquier import que las use
 _env_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), '.env')
 load_dotenv(_env_path)
+# …y desde <data>/.env: ahí guarda sus claves la app instalada / el contenedor
+# (p. ej. la de Groq), porque es lo único que sobrevive a un update de la imagen.
+# Sin pisar: lo del entorno y lo de plotspace/.env ganan.
+from plotspace.core.datadir import ruta_data as _ruta_data
+load_dotenv(_ruta_data('.env'))
 
 # Asegurar que el directorio raíz esté en el path para imports absolutos
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -557,7 +562,8 @@ app.include_router(browser.router)  # /ws/browser: Browser server-side (Chromium
 # ─── Host / Origin (anti DNS-rebinding y CSRF). No hay token de acceso. ──────
 
 from fastapi import Request
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+from urllib.parse import urlencode
 from plotspace.core import auth as jarvis_auth
 
 
@@ -649,12 +655,31 @@ async def _handler_body_grande(request: Request, exc: _BodyDemasiadoGrande):
     return JSONResponse(status_code=413, content={'detail': 'Cuerpo demasiado grande'})
 
 
+# Rutas que no piden token: el healthcheck de Docker, el ícono/manifest y /static
+# (el código del front es público y la página de login usa sus tokens de color).
+def _exenta_de_token(path: str) -> bool:
+    return (path in ('/api/health', '/favicon.ico', '/manifest.webmanifest')
+            or path.startswith('/static/'))
+
+
 @app.middleware("http")
 async def _middleware_http(request: Request, call_next):
+    path = request.url.path
+    # Acceso desde OTRA máquina cuando el server escucha en la red → token
+    # (core/auth). Con token válido el Host puede ser un nombre (http://tower:3000).
+    client = request.client.host if request.client else ''
+    permitido, con_token = jarvis_auth.acceso_por_token(
+        client, request.headers, request.cookies, request.query_params)
+    resp = None
+    if not permitido and not _exenta_de_token(path):
+        if path.startswith('/api/') or request.method not in ('GET', 'HEAD'):
+            resp = JSONResponse(status_code=401, content={'detail': 'Falta el token de acceso'})
+        else:
+            resp = HTMLResponse(jarvis_auth.pagina_login_html(), status_code=401)
     # Anti DNS-rebinding: rechazar Host que no sea localhost/IP (un dominio del
     # atacante resolviendo a 127.0.0.1 quedaría afuera). El acceso legítimo
     # —localhost o la IP de LAN— pasa.
-    if not jarvis_auth.host_permitido(request.headers.get('host'), jarvis_auth.hosts_extra()):
+    elif not con_token and not jarvis_auth.host_permitido(request.headers.get('host'), jarvis_auth.hosts_extra()):
         resp = JSONResponse(status_code=400, content={'detail': 'Host no permitido'})
     elif _body_demasiado_grande(request.headers.get('content-length')):
         # Tope de body ANTES de leerlo: un POST multipart de varios GB (upload /
@@ -663,16 +688,29 @@ async def _middleware_http(request: Request, call_next):
         # endpoints de una. (auditoría 2ª pasada — DoS)
         resp = JSONResponse(status_code=413, content={'detail': 'Cuerpo demasiado grande'})
     else:
-        path = request.url.path
-        resp = None
         # CSRF: una mutación disparada por una web maliciosa viaja con Origin
         # cross-site → afuera. Origin ausente = curl o same-origin → permitido.
         if (path.startswith('/api/')
                 and request.method not in ('GET', 'HEAD', 'OPTIONS')
                 and not jarvis_auth.origen_permitido(request.headers.get('origin'),
                                                      jarvis_auth.hosts_extra(),
-                                                     host=request.headers.get('host', ''))):
+                                                     host=request.headers.get('host', ''),
+                                                     confiar_host=con_token)):
             resp = JSONResponse(status_code=403, content={'detail': 'Origin no permitido'})
+        elif con_token and request.query_params.get('token'):
+            # Entró con el link ?token=…: cookie (el navegador lo recuerda) y, si es
+            # una página, redirect a la misma URL SIN el token (no queda en la barra).
+            if request.method == 'GET' and not path.startswith('/api/'):
+                resto = [(k, v) for k, v in request.query_params.multi_items() if k != 'token']
+                destino = path + (('?' + urlencode(resto)) if resto else '')
+                resp = RedirectResponse(destino, status_code=303)
+            else:
+                resp = await call_next(request)
+            seguro = (request.url.scheme == 'https'
+                      or request.headers.get('x-forwarded-proto') == 'https')
+            resp.set_cookie(jarvis_auth.TOKEN_COOKIE, jarvis_auth.token_actual(),
+                            max_age=60 * 60 * 24 * 365, httponly=True, samesite='lax',
+                            secure=seguro, path='/')
         if resp is None:
             resp = await call_next(request)
     # Endurecer headers en toda respuesta (setdefault: no pisa headers propios de la ruta).
@@ -746,9 +784,9 @@ async def ws_events(websocket: WebSocket, project_id: int):
     """Canal de eventos en tiempo real para el workspace.
     Broadcasts: task_event, agentes_update, orquestador_mensaje, …"""
     # El middleware http NO corre para websockets: Origin anti CSWSH.
-    if not jarvis_auth.origen_permitido(websocket.headers.get('origin'), jarvis_auth.hosts_extra(),
-                                        host=websocket.headers.get('host', '')):
-        await websocket.close(code=4403)
+    ok, codigo = jarvis_auth.ws_permitido(websocket)   # token (si escucha en la red) + Origin
+    if not ok:
+        await websocket.close(code=codigo)
         return
     if not await broadcaster.connect(websocket, project_id):
         return   # tope global de WS alcanzado (el broadcaster ya cerró el socket)

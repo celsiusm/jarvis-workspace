@@ -1,10 +1,17 @@
-# JARVIS — candado de Host / Origin (anti DNS-rebinding y CSWSH).
-# No hay token de acceso: la app es local. El default escucha en 127.0.0.1;
-# 0.0.0.0 es explícito. Lo que queda es no aceptar un Host/Origin de un
-# dominio ajeno que apunte a esta máquina.
+# JARVIS — candado de acceso: Host / Origin (anti DNS-rebinding y CSWSH) y,
+# cuando el server escucha en la RED, un token.
+#
+# En la PC propia (127.0.0.1, el default) no hay login: abrís localhost:3000 y
+# entrás. Si Jarvis escucha en la red (Docker, Unraid, `--host 0.0.0.0` para el
+# celular), quien entra desde OTRA máquina necesita el token: Jarvis tiene
+# terminales, y sin esto cualquiera de esa red llegaba a una. Lo que corre en la
+# misma máquina (hooks de los agentes, el navegador local) no lo necesita.
+# JARVIS_TOKEN=off lo apaga; JARVIS_TOKEN=<valor> fija uno propio.
 
+import hmac
 import os
 import ipaddress
+import secrets
 from urllib.parse import urlsplit
 
 
@@ -93,7 +100,8 @@ _REDES_LOCALES = tuple(ipaddress.ip_network(r) for r in (
 ))
 
 
-def origen_permitido(origin_header: str | None, extra=(), host: str | None = None) -> bool:
+def origen_permitido(origin_header: str | None, extra=(), host: str | None = None,
+                     confiar_host: bool = False) -> bool:
     """Valida el header Origin (anti CSWSH / CSRF). Origin ausente = cliente
     no-browser o navegación same-origin → permitido. `null` (sandbox/data:) →
     rechazado. Un host de `extra` (JARVIS_ALLOWED_HOSTS) → permitido.
@@ -104,6 +112,9 @@ def origen_permitido(origin_header: str | None, extra=(), host: str | None = Non
     "same-origin" consigo mismo). La UI legítima siempre es same-origin, así
     que esto deja afuera a una web en una IP pública Y a las páginas de otros
     puertos locales (dev servers con código de terceros).
+
+    `confiar_host=True` (request con token válido): el Host no necesita ser
+    una IP/localhost — basta el mismo origen.
 
     Sin `host` (llamadores viejos): solo localhost o IP de loopback/LAN privada.
     Antes valía cualquier IP literal: una web servida desde una IP PÚBLICA podía
@@ -121,7 +132,9 @@ def origen_permitido(origin_header: str | None, extra=(), host: str | None = Non
         if o is None:
             return False
         h = _host_puerto(host, origin_header.split('://', 1)[0].lower() if '://' in origin_header else 'http')
-        return h is not None and o == h and host_permitido(host, extra)
+        # confiar_host: la request ya vino con un token válido → el Host puede ser
+        # un nombre (http://tower:3000); el rebinding no tiene el token.
+        return h is not None and o == h and (confiar_host or host_permitido(host, extra))
     return _es_loopback_o_lan(hostname)
 
 
@@ -132,6 +145,165 @@ def hosts_extra() -> tuple:
     return tuple(h.strip().lower() for h in crudo.split(',') if h.strip())
 
 
+# ─── Token de acceso (solo cuando el server escucha en la red) ────────────────
+
+TOKEN_COOKIE = 'jarvis_acceso'
+_RUTA_TOKEN = None          # data/acceso-token (se resuelve perezoso; los tests lo apuntan a tmp)
+_token_cache = None
+_HOSTS_LOOPBACK = ('127.0.0.1', 'localhost', '::1')
+
+
+def host_de_escucha() -> str:
+    from plotspace.core.escucha import host_puerto_actuales
+    return host_puerto_actuales()[0]
+
+
+def _es_loopback(host: str) -> bool:
+    h = (host or '').strip().strip('[]').lower()
+    if h in _HOSTS_LOOPBACK:
+        return True
+    try:
+        return ipaddress.ip_address(h).is_loopback
+    except ValueError:
+        return False
+
+
+def _modo_token() -> str:
+    """'auto' (default) · 'off' · o el token literal de JARVIS_TOKEN."""
+    v = (os.environ.get('JARVIS_TOKEN') or '').strip()
+    if not v or v.lower() == 'auto':
+        return 'auto'
+    if v.lower() in ('off', '0', 'no', 'false'):
+        return 'off'
+    return v
+
+
+def token_requerido() -> bool:
+    """¿Se exige token a quien entra desde otra máquina? auto = solo si el
+    server escucha en la red (no en loopback)."""
+    modo = _modo_token()
+    if modo == 'off':
+        return False
+    if modo != 'auto':
+        return True
+    return not _es_loopback(host_de_escucha())
+
+
+def _ruta_token() -> str:
+    if _RUTA_TOKEN:
+        return _RUTA_TOKEN
+    from plotspace.core.datadir import ruta_data
+    return ruta_data('acceso-token')
+
+
+def token_actual() -> str:
+    """El token vigente: el de JARVIS_TOKEN o uno aleatorio persistido (0600)
+    en data/acceso-token, así sobrevive a reinicios y updates del contenedor."""
+    global _token_cache
+    modo = _modo_token()
+    if modo not in ('auto', 'off'):
+        return modo
+    if _token_cache:
+        return _token_cache
+    ruta = _ruta_token()
+    try:
+        with open(ruta, encoding='utf-8') as f:
+            t = f.read().strip()
+        if len(t) >= 24:
+            _token_cache = t
+            return t
+    except OSError:
+        pass
+    t = secrets.token_urlsafe(32)
+    os.makedirs(os.path.dirname(ruta) or '.', exist_ok=True)
+    fd = os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, 'w', encoding='utf-8') as f:
+        f.write(t + '\n')
+    os.chmod(ruta, 0o600)
+    _token_cache = t
+    return t
+
+
+def token_valido(candidato) -> bool:
+    if not candidato:
+        return False
+    return hmac.compare_digest(str(candidato).encode(), token_actual().encode())
+
+
+_CABECERAS_PROXY = ('x-forwarded-for', 'forwarded', 'x-real-ip')
+
+
+def cliente_local(client_host, headers) -> bool:
+    """La request viene de ESTA máquina (loopback) y no a través de un proxy.
+    Dentro de Docker el navegador del usuario llega desde el gateway del bridge
+    (172.17.0.1) → NO es local; los hooks de los agentes llegan por 127.0.0.1."""
+    if any(headers.get(k) for k in _CABECERAS_PROXY):
+        return False
+    return _es_loopback(client_host or '')
+
+
+def token_de_request(headers, cookies, query) -> str:
+    """Token de la request: ?token= (el link del arranque) → X-Jarvis-Token →
+    Authorization: Bearer → cookie."""
+    t = query.get('token') or headers.get('x-jarvis-token')
+    if not t:
+        a = headers.get('authorization') or ''
+        if a.lower().startswith('bearer '):
+            t = a[7:].strip()
+    return t or cookies.get(TOKEN_COOKIE) or ''
+
+
+def acceso_por_token(client_host, headers, cookies, query):
+    """(permitido, con_token) para una request que NO es de una ruta exenta.
+    con_token=True → vino con un token válido (el Host puede ser un nombre)."""
+    if not token_requerido() or cliente_local(client_host, headers):
+        return True, False
+    if token_valido(token_de_request(headers, cookies, query)):
+        return True, True
+    return False, False
+
+
+def ws_permitido(websocket) -> tuple:
+    """(ok, codigo_de_cierre) para un upgrade WebSocket: token (si hace falta)
+    + Origin del mismo origen. El middleware http NO corre para websockets."""
+    client = websocket.client.host if websocket.client else ''
+    ok, con_token = acceso_por_token(client, websocket.headers, websocket.cookies,
+                                     websocket.query_params)
+    if not ok:
+        return False, 4401
+    if not origen_permitido(websocket.headers.get('origin'), hosts_extra(),
+                            host=websocket.headers.get('host', ''), confiar_host=con_token):
+        return False, 4403
+    return True, None
+
+
+def pagina_login_html() -> str:
+    """Página mínima para pegar el token. Usa los tokens de color del tema
+    (/static es público: el código del front no es secreto)."""
+    return """<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1"><title>Jarvis</title>
+<link rel="stylesheet" href="/static/shared/tokens.css">
+<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--ob-bg-0);
+color:var(--ob-fg-0);font:15px/1.5 var(--font-ui)}main{width:min(420px,90vw)}h1{font-size:20px;margin:0 0 6px}
+p{color:var(--ob-fg-2);margin:0 0 18px}input{width:100%;box-sizing:border-box;padding:10px 12px;border-radius:8px;
+border:1px solid var(--ob-line-2);background:var(--ob-bg-1);color:inherit;font:inherit}
+button{margin-top:10px;width:100%;padding:10px;border:0;border-radius:8px;background:var(--ob-accent);
+color:var(--ob-on-accent);font:600 15px var(--font-ui);cursor:pointer}small{display:block;margin-top:14px;color:var(--ob-fg-2)}</style>
+</head><body><main><h1>Jarvis está protegido</h1>
+<p>Estás entrando desde otra máquina. Pegá el token de acceso.<br>
+<span lang="en">Jarvis is protected: paste the access token.</span></p>
+<form method="get"><input name="token" autocomplete="off" autofocus placeholder="token" aria-label="token">
+<button type="submit">Entrar</button></form>
+<small>El link con el token aparece en los logs al arrancar (<code>docker logs</code>)
+y está guardado en <code>data/acceso-token</code>.</small></main></body></html>"""
+
+
 def imprimir_banner():
-    """Arranque: una línea, sin token. El dibujo de caja viejo tumba cp1252."""
-    print('[jarvis] listo — abrí http://127.0.0.1:3000')
+    """Arranque: una línea (el dibujo de caja viejo tumba cp1252). Si el server
+    escucha en la red, también el link con el token."""
+    from plotspace.core.escucha import host_puerto_actuales
+    host, port = host_puerto_actuales()
+    print(f'[jarvis] listo — abrí http://127.0.0.1:{port}')
+    if token_requerido():
+        print(f'[jarvis] escuchando en la red ({host}): desde otra máquina se entra con token.')
+        print(f'[jarvis] abrí  http://<ip-de-este-equipo>:{port}/?token={token_actual()}')
