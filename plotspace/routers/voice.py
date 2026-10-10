@@ -645,17 +645,24 @@ def guardar_groq_key(body: GroqKeyIn):
     key = (body.key or "").strip()
     if not stt_groq.clave_parece_groq(key):
         raise HTTPException(status_code=400, detail="La clave de Groq empieza con gsk_")
-    path = stt_groq.ruta_env_local()
-    stt_groq.upsert_env(path, "GROQ_API_KEY", key)
-    stt_groq.upsert_env(path, "STT_MOTOR", "groq")
-    try:
-        from plotspace.core.datadir import ruta_data
-        extra = ruta_data(".env")
-        if os.path.abspath(extra) != os.path.abspath(path):
-            stt_groq.upsert_env(extra, "GROQ_API_KEY", key)
-            stt_groq.upsert_env(extra, "STT_MOTOR", "groq")
-    except Exception:
-        pass
+    # Dos lugares: plotspace/.env (instalación desde el repo) y data/.env (el
+    # volumen de datos: es lo ÚNICO que sobrevive a un update del contenedor, y en
+    # Docker no-root el código es de solo lectura). Basta con que UNO funcione.
+    from plotspace.core import datadir
+    destinos = [stt_groq.ruta_env_local()]
+    extra = datadir.ruta_data(".env")
+    if os.path.abspath(extra) != os.path.abspath(destinos[0]):
+        destinos.append(extra)
+    escritos = 0
+    for path in destinos:
+        try:
+            stt_groq.upsert_env(path, "GROQ_API_KEY", key)
+            stt_groq.upsert_env(path, "STT_MOTOR", "groq")
+            escritos += 1
+        except OSError:
+            pass
+    if not escritos:
+        raise HTTPException(status_code=500, detail="No se pudo guardar la clave (sin permiso de escritura)")
     os.environ["GROQ_API_KEY"] = key
     os.environ["STT_MOTOR"] = "groq"
     return {"groq": True, "motor": "groq"}

@@ -1,19 +1,20 @@
-# Jarvis Workspace — local orchestration with Docker Compose.
+# Jarvis Workspace — Docker Compose.
 #
 # Usage:
-#   cp .env.example .env      # edit PROYECTOS_DIR (and optionally the API key)
-#   docker compose up -d --build
-#   docker compose logs -f
-#   # open http://localhost:3000
+#   cp .env.example .env      # set PROYECTOS_DIR (and PUID/PGID = your user's ids: `id`)
+#   docker compose up -d      # pulls ghcr.io/celsiusm/jarvis-workspace (no local build)
+#   docker compose logs       # the access link with the token is printed here
+#   # open http://<this-machine>:3000/?token=… once; the browser remembers it
 #
+# Build the image yourself instead: `docker compose up -d --build`.
 # (compose v2: no `version:` key, it is deprecated)
 
 services:
   jarvis:
+    image: ghcr.io/celsiusm/jarvis-workspace:latest
     build:
       context: .
       dockerfile: Dockerfile
-    image: jarvis-workspace:latest
     container_name: jarvis-workspace
     # init=true → a PID 1 that reaps zombies. Jarvis spawns MANY subprocesses
     # (tmux, git, node, chromium, ffmpeg); without an init they pile up as defunct.
@@ -22,31 +23,31 @@ services:
     # Chromium crashes with Docker's default /dev/shm (64 MB). 1 GB is roomy.
     shm_size: "1gb"
     ports:
-      # With Docker Desktop, port mapping DOES work even on WSL (it solves the
-      # pain of WSL not forwarding new ports to Windows). host:container.
+      # Reachable from your network: whoever opens it from another machine needs
+      # the access token (see `docker compose logs`). Only for this machine:
+      # "127.0.0.1:3000:3000".
       - "3000:3000"
+    environment:
+      # The container runs as this user, so the files the agents create in your
+      # projects are yours. `id -u` / `id -g` on the host (Unraid: 99 / 100).
+      PUID: ${PUID:-1000}
+      PGID: ${PGID:-1000}
     env_file:
-      - .env
+      - path: .env
+        required: false
     volumes:
-      # 1) Container HOME (named volume) → the agent CLIs' AUTH
-      #    (~/.claude, ~/.config, CODEX_HOME, etc.). The user links their
-      #    accounts FROM the UI (⚙ → Accounts, login in a PTY); they persist
-      #    across restarts. The host's ~/.claude is NOT mounted: auth lives only
-      #    in this volume.
-      - jarvis_home:/root
-      # 2) Local app state (SQLite jarvis.db + remote
-      #    browser profile + account secrets). Bound to ./data so you can
-      #    see/back it up from the host. It auto-creates and bootstraps empty.
+      # 1) Container HOME → the agent CLIs' logins (~/.claude, ~/.codex, …),
+      #    linked from the UI (⚙ → Accounts). They survive updates.
+      - jarvis_home:/home/jarvis
+      # 2) App state: SQLite DB, access token, account secrets, voice key,
+      #    remote browser profile. Bound to ./data so you can see/back it up.
       - ./data:/app/data
-      # 3) The user's PROJECTS directory (their code). Configurable via the
-      #    PROYECTOS_DIR env var in .env. INSIDE the container it lives at
-      #    /proyectos → when creating a project in the UI, use paths like
-      #    /proyectos/my-app. Default ./proyectos if not set.
+      # 3) Your PROJECTS (code). Inside the container they live at /proyectos →
+      #    when creating a project in the UI use paths like /proyectos/my-app.
       - ${PROYECTOS_DIR:-./proyectos}:/proyectos
     healthcheck:
-      # /api/health is an OPEN route (no token). Generous start_period because of
-      # startup (Whisper preload, tmux reconciliation, etc.).
-      test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/health"]
+      # /api/health needs no token. Generous start_period for the first boot.
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
       interval: 30s
       timeout: 5s
       retries: 5

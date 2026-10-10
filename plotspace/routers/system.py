@@ -633,25 +633,9 @@ def _canary_import(modulo: str = 'plotspace.main') -> tuple:
 
 def _host_puerto_actuales(argv=None, env=None) -> tuple:
     """Host y puerto con los que está escuchando ESTE server, para que el
-    re-exec de "Update now" vuelva igual. Antes el re-exec forzaba 0.0.0.0: un
-    server levantado solo en 127.0.0.1 reaparecía expuesto a toda la red.
-    Orden: JARVIS_BIND_HOST/JARVIS_PORT (los fija el CLI `jarvis`) → JARVIS_HOST
-    → --host/--port del argv de uvicorn → 127.0.0.1:3000."""
-    argv = sys.argv if argv is None else argv
-    env = os.environ if env is None else env
-
-    def _arg(nombre):
-        for i, a in enumerate(argv):
-            if a == nombre and i + 1 < len(argv):
-                return argv[i + 1]
-            if a.startswith(nombre + '='):
-                return a.split('=', 1)[1]
-        return None
-
-    host = ((env.get('JARVIS_BIND_HOST') or '').strip() or (env.get('JARVIS_HOST') or '').strip()
-            or _arg('--host') or '127.0.0.1')
-    port = (env.get('JARVIS_PORT') or '').strip() or _arg('--port') or '3000'
-    return host, str(port)
+    re-exec de "Update now" vuelva igual (antes forzaba 0.0.0.0). Ver core/escucha."""
+    from plotspace.core.escucha import host_puerto_actuales
+    return host_puerto_actuales(argv=argv, env=env)
 
 
 def _comando_uvicorn(python=None, host=None, port=None):

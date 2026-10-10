@@ -248,3 +248,26 @@ def test_prewarm_con_groq_es_noop(monkeypatch):
     r = _app_client().post("/api/voice/prewarm")
     assert r.status_code == 200, r.text
     assert r.json()["estado"] == "listo"
+
+
+def test_guardar_key_sin_permiso_en_el_codigo_usa_data(monkeypatch, tmp_path):
+    """Docker no-root: /app/plotspace/.env no se puede escribir. La clave tiene
+    que quedar en data/.env (el volumen que persiste) y no dar error 500."""
+    monkeypatch.setenv("STT_MOTOR", "parakeet")
+    monkeypatch.delenv("GROQ_API_KEY", raising=False)
+    codigo = tmp_path / "app" / ".env"
+    datos = tmp_path / "data" / ".env"
+    monkeypatch.setattr(stt_groq, "ruta_env_local", lambda: str(codigo))
+    from plotspace.core import datadir
+    monkeypatch.setattr(datadir, "ruta_data", lambda *p: str(tmp_path / "data" / os.path.join(*p)))
+    real = stt_groq.upsert_env
+
+    def _upsert(path, k, v):
+        if os.path.abspath(path) == os.path.abspath(str(codigo)):
+            raise PermissionError(13, "Permission denied", path)
+        return real(path, k, v)
+    monkeypatch.setattr(stt_groq, "upsert_env", _upsert)
+    ok = _app_client().post("/api/voice/groq-key", json={"key": FAKE_KEY})
+    assert ok.status_code == 200, ok.text
+    assert f"GROQ_API_KEY={FAKE_KEY}" in datos.read_text(encoding="utf-8")
+    assert os.getenv("GROQ_API_KEY") == FAKE_KEY

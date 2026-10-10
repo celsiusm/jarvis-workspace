@@ -1,0 +1,102 @@
+name: Docker image
+
+# Builds the image, boots it and checks that it answers; on main (and on version
+# tags) it is then published to ghcr.io/<owner>/jarvis-workspace so servers
+# (Unraid, a NAS, a VPS) pull it instead of building it.
+# Pull requests only build + smoke-test, and only when something that goes into
+# the image changed (the build is heavy).
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+    paths:
+      - Dockerfile
+      - docker/**
+      - .dockerignore
+      - plotspace/requirements.txt
+      - .github/workflows/docker.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+concurrency:
+  group: docker-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      IMAGE: ghcr.io/${{ github.repository_owner }}/jarvis-workspace
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Image tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha,format=short
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+
+      - name: Build (load for the smoke test)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: jarvis-workspace:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test — boots as non-root, health OK, token required from outside
+        run: |
+          set -e
+          mkdir -p "$RUNNER_TEMP/data" "$RUNNER_TEMP/proyectos"
+          docker run -d --name jarvis-ci -p 3000:3000 \
+            -e PUID="$(id -u)" -e PGID="$(id -g)" \
+            -v "$RUNNER_TEMP/data:/app/data" -v "$RUNNER_TEMP/proyectos:/proyectos" \
+            jarvis-workspace:ci
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:3000/api/health >/dev/null 2>&1; then break; fi
+            sleep 2
+          done
+          docker logs jarvis-ci | tail -20
+          curl -fsS http://127.0.0.1:3000/api/health
+          # The host reaches it through Docker's bridge = "another machine": no token → 401.
+          code=$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/projects)
+          test "$code" = "401" || { echo "expected 401 without token, got $code"; exit 1; }
+          tok=$(cat "$RUNNER_TEMP/data/acceso-token")
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H "X-Jarvis-Token: $tok" http://127.0.0.1:3000/api/projects)
+          test "$code" = "200" || { echo "expected 200 with token, got $code"; exit 1; }
+          # Runs as the requested user, not root.
+          uid=$(docker exec jarvis-ci ps -eo uid=,args= | grep '[u]vicorn' | head -1 | awk '{print $1}')
+          test "$uid" = "$(id -u)" || { echo "uvicorn runs as uid $uid, expected $(id -u)"; exit 1; }
+          docker rm -f jarvis-ci
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish
+        if: github.event_name != 'pull_request'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha

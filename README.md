@@ -41,7 +41,7 @@ Engine runs in [WSL2](docs/install/windows.md). One reboot if WSL is new. Leaves
 </tr>
 </table>
 
-Full app (terminals, voice, preview, Mobile Studio, …). Link your own CLIs in ⚙ → Accounts. Docker: `cp .env.example .env && docker compose up -d --build` (large, experimental).
+Full app (terminals, voice, preview, Mobile Studio, …). Link your own CLIs in ⚙ → Accounts. Server, NAS or Unraid: [Docker image](docs/install/docker.md) (`docker compose up -d`, protected by an access token on your network).
 
 ---
 
