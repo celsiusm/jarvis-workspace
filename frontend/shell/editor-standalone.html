@@ -124,7 +124,7 @@
     //  - editorVisible / togglePanel: el editor consulta visibilidad y togglea el
     //    dock; acá el editor está siempre visible y no hay dock, así que noop.
     //  - pedirTexto: ui.js ya lo define; el || lo preserva (defensivo).
-    window.esc = window.esc || ((s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; });
+    window.esc = window.esc || ((s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])));
     window.pedirTexto = window.pedirTexto || (async (msg, def = '') => prompt(msg, def));
     window.editorVisible = true;
     window.togglePanel = () => {};

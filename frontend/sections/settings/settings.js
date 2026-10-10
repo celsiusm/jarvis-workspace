@@ -48,7 +48,7 @@
     memoria:    { t: 'Memoria',     sub: 'El conocimiento que comparten los agentes: estado y salud.' },
   };
 
-  const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // incluye comillas: se usa en atributos;
   const _t = (s) => window.JarvisI18n?.t?.(s) ?? s;
   const num = (n) => Number(n || 0).toLocaleString('es-AR');
   const _root = () => document.getElementById('jw-settings');

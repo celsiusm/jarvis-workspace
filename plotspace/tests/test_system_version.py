@@ -53,14 +53,33 @@ def test_comando_uvicorn_fuerza_asyncio():
     """El re-exec del updater debe levantar con `--loop asyncio`: uvloop sufre
     un stall periódico de ~400ms del event loop en este entorno (WSL2 + Py3.14)
     que se ve como cortes en el eco del tipeo. Sin este flag uvicorn elige uvloop."""
-    cmd = system._comando_uvicorn()
+    cmd = system._comando_uvicorn(host='127.0.0.1', port='3000')
     assert '--loop' in cmd
     assert cmd[cmd.index('--loop') + 1] == 'asyncio'
     # Sigue siendo un arranque de uvicorn sobre la app correcta, host/port default.
     assert 'uvicorn' in cmd
     assert 'plotspace.main:app' in cmd
     assert cmd[cmd.index('--port') + 1] == '3000'
-    assert cmd[cmd.index('--host') + 1] == '0.0.0.0'
+    assert cmd[cmd.index('--host') + 1] == '127.0.0.1'
+
+
+def test_reexec_conserva_host_y_puerto_del_argv():
+    # Un server levantado en 127.0.0.1 NO puede volver en 0.0.0.0 tras "Update now".
+    argv = ['/x/uvicorn', 'plotspace.main:app', '--host', '127.0.0.1', '--port', '4100', '--loop', 'asyncio']
+    assert system._host_puerto_actuales(argv=argv, env={}) == ('127.0.0.1', '4100')
+    argv = ['/x/uvicorn', 'plotspace.main:app', '--host=0.0.0.0', '--port=3000']
+    assert system._host_puerto_actuales(argv=argv, env={}) == ('0.0.0.0', '3000')
+
+
+def test_reexec_prefiere_env_del_cli():
+    # El CLI `jarvis` corre uvicorn in-process (sin --host en argv): deja el
+    # host/puerto en JARVIS_HOST/JARVIS_PORT.
+    env = {'JARVIS_BIND_HOST': '127.0.0.1', 'JARVIS_PORT': '5055'}
+    assert system._host_puerto_actuales(argv=['jarvis', '--puerto', '5055'], env=env) == ('127.0.0.1', '5055')
+
+
+def test_reexec_default_es_loopback():
+    assert system._host_puerto_actuales(argv=['jarvis'], env={}) == ('127.0.0.1', '3000')
 
 
 def test_comando_uvicorn_params_custom():

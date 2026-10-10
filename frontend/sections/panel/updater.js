@@ -198,9 +198,8 @@
 
   const _tradCache = {};   // { novedadES normalizada -> inglés } — traducciones ya pedidas
   const _fetch = (url, opts) => (global.apiFetch ? global.apiFetch(url, opts) : fetch(url, opts));
-  const _esc = (s) => { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; };
-  // Para valores de ATRIBUTO (data-es): _esc no escapa comillas dobles.
-  const _escAttr = (s) => _esc(s).replace(/"/g, '&quot;');
+  const _esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // incluye comillas
+  const _escAttr = _esc;
   // Idioma actual de la UI (lo maneja el i18n). El modal se crea por innerHTML y
   // el observer traduce el chrome fijo; los ítems dinámicos los traducimos acá.
   const _lang = () => { try { return (global.JarvisI18n && global.JarvisI18n.lang) ? global.JarvisI18n.lang() : 'es'; } catch (_) { return 'es'; } };

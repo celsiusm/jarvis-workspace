@@ -20,7 +20,7 @@
   let _agoTimer = null;
   let _pollTimer = null;
 
-  const esc = (s) => { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; };
+  const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));   // incluye comillas: se usa en atributos;
   const escAttr = (s) => esc(s).replace(/"/g, '&quot;');
   const _t = (s) => (window.JarvisI18n && window.JarvisI18n.t) ? window.JarvisI18n.t(s) : s;
   const _L = (es, en) => (window.JarvisI18n?.lang?.() === 'en' ? en : es);

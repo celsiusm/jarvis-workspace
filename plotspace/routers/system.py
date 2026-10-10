@@ -631,7 +631,30 @@ def _canary_import(modulo: str = 'plotspace.main') -> tuple:
 # reemplaza ESTE proceso por el uvicorn nuevo conservando PID, sesión y terminal:
 # el server sigue alojado en la terminal donde el usuario lo levantó.
 
-def _comando_uvicorn(python=None, host='0.0.0.0', port='3000'):
+def _host_puerto_actuales(argv=None, env=None) -> tuple:
+    """Host y puerto con los que está escuchando ESTE server, para que el
+    re-exec de "Update now" vuelva igual. Antes el re-exec forzaba 0.0.0.0: un
+    server levantado solo en 127.0.0.1 reaparecía expuesto a toda la red.
+    Orden: JARVIS_BIND_HOST/JARVIS_PORT (los fija el CLI `jarvis`) → JARVIS_HOST
+    → --host/--port del argv de uvicorn → 127.0.0.1:3000."""
+    argv = sys.argv if argv is None else argv
+    env = os.environ if env is None else env
+
+    def _arg(nombre):
+        for i, a in enumerate(argv):
+            if a == nombre and i + 1 < len(argv):
+                return argv[i + 1]
+            if a.startswith(nombre + '='):
+                return a.split('=', 1)[1]
+        return None
+
+    host = ((env.get('JARVIS_BIND_HOST') or '').strip() or (env.get('JARVIS_HOST') or '').strip()
+            or _arg('--host') or '127.0.0.1')
+    port = (env.get('JARVIS_PORT') or '').strip() or _arg('--port') or '3000'
+    return host, str(port)
+
+
+def _comando_uvicorn(python=None, host=None, port=None):
     """argv para levantar el server. `--loop asyncio` FUERZA el event loop puro
     de Python en lugar de uvloop (el default de uvicorn cuando uvloop está
     instalado).
@@ -644,9 +667,13 @@ def _comando_uvicorn(python=None, host='0.0.0.0', port='3000'):
     de los pollers ni del GC (todos descartados midiendo): es de uvloop. asyncio
     puro es marginalmente más lento en throughput crudo pero acá no es el cuello
     de botella (el cuello es tmux/PTY), y elimina el stall por completo."""
+    if host is None or port is None:
+        h, p = _host_puerto_actuales()
+        host = h if host is None else host
+        port = p if port is None else port
     return [
         python or sys.executable, '-m', 'uvicorn', 'plotspace.main:app',
-        '--host', host, '--port', port, '--loop', 'asyncio',
+        '--host', host, '--port', str(port), '--loop', 'asyncio',
     ]
 
 

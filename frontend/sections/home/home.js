@@ -27,7 +27,7 @@ function _iniciales(n) {
   if (limpio.length === 1) return limpio[0].toUpperCase() + limpio[0].toLowerCase();
   return limpio[0].toUpperCase() + limpio[1].toLowerCase();
 }
-function esc(s) { const d = document.createElement('div'); d.textContent = String(s ?? ''); return d.innerHTML; }
+function esc(s) { return String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }   // incluye comillas: se usa en atributos
 function _t(s) { return (window.JarvisI18n && window.JarvisI18n.t(s)) || s; }
 function _fechaHumana(iso) {
   if (!iso) return 'sin actividad';

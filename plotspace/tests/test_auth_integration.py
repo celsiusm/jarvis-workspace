@@ -74,7 +74,9 @@ def test_mutacion_sin_origin_pasa_el_gate():
 
 def test_mutacion_origin_local_pasa_el_gate():
     client = _client()
-    r = client.post('/api/projects', json={}, headers={'Origin': 'http://localhost:3000'})
+    # Un browser en localhost:3000 manda Host y Origin del MISMO origen.
+    r = client.post('/api/projects', json={}, headers={'Host': 'localhost:3000',
+                                                       'Origin': 'http://localhost:3000'})
     assert r.status_code not in (401, 403)
 
 
@@ -104,3 +106,34 @@ if __name__ == '__main__':
             except Exception:
                 fallos += 1; print(f'FAIL {nombre}'); traceback.print_exc()
     sys.exit(1 if fallos else 0)
+
+
+def test_mutacion_origin_ip_publica_da_403():
+    client = _client()
+    r = client.post('/api/projects', json={}, headers={'Origin': 'http://93.184.216.34'})
+    assert r.status_code == 403
+
+
+def test_mutacion_origin_otro_puerto_local_da_403():
+    # Una página de un dev server en localhost:5173 no puede mutar Jarvis.
+    client = _client()
+    r = client.post('/api/projects', json={}, headers={'Host': 'localhost:3000',
+                                                       'Origin': 'http://localhost:5173'})
+    assert r.status_code == 403
+
+
+def test_ws_eventos_origin_ip_publica_rechazado():
+    import pytest
+    from starlette.websockets import WebSocketDisconnect
+    client = _client()
+    with pytest.raises(WebSocketDisconnect) as e:
+        with client.websocket_connect('/ws/events/1', headers={'Origin': 'http://203.0.113.5'}) as ws:
+            ws.receive_json()
+    assert e.value.code == 4403
+
+
+def test_ws_eventos_mismo_origen_ok():
+    client = _client()
+    with client.websocket_connect('/ws/events/1', headers={'Host': 'testserver',
+                                                          'Origin': 'http://testserver'}) as ws:
+        assert ws.receive_json().get('type') == 'hola'

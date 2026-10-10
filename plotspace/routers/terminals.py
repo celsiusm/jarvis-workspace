@@ -1997,7 +1997,8 @@ async def ws_terminal(websocket: WebSocket, terminal_id: int,
     no manda fc y conserva el comportamiento histórico. Ver _FlujoWS."""
     # El middleware http NO corre para websockets: Origin anti CSWSH.
     from plotspace.core import auth as jarvis_auth
-    if not jarvis_auth.origen_permitido(websocket.headers.get('origin'), jarvis_auth.hosts_extra()):
+    if not jarvis_auth.origen_permitido(websocket.headers.get('origin'), jarvis_auth.hosts_extra(),
+                                        host=websocket.headers.get('host', '')):
         await websocket.close(code=4403)
         return
     # Red de seguridad anti-desplazamiento: un browser headless (QA de un agente)
