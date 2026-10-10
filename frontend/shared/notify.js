@@ -26,7 +26,10 @@
   global.JarvisNotify = Object.assign(global.JarvisNotify || {}, { _pure: pure });
   if (typeof document === 'undefined') return;  // tests Node: solo _pure
 
-  let _base = document.title;
+  // El título base se lee RECIÉN al arrancar un flash: al cargar el script la
+  // página todavía tiene el título genérico ("Jarvis Workspace"), y el workspace
+  // lo cambia después a "JARVIS — <proyecto>". Leerlo antes lo pisaba en cada focus.
+  let _base = null;
   let _pend = 0;
   let _timer = null;
   let _alterno = false;
@@ -42,15 +45,19 @@
   }
 
   function _limpiar() {
+    const huboFlash = !!_timer || _pend > 0;
     _pend = 0; _alterno = false;
     if (_timer) { clearInterval(_timer); _timer = null; }
-    document.title = _base;
+    // Solo restaurar si HUBO flash: si no, cada focus/visibilitychange pisaba el
+    // título vigente de la pestaña.
+    if (huboFlash && _base !== null) document.title = _base;
+    _base = null;
   }
 
   // tipo ∈ 'termino' | 'espera' · nombre = nombre de la terminal
   global.JarvisNotify.avisar = ({ tipo, nombre, sonidoOn } = {}) => {
     if (!debeAvisar({ hidden: document.hidden, sonidoOn })) return;
-    _base = _base || document.title;
+    if (_pend === 0 && !_timer) _base = document.title;
     _pend++;
     _startFlash();
     const permiso = (typeof Notification !== 'undefined') ? Notification.permission : 'denied';

@@ -122,7 +122,7 @@ def _git(*args):
     (rc!=0, no es repo, git ausente, timeout)."""
     try:
         r = subprocess.run(
-            ['git', '-C', _REPO_ROOT, *args],
+            ['git', '--no-optional-locks', '-C', _REPO_ROOT, *args],   # no pisar index.lock de los agentes
             capture_output=True, text=True, timeout=5,
             # Ver core/gitutil: nada de prompts ni ventanas de login desde el motor.
             env=_entorno_git(),

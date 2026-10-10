@@ -77,6 +77,22 @@ def test_endpoints_de_review_no_bloquean_el_loop():
         assert not inspect.iscoroutinefunction(fn), fn.__name__
 
 
+def _subcomando_git(cmd):
+    """El subcomando de un argv de git, salteando opciones globales
+    (`--no-optional-locks`, `-c clave=valor`, `-C ruta`)."""
+    i = 1
+    while i < len(cmd):
+        a = cmd[i]
+        if a in ('-c', '-C'):
+            i += 2
+            continue
+        if a.startswith('-'):
+            i += 1
+            continue
+        return a
+    return None
+
+
 def test_commit_usa_timeout_largo(monkeypatch):
     client, pid, d = _client_repo()
     with open(os.path.join(d, 'a.txt'), 'w', encoding='utf-8') as f:
@@ -84,8 +100,9 @@ def test_commit_usa_timeout_largo(monkeypatch):
     timeouts = {}
 
     def _run_espia(cmd, *a, **kw):
-        if len(cmd) > 1:
-            timeouts.setdefault(cmd[1], kw.get('timeout'))
+        sub = _subcomando_git(cmd)
+        if sub:
+            timeouts.setdefault(sub, kw.get('timeout'))
         return _REAL_RUN(cmd, *a, **kw)
     monkeypatch.setattr(review.subprocess, 'run', _run_espia)
 

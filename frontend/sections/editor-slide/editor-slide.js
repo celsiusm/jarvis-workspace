@@ -125,6 +125,7 @@
   function onProjectChanged(projId) {
     _projId = projId;
     for (const k in _cache) delete _cache[k];
+    for (const k in _ramas) delete _ramas[k];   // la rama se vuelve a consultar (puede haber cambiado)
     cerrar();
   }
   function isOpen() { return state.editorOpen; }
@@ -325,11 +326,32 @@
     });
     repaint(); gutUpdate(); activeUpdate();
   }
+  // Rama REAL del proyecto (antes decía "master" fijo, y el repo usa main).
+  // Una consulta por proyecto; sin git o mientras llega, no se muestra nada.
+  const _ramas = {};
+  function _rama() {
+    const pid = _projId; if (pid == null) return '';
+    if (!(pid in _ramas)) {
+      _ramas[pid] = '';
+      fetch(`/api/projects/${encodeURIComponent(pid)}/files/git-status`)
+        .then(r => r.ok ? r.json() : null)
+        .then(d => {
+          _ramas[pid] = (d && d.git && d.branch) || '';
+          if (_ramas[pid] && pid === _projId && state.active) _renderStatus(_cache[state.active] || null);
+        })
+        .catch(() => {});
+    }
+    return _ramas[pid];
+  }
+  function _ramaHTML() {
+    const r = _rama();
+    return r ? `<span class="g"><span class="d"></span>${esc(r)}</span>` : '';
+  }
   function _renderStatus(data) {
     const st = $('jw-ed-status'); if (!st) return;
-    if (!data || data.binary) { st.innerHTML = `<span class="g"><span class="d"></span>master</span><span class="sp"></span>`; return; }
+    if (!data || data.binary) { st.innerHTML = `${_ramaHTML()}<span class="sp"></span>`; return; }
     const dirty = !!data.dirty;
-    st.innerHTML = `<span class="g"><span class="d"></span>master</span>${dirty ? '<span class="dirty">sin guardar</span>' : ''}<span class="sp"></span><span>${esc(data.language || '')}</span><span>UTF-8</span><span>${_fmtSize(data.size)}</span>${dirty ? '<button class="ed-save" title="Guardar (Ctrl+S)">Guardar</button>' : ''}`;
+    st.innerHTML = `${_ramaHTML()}${dirty ? '<span class="dirty">sin guardar</span>' : ''}<span class="sp"></span><span>${esc(data.language || '')}</span><span>UTF-8</span><span>${_fmtSize(data.size)}</span>${dirty ? '<button class="ed-save" title="Guardar (Ctrl+S)">Guardar</button>' : ''}`;
     if (dirty) st.querySelector('.ed-save')?.addEventListener('click', () => _guardar(state.active));
   }
   function _markDirty(path, dirty) {

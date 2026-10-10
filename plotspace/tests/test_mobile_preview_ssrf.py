@@ -76,6 +76,15 @@ def test_url_publica_no_se_bloquea_por_ssrf(tmp_path, monkeypatch):
         def __exit__(self, *a): return False
 
     monkeypatch.setattr(urllib.request, 'urlopen', lambda *a, **k: _Resp())
+    # El código usa un opener propio (sin seguir redirects), no urlopen: sin
+    # stubearlo, este test le pegaba a onrender.com DE VERDAD.
+    monkeypatch.setattr(urllib.request, 'build_opener',
+                        lambda *a, **k: type('_Op', (), {'open': lambda self, *x, **y: _Resp()})())
+    # Hermético: el guard RESUELVE el dominio antes de dejar pasar. Sin esto el
+    # test dependía del DNS de la máquina (en un sandbox sin DNS caía como
+    # "bloqueado"). Una IP pública de documentación hace de onrender.com.
+    from plotspace.core import ssrf
+    monkeypatch.setattr(ssrf, '_resolver', lambda host: ['93.184.216.34'])
     res = mp._backend_status_sync(999)
     assert res['configurado'] is True
     assert 'bloqueado' not in res

@@ -61,3 +61,41 @@ def test_broadcast_por_proyecto_tambien_notifica():
     b.escuchar(cb)
     asyncio.run(b.broadcast(7, {'type': 'w'}))
     assert tipos == ['w']
+
+
+# ─── Un socket dado de baja se CIERRA (si no, la pestaña queda sorda) ────────
+# Antes: si un envío fallaba o tardaba >2 s, el socket solo salía de la lista.
+# El browser lo seguía viendo abierto (ws_events sigue en receive_text) → nunca
+# reconectaba y dejaba de recibir sonidos, task_event y live_update hasta un F5.
+
+class _WsFalla:
+    def __init__(self, falla=True):
+        self.falla = falla
+        self.cerrado_con = None
+        self.enviados = []
+
+    async def send_json(self, data):
+        if self.falla:
+            raise RuntimeError('cola TCP llena')
+        self.enviados.append(data)
+
+    async def close(self, code=1000):
+        self.cerrado_con = code
+
+
+def test_socket_que_falla_se_cierra_para_que_el_cliente_reconecte():
+    import asyncio
+    from plotspace.core.events import EventBroadcaster
+
+    async def _run():
+        b = EventBroadcaster()
+        malo, bueno = _WsFalla(True), _WsFalla(False)
+        b._conns[7] = [malo, bueno]
+        await b.broadcast(7, {'type': 'x'})
+        await asyncio.sleep(0.05)   # el cierre corre en una tarea aparte
+        return b, malo, bueno
+
+    b, malo, bueno = asyncio.run(_run())
+    assert malo not in b._conns[7]
+    assert malo.cerrado_con is not None, 'el socket caído quedó abierto: el cliente nunca reconecta'
+    assert bueno.enviados == [{'type': 'x'}] and bueno.cerrado_con is None

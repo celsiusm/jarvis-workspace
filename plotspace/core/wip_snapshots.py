@@ -26,7 +26,7 @@ def _git(repo, *args, env=None, timeout=60):
     e = dict(os.environ)
     if env:
         e.update(env)
-    r = subprocess.run(['git', *args], cwd=repo, env=e,
+    r = subprocess.run(['git', '--no-optional-locks', *args], cwd=repo, env=e,
                        capture_output=True, text=True, timeout=timeout)
     return r.returncode, r.stdout.strip()
 
