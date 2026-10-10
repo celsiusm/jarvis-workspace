@@ -92,7 +92,7 @@ async def _run_git(cwd: str, *args: str) -> tuple:
     timeout: un repo trabado no cuelga el loop de STATE.md."""
     try:
         r = await asyncio.to_thread(
-            subprocess.run, ['git', *args], cwd=cwd,
+            subprocess.run, ['git', '--no-optional-locks', *args], cwd=cwd,   # no pisar index.lock de los agentes
             capture_output=True, text=True, errors='replace', timeout=10)
         # stdout solo en éxito: los warnings de stderr no son archivos.
         salida = r.stdout if r.returncode == 0 else (r.stdout or '') + (r.stderr or '')

@@ -245,7 +245,7 @@ def _git_run(base: str, *args: str) -> subprocess.CompletedProcess:
     """Corre git -C <base> <args> síncrono, stdout/stderr SEPARADOS, con timeout.
     Pensado para llamarse dentro de run_in_executor (NO en el handler async)."""
     return subprocess.run(
-        ['git', '-C', base, *args],
+        ['git', '--no-optional-locks', '-C', base, *args],   # no pisar index.lock de los agentes
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         timeout=10,

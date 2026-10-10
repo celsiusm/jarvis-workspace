@@ -283,7 +283,7 @@
   gap: 6px;
   padding: 5px 12px 5px 9px;
   background: var(--ob-accent);
-  color: #fff;
+  color: var(--ob-on-accent);   /* sobre relleno de acento: en 17 temas el acento es claro */
   border: none;
   border-radius: var(--radius-pill);
   font: 600 11.5px var(--font-ui);
@@ -923,7 +923,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--ob-on-accent);   /* sobre relleno de acento: en 17 temas el acento es claro */
   cursor: pointer;
   box-shadow: inset 0 1px 0 color-mix(in oklch, white 30%, transparent), 0 4px 16px color-mix(in oklch, var(--ob-accent) 42%, transparent);
   transition: opacity 140ms ease, box-shadow 140ms ease, transform 140ms var(--ease-snap, ease);

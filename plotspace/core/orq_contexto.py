@@ -265,7 +265,7 @@ def formatear_coordinacion(permisos: list, reservas: list, actividad: list) -> s
 
 def _git(ruta: str, *args) -> str:
     try:
-        r = subprocess.run(['git', *args], cwd=ruta, capture_output=True,
+        r = subprocess.run(['git', '--no-optional-locks', *args], cwd=ruta, capture_output=True,
                            text=True, timeout=3)
         return r.stdout if r.returncode == 0 else ''
     except Exception:

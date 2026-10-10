@@ -43,7 +43,8 @@ def _git_full(cwd: str, *args: str, timeout: int = GIT_TIMEOUT) -> tuple[int, st
     Devuelve (rc, stdout, stderr) SEPARADOS: los warnings de git van a stderr y
     no deben mezclarse con la salida que se parsea (porcelain/numstat/...)."""
     try:
-        r = subprocess.run(['git', *args], cwd=cwd, capture_output=True, text=True,
+        # --no-optional-locks: el `status` de Review no toma index.lock (el commit de un agente fallaría).
+        r = subprocess.run(['git', '--no-optional-locks', *args], cwd=cwd, capture_output=True, text=True,
                            timeout=timeout)
         return r.returncode, (r.stdout or ''), (r.stderr or '')
     except subprocess.TimeoutExpired:

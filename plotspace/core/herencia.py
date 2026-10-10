@@ -111,7 +111,7 @@ def sucios_de(ruta_proyecto, ahora=None) -> set:
     if hit and (ahora - hit[0]) < CACHE_TTL_S:
         return hit[1]
     try:
-        r = subprocess.run(['git', '-c', 'core.quotepath=false', 'status',
+        r = subprocess.run(['git', '--no-optional-locks', '-c', 'core.quotepath=false', 'status',
                             '--porcelain'], cwd=ruta_proyecto,
                            capture_output=True, text=True, timeout=15)
         sucios = parsear_sucios(r.stdout) if r.returncode == 0 else set()

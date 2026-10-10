@@ -725,7 +725,7 @@ html[data-theme="papel"], html[data-theme="alba"] {
 .ob-confirm-btn:hover { background: var(--ob-bg-3); border-color: var(--ob-line-3); }
 .ob-confirm-btn:active { transform: scale(.98); }
 .ob-confirm-btn.primario {
-  background: var(--ob-accent); border-color: var(--ob-accent); color: #fff;
+  background: var(--ob-accent); border-color: var(--ob-accent); color: var(--ob-on-accent);
 }
 .ob-confirm-btn.primario:hover { background: var(--ob-accent-dim); border-color: var(--ob-accent-dim); }
 .ob-confirm-btn.peligro {

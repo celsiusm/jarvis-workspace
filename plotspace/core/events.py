@@ -37,6 +37,26 @@ class EventBroadcaster:
         for ws in await asyncio.gather(*[_enviar(w) for w in conns]):
             if ws is not None:
                 self.disconnect(ws, project_id)
+                self._cerrar_en_fondo(ws)
+
+    # Tareas de cierre vivas (referencia fuerte: asyncio no garantiza que una
+    # tarea suelta sobreviva al GC antes de terminar).
+    _cierres: set = set()
+
+    def _cerrar_en_fondo(self, ws):
+        """Cierra un socket dado de baja. Sin esto la pestaña quedaba SORDA: el
+        browser lo seguía viendo abierto (ws_events espera en receive_text), no
+        reconectaba y dejaba de recibir sonidos/task_event/live_update hasta un
+        F5. Con el cierre (1011) el cliente reconecta con su backoff normal.
+        En una tarea aparte y con timeout: un socket trabado no frena el broadcast."""
+        async def _cerrar():
+            try:
+                await asyncio.wait_for(ws.close(code=1011), timeout=2.0)
+            except Exception:
+                pass
+        t = asyncio.ensure_future(_cerrar())
+        self._cierres.add(t)
+        t.add_done_callback(self._cierres.discard)
 
     async def _notificar(self, data: dict):
         for cb in list(self._listeners):
